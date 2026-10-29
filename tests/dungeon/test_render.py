@@ -8,8 +8,8 @@ import pytest
 
 from apl.dungeon import DEV_SEEDS, LEVELS, generate
 from apl.dungeon.frames import build_frames
-from apl.dungeon.model import Action, Dungeon
-from apl.dungeon.render_html import render_html
+from apl.dungeon.model import Action, Dungeon, Edge, Layout
+from apl.dungeon.render_html import CELL, GAP, MARGIN, render_html
 from apl.dungeon.render_text import render_text
 from tests.dungeon.reference import chained_keys
 
@@ -40,9 +40,79 @@ def test_text_map_shows_everything(level: str) -> None:
         assert render_text(dungeon) == text
 
 
-def test_overlay_marks_the_route_and_lists_steps() -> None:
+def _text_doors(grid: str, layout: Layout) -> tuple[set[Edge], dict[Edge, str]]:
+    """Rebuild open doors and lock letters from the text map; also checks every label."""
+    n, lines = layout.size, grid.split("\n")
+    width = len(lines[0].split("+")[1])
+    doors: set[Edge] = set()
+    locks: dict[Edge, str] = {}
+
+    def record(edge: Edge, mark: str) -> None:
+        letters = mark.strip(" -|")  # a lock letter, if any
+        if letters:
+            locks[edge] = letters
+        if letters or " " in mark:  # a gap is an open door
+            doors.add(edge)
+
+    for y in range(n):
+        row = lines[2 * y + 1]
+        for x in range(n):
+            start = 1 + x * (width + 1)
+            assert row[start + 1 :].startswith(layout.labels[(x, y)]), (x, y)
+            if x < n - 1:
+                record(Edge((x, y), (x + 1, y)), row[start + width])
+        if y > 0:
+            for x, segment in enumerate(lines[2 * y].split("+")[1:-1]):
+                record(Edge((x, y - 1), (x, y)), segment)
+    return doors, locks
+
+
+@pytest.mark.parametrize("level", sorted(LEVELS))
+def test_text_map_doors_round_trip(level: str) -> None:
     for seed in DEV_SEEDS:
-        dungeon = generate("L3", seed)
+        dungeon = generate(level, seed)
+        layout = dungeon.layout
+        doors, locks = _text_doors(render_text(dungeon).split("\n\n")[0], layout)
+        assert doors == set(layout.doors)
+        assert locks == {e: c[0].upper() for e, c in layout.locks.items()}
+
+
+def _segment(edge: Edge) -> tuple[int, int, int, int]:
+    """The wall segment between two neighboring rooms, in SVG coordinates."""
+    (ax, ay), (bx, by) = edge.a, edge.b
+    if ay == by:  # side by side: a vertical wall
+        x = MARGIN + bx * CELL
+        return (x, MARGIN + ay * CELL, x, MARGIN + ay * CELL + CELL)
+    y = MARGIN + by * CELL
+    return (MARGIN + ax * CELL, y, MARGIN + ax * CELL + CELL, y)
+
+
+@pytest.mark.parametrize("level", sorted(LEVELS))
+def test_picture_walls_round_trip(level: str) -> None:
+    line = re.compile(r'<line class="wall" x1="(\d+)" y1="(\d+)" x2="(\d+)" y2="(\d+)"/>')
+    for seed in DEV_SEEDS:
+        dungeon = generate(level, seed)
+        layout, page = dungeon.layout, render_html(dungeon)
+        n, end = layout.size, MARGIN + layout.size * CELL
+        walls = [tuple(int(v) for v in m) for m in line.findall(page)]
+        full = {w for w in walls if abs(w[2] - w[0]) + abs(w[3] - w[1]) == CELL}
+        pieces = [w for w in walls if abs(w[2] - w[0]) + abs(w[3] - w[1]) == (CELL - GAP) // 2]
+        inner = {Edge((x, y), (x + 1, y)) for y in range(n) for x in range(n - 1)}
+        inner |= {Edge((x, y), (x, y + 1)) for y in range(n - 1) for x in range(n)}
+        border = {(MARGIN + i * CELL, MARGIN, MARGIN + i * CELL + CELL, MARGIN) for i in range(n)}
+        border |= {(MARGIN + i * CELL, end, MARGIN + i * CELL + CELL, end) for i in range(n)}
+        border |= {(MARGIN, MARGIN + i * CELL, MARGIN, MARGIN + i * CELL + CELL) for i in range(n)}
+        border |= {(end, MARGIN + i * CELL, end, MARGIN + i * CELL + CELL) for i in range(n)}
+        assert full == {_segment(e) for e in inner - layout.doors} | border
+        assert len(walls) == len(full) + len(pieces) and len(pieces) == 2 * len(layout.doors)
+        lock_ids = set(re.findall(r'class="lock c-\w+" id="door-(\d+)-(\d+)-(\d+)-(\d+)"', page))
+        assert {tuple(int(v) for v in i) for i in lock_ids} == {(*e.a, *e.b) for e in layout.locks}
+
+
+@pytest.mark.parametrize("level", sorted(LEVELS))
+def test_overlay_marks_the_route_and_lists_steps(level: str) -> None:
+    for seed in DEV_SEEDS:
+        dungeon = generate(level, seed)
         frames = build_frames(dungeon, dungeon.solution.actions)
         text = render_text(dungeon, frames)
         labels = dungeon.layout.labels

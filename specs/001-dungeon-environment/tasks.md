@@ -404,3 +404,17 @@ Commit after each checkpoint.
 - The golden fingerprints in T009 are filled in only once, after the first green run. Changing
   them later means the dungeons changed, and any results based on them are invalidated
   (Constitution, Experiment Setup).
+
+---
+
+## Phase 9: Convergence
+
+- [X] T040 Extend the boundary scan in `tests/dungeon/test_boundary.py` so that it also fails on any access to the private `_episode` attribute of `AgentTools` in `src/apl/arch/`, both as an attribute (`tools._episode`) and as a string in `getattr(..., "_episode")`; add cases to `test_boundary_scan_catches_forbidden_imports` showing both forms are caught, per Constitution II and FR-022 (partial)
+- [X] T041 Add round-trip tests in `tests/dungeon/test_render.py` for every level and every dev seed. From the text map, rebuild the set of open doors (gaps), locked doors (color letters) and walls, and assert it equals the layout's `doors` and `locks`, with every label present. From the SVG, rebuild the full-length wall segments and lock segments, and assert they match the layout's walls and `locks`. Per SC-010, FR-024 and FR-026 (partial)
+- [X] T042 Parametrize `test_overlay_marks_the_route_and_lists_steps` in `tests/dungeon/test_render.py` over all levels instead of L3 only. For levels without locks, the `took`/`opened` assertions apply only to keys that exist. Per SC-010 and US4/AC2 (partial)
+
+---
+
+## Phase 10: Convergence
+
+- [ ] T043 Extend `_forbidden` in `tests/dungeon/test_boundary.py` to also flag string constants in `src/apl/arch/` that name an `apl.dungeon` module other than `apl.dungeon.tools` or `apl.dungeon.results`, such as `importlib.import_module("apl.dungeon.solver")` or `__import__("apl.dungeon.env")`; add both forms, plus an allowed `"apl.dungeon.tools"` string, to `test_boundary_scan_catches_forbidden_imports`, per Constitution II and plan R5 (partial)

@@ -85,6 +85,16 @@ def _imports(path: Path, package: str) -> set[str]:
     return names
 
 
+def _reaches_episode(path: Path) -> bool:
+    """AgentTools keeps its Episode in `_episode`; reaching it bypasses the four tools."""
+    for node in ast.walk(ast.parse(path.read_text(), str(path))):
+        if isinstance(node, ast.Attribute) and node.attr == "_episode":
+            return True
+        if isinstance(node, ast.Constant) and node.value == "_episode":
+            return True
+    return False
+
+
 def _forbidden(root: Path, package: str = "apl.arch") -> list[str]:
     found = []
     for path in sorted(root.rglob("*.py")):
@@ -93,6 +103,8 @@ def _forbidden(root: Path, package: str = "apl.arch") -> list[str]:
             if name == "apl.dungeon" or name.startswith("apl.dungeon."):
                 if not any(name == a or name.startswith(f"{a}.") for a in ALLOWED):
                     found.append(f"{path.name}: {name}")
+        if _reaches_episode(path):
+            found.append(f"{path.name}: _episode")
     return found
 
 
@@ -113,9 +125,13 @@ def test_boundary_scan_catches_forbidden_imports(tmp_path: Path) -> None:
     (tmp_path / "rel_peek.py").write_text("from ..dungeon import solver\n")
     (tmp_path / "graphs").mkdir()
     (tmp_path / "graphs" / "deep.py").write_text("from ...dungeon.generator import generate\n")
+    (tmp_path / "sneak_attr.py").write_text("def f(tools):\n    return tools._episode.dungeon\n")
+    (tmp_path / "sneak_getattr.py").write_text("def f(t):\n    return getattr(t, '_episode')\n")
     assert _forbidden(tmp_path) == [
         "deep.py: apl.dungeon.generator.generate",
         "peek.py: apl.dungeon.env",
         "peek.py: apl.dungeon.solver",
         "rel_peek.py: apl.dungeon.solver",
+        "sneak_attr.py: _episode",
+        "sneak_getattr.py: _episode",
     ]
