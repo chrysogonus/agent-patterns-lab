@@ -135,7 +135,9 @@ One snapshot used for drawing. It is built by replaying a route (research R7).
 
 `build_frames(dungeon, actions) -> list[Frame]` gives `len(actions) + 1` frames. With
 `expected_results`, as for an episode log, it raises `ValueError` if a replayed result differs
-from the logged one.
+from the logged one. With the logged `end_reason`, a `stopped` end is applied to the last frame
+after the replay, because stopping is not a tool call. Any other mismatch raises `ValueError`.
+`parse_route_file(data) -> RouteFile` reads both route-file formats in contracts/cli.md.
 
 ### SeedSet
 

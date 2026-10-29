@@ -24,15 +24,16 @@ JSON. Either a plain list of actions:
 {"actions": [{"tool": "move", "args": ["east"]}, {"tool": "take", "args": ["red key"]}]}
 ```
 
-or an outcome record from [outcome.md](outcome.md), whose `log` is used. In that case the
-replayed results must match the logged ones (research R7).
+or an outcome record from [outcome.md](outcome.md), whose `log` and `end_reason` are used. The
+replayed results and end must match the logged ones, except that a `stopped` end is applied
+after the replay, because stopping is not a tool call (research R7).
 
 ## Text map
 
-Each room is a 6-character cell. The walls are `+`, `-` and `|`. A gap in a wall is an open
-door, and an uppercase color initial in a wall is a locked door (`R`ed, `B`lue, `G`reen,
-`Y`ellow). Inside a cell are the label and up to two markers: `S` start, `E` exit, a lowercase
-key initial (`r` = red key), and `*` for a room on the route.
+Each room is a fixed-width cell, as wide as the longest label plus its markers. The walls are
+`+`, `-` and `|`. A gap in a wall is an open door, and an uppercase color initial in a wall is a
+locked door (`R`ed, `B`lue, `G`reen, `Y`ellow). Inside a cell are the label and its markers:
+`S` start, `E` exit, a lowercase key initial (`r` = red key), and `*` for a room on the route.
 
 ```text
 +------+------+------+

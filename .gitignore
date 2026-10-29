@@ -5,6 +5,8 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
+dist/
+*.egg-info/
 
 # Secrets: the provider API key lives here
 .env

@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{TITLE}}</title>
+<style>
+:root {
+  --bg: #f8f7f4; --ink: #1f2328; --muted: #6b7280; --floor: #ffffff; --wall: #1f2328;
+  --trail: #7c3aed; --agent: #7c3aed; --fail: rgba(220, 38, 38, 0.25); --exit: #16a34a;
+  --red: #dc2626; --blue: #2563eb; --green: #16a34a; --yellow: #ca8a04;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #15171a; --ink: #e6e6e6; --muted: #9ca3af; --floor: #22262b; --wall: #e6e6e6;
+    --trail: #a78bfa; --agent: #a78bfa; --fail: rgba(248, 113, 113, 0.3); --exit: #4ade80;
+    --red: #f87171; --blue: #60a5fa; --green: #4ade80; --yellow: #facc15;
+  }
+}
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.4 system-ui, sans-serif; }
+main { max-width: 720px; margin: 0 auto; padding: 16px; }
+h1 { font-size: 18px; margin: 0 0 12px; }
+svg { width: 100%; height: auto; display: block; }
+.floor { fill: var(--floor); }
+.wall { stroke: var(--wall); stroke-width: 4; stroke-linecap: square; }
+.lock { stroke-width: 6; }
+.lock.open { opacity: 0.15; }
+.label { fill: var(--muted); font-size: 12px; font-family: ui-monospace, monospace; }
+.marker { fill: var(--ink); font-size: 16px; font-weight: 700; }
+#exit { fill: none; stroke: var(--exit); stroke-width: 3; stroke-dasharray: 6 4; }
+.key.taken { display: none; }
+#trail { fill: none; stroke: var(--trail); stroke-width: 3; stroke-opacity: 0.5; }
+#agent { fill: var(--agent); transition: cx 0.25s, cy 0.25s; }
+#fail { fill: var(--fail); visibility: hidden; }
+#fail.show { visibility: visible; }
+.c-red { stroke: var(--red); fill: var(--red); }
+.c-blue { stroke: var(--blue); fill: var(--blue); }
+.c-green { stroke: var(--green); fill: var(--green); }
+.c-yellow { stroke: var(--yellow); fill: var(--yellow); }
+.controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 12px 0; }
+.controls button, .controls select { font: inherit; padding: 4px 10px; }
+.controls input[type=range] { flex: 1 1 160px; }
+#panel { display: grid; grid-template-columns: max-content 1fr; gap: 2px 12px; }
+#panel dt { color: var(--muted); }
+#panel dd { margin: 0; font-family: ui-monospace, monospace; }
+#result.error { color: var(--red); }
+@media (prefers-reduced-motion: reduce) { #agent { transition: none; } }
+</style>
+</head>
+<body>
+<main>
+<h1>{{TITLE}}</h1>
+{{SVG}}
+<!--PLAYER-->
+<div class="controls">
+  <button id="prev" type="button" aria-label="Step back">&#9664;</button>
+  <button id="play" type="button">Play</button>
+  <button id="next" type="button" aria-label="Step forward">&#9654;</button>
+  <input id="step" type="range" min="0" value="0" aria-label="Jump to step">
+  <label>Speed <select id="speed">
+    <option value="0.5">0.5&times;</option>
+    <option value="1" selected>1&times;</option>
+    <option value="2">2&times;</option>
+    <option value="4">4&times;</option>
+  </select></label>
+</div>
+<dl id="panel" aria-live="polite">
+  <dt>Step</dt><dd id="step-no"></dd>
+  <dt>Action</dt><dd id="action"></dd>
+  <dt>Result</dt><dd id="result"></dd>
+  <dt>Inventory</dt><dd id="inventory"></dd>
+  <dt>End</dt><dd id="end"></dd>
+</dl>
+<p class="label">Space: play/pause. Arrow keys: step.</p>
+<script type="application/json" id="apl-frames">{{FRAMES}}</script>
+<script>
+(() => {
+  const data = JSON.parse(document.getElementById("apl-frames").textContent);
+  const frames = data.frames, C = data.cell, M = data.margin;
+  const $ = (id) => document.getElementById(id);
+  const slider = $("step"), speed = $("speed"), play = $("play");
+  const center = (p) => [M + p[0] * C + C / 2, M + p[1] * C + C / 2];
+  const doorId = (e) => `door-${e[0][0]}-${e[0][1]}-${e[1][0]}-${e[1][1]}`;
+  let current = 0, timer = null;
+  slider.max = String(frames.length - 1);
+
+  /* Draws step n from frames[n] alone, so jumping and playing always agree. */
+  function render(n) {
+    current = Math.max(0, Math.min(frames.length - 1, n));
+    const f = frames[current];
+    const [cx, cy] = center(f.position);
+    $("agent").setAttribute("cx", cx);
+    $("agent").setAttribute("cy", cy);
+    const points = frames.slice(0, current + 1).map((g) => center(g.position).join(","));
+    $("trail").setAttribute("points", points.join(" "));
+    const opened = new Set(f.opened.map(doorId));
+    document.querySelectorAll(".lock").forEach((el) => el.classList.toggle("open", opened.has(el.id)));
+    document.querySelectorAll(".key").forEach((el) => el.classList.toggle("taken", !(el.dataset.color in f.keys)));
+    const fail = $("fail");
+    fail.classList.toggle("show", f.action !== null && !f.ok);
+    fail.setAttribute("x", M + f.position[0] * C);
+    fail.setAttribute("y", M + f.position[1] * C);
+    slider.value = String(current);
+    $("step-no").textContent = `${current} / ${frames.length - 1}`;
+    $("action").textContent = f.action ? [f.action.tool, ...f.action.args].join(" ") : "(start)";
+    $("result").textContent = f.action ? (f.ok ? "ok" : f.error) : "";
+    $("result").classList.toggle("error", !f.ok);
+    $("inventory").textContent = f.inventory.length ? f.inventory.map((c) => `${c} key`).join(", ") : "empty";
+    $("end").textContent = f.end_reason || "";
+  }
+
+  function pause() {
+    clearInterval(timer);
+    timer = null;
+    play.textContent = "Play";
+  }
+
+  function start() {
+    if (current >= frames.length - 1) render(0);
+    play.textContent = "Pause";
+    timer = setInterval(() => {
+      if (current >= frames.length - 1) pause();
+      else render(current + 1);
+    }, 500 / Number(speed.value));
+  }
+
+  const toggle = () => (timer ? pause() : start());
+  play.addEventListener("click", toggle);
+  $("prev").addEventListener("click", () => { pause(); render(current - 1); });
+  $("next").addEventListener("click", () => { pause(); render(current + 1); });
+  slider.addEventListener("input", () => { pause(); render(Number(slider.value)); });
+  speed.addEventListener("change", () => { if (timer) { pause(); start(); } });
+  document.addEventListener("keydown", (e) => {
+    /* The slider and speed select handle their own keys; a focused button handles Space. */
+    const tag = e.target.tagName;
+    if (tag === "INPUT" || tag === "SELECT" || (tag === "BUTTON" && e.key === " ")) return;
+    if (e.key === " ") { e.preventDefault(); toggle(); }
+    else if (e.key === "ArrowLeft") { pause(); render(current - 1); }
+    else if (e.key === "ArrowRight") { pause(); render(current + 1); }
+  });
+  render(0);
+})();
+</script>
+<!--/PLAYER-->
+</main>
+</body>
+</html>

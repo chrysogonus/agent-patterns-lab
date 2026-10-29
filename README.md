@@ -3,8 +3,9 @@
 A playground for comparing LangGraph agent architectures on the same generated dungeon,
 scored by code.
 
-> **Status: M0 done.** The repository, toolchain and Spec Kit are set up. Nothing is runnable
-> yet beyond the test suite. The design and milestones are in [`plan.md`](plan.md).
+> **Status: M1 done.** The dungeon generator, environment, tools and solver work, with a text
+> map and an animated HTML view. No architecture exists yet. The design and milestones are in
+> [`plan.md`](plan.md).
 
 ## What this is
 
@@ -83,6 +84,18 @@ uv run ruff format --check .
 uv run mypy
 ```
 
+### Try it
+
+```bash
+uv run apl dungeon show --level L3 --seed 1000                       # text map
+uv run apl dungeon show --level L3 --seed 1000 --route solution      # with the shortest route
+uv run apl dungeon show --level L3 --seed 1000 --route solution --html l3.html  # animation
+```
+
+Open `l3.html` in a browser to play the route back step by step. `--route` also accepts a JSON
+file with an action list or a recorded outcome; see
+[`contracts/cli.md`](specs/001-dungeon-environment/contracts/cli.md).
+
 ## Working with Spec Kit
 
 The repository uses [Spec Kit](https://github.com/github/spec-kit) for Claude Code and Codex.
@@ -101,12 +114,11 @@ Repeat implement and converge until converge reports `Converged`.
 
 ## Layout
 
-Planned:
-
 ```text
-src/apl/dungeon/   generator, environment, tools, solver
-src/apl/arch/      one module per architecture
-src/apl/runner/    run matrix, results, report
+src/apl/dungeon/   generator, environment, tools, solver, text map, HTML view
+src/apl/cli.py     the `apl` command
+src/apl/arch/      one module per architecture (planned, M2+)
+src/apl/runner/    run matrix, results, report (planned, M2)
 tests/
 specs/             Spec Kit feature specs
 .specify/          Spec Kit configuration and templates

@@ -38,9 +38,9 @@ Single project: `src/apl/` and `tests/` at the repository root, as in plan.md.
 
 **Purpose**: Package skeleton and tooling for the new modules
 
-- [ ] T001 Create the empty package `src/apl/dungeon/__init__.py` (module docstring only) and the directory `src/apl/dungeon/assets/`
-- [ ] T002 [P] Create `tests/__init__.py` and `tests/dungeon/__init__.py` (both empty), so tests can import `tests.dungeon.reference`
-- [ ] T003 Add `[project.scripts] apl = "apl.cli:main"` to `pyproject.toml`, and create `src/apl/cli.py` with a `main(argv: list[str] | None = None) -> int` that builds an `argparse` parser with a `dungeon` subcommand group and returns 2 when no subcommand is given; run `uv sync` and confirm `uv run apl --help` works
+- [X] T001 Create the empty package `src/apl/dungeon/__init__.py` (module docstring only) and the directory `src/apl/dungeon/assets/`
+- [X] T002 [P] Create `tests/__init__.py` and `tests/dungeon/__init__.py` (both empty), so tests can import `tests.dungeon.reference`
+- [X] T003 Add `[project.scripts] apl = "apl.cli:main"` to `pyproject.toml`, and create `src/apl/cli.py` with a `main(argv: list[str] | None = None) -> int` that builds an `argparse` parser with a `dungeon` subcommand group and returns 2 when no subcommand is given; run `uv sync` and confirm `uv run apl --help` works
 
 ---
 
@@ -50,7 +50,7 @@ Single project: `src/apl/` and `tests/` at the repository root, as in plan.md.
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T004 Implement `src/apl/dungeon/model.py` per data-model.md "Internal types":
+- [X] T004 Implement `src/apl/dungeon/model.py` per data-model.md "Internal types":
   - `Direction` (StrEnum `north, east, south, west` in that order, with `delta` and `opposite`).
   - `Pos = tuple[int, int]` (x = column, y = row, `(0, 0)` north-west).
   - `Level`, and `LEVELS` with exactly the FR-010 table (L1: 3, 0, 1, 0; L2: 4, 1, 2, 0; L3: 5, 2, 3, 2).
@@ -66,20 +66,20 @@ Single project: `src/apl/` and `tests/` at the repository root, as in plan.md.
   - `Solution(actions, length)` with `length == len(actions)`.
   - `Dungeon(level, seed, layout, solution)` with `budget = 3 * solution.length`.
   - A canonical `to_dict()` on `Layout`, `Dungeon`, `Action` and `Solution`: sorted keys, positions as `[x, y]`, edges as sorted pairs.
-- [ ] T005 [P] Implement `src/apl/dungeon/results.py` per contracts/tools.md:
+- [X] T005 [P] Implement `src/apl/dungeon/results.py` per contracts/tools.md:
   - `ErrorCode` (StrEnum: `invalid_direction`, `no_door`, `locked`, `no_such_item`, `not_in_inventory`, `wrong_key`, `not_locked`, `episode_over`).
   - `EndReason` (StrEnum: `exit`, `budget`, `stopped`).
   - `ExitView`, `RoomView`, `InventoryView`, `DoorOpened`, `ToolError` and `ToolResult`.
   - Each `to_dict()` gives exactly the JSON shapes and key order in contracts/tools.md.
   - Item names are `"<color> key"`.
   - This module MUST NOT import `model.py` internals except `Direction`.
-- [ ] T006 Implement `solve(layout: Layout) -> Solution | None` in `src/apl/dungeon/solver.py` (research R4):
+- [X] T006 Implement `solve(layout: Layout) -> Solution | None` in `src/apl/dungeon/solver.py` (research R4):
   - BFS over `(room, keys_taken_mask, doors_opened_mask)`.
   - Successor order: `take`, then `use` in direction order, then `move` in direction order.
   - Keys are taken as `take("<color> key")`; a door is opened with `use("<color> key", direction)` and is passable afterwards from both sides.
   - Return `None` when the exit is unreachable.
   - Also add `Dungeon.from_layout(layout)` in `src/apl/dungeon/model.py`: level and seed `None`; solves the layout; raises `ValueError("unsolvable layout")` if `solve` returns `None` (data-model.md "Dungeon").
-- [ ] T007 [P] Create `tests/dungeon/reference.py` with five hand-built 3×3 `Layout` builders. They do not need to meet level rules; they only need `Layout.validate()`.
+- [X] T007 [P] Create `tests/dungeon/reference.py` with five hand-built 3×3 `Layout` builders. They do not need to meet level rules; they only need `Layout.validate()`.
   - **Coordinates:** `(x, y)`, with `(0, 0)` north-west and south = `y + 1`. Give each builder an ASCII sketch docstring. `grid_labels(size)` assigns labels `a2, a3, …` in grid order (fine for tests; hand-built dungeons don't need random labels).
   - **Shared ring:** the open doors `(0,0)-(0,1)`, `(0,1)-(0,2)`, `(0,2)-(1,2)`, `(1,2)-(2,2)`, `(2,2)-(2,1)`, `(2,1)-(2,0)` and `(0,0)-(1,0)`, with start `(0,0)` and exit `(2,0)`. The long way round, west then south then east then north, is 6 moves.
   - `two_open_routes()`: the ring plus an open door `(1,0)-(2,0)`. Optimal **2** (east, east).
@@ -88,7 +88,7 @@ Single project: `src/apl/` and `tests/` at the repository root, as in plan.md.
   - `chained_keys()`: open doors `(0,0)-(1,0)`, `(0,0)-(0,1)` and `(2,0)-(2,1)`; `(1,0)-(2,0)` locked `red` with the red key at `(0,1)`; `(2,1)-(2,2)` locked `blue` with the blue key at `(2,1)`. Start `(0,0)`, exit `(2,2)`. Optimal **10**: south, take red, north, east, use red east, east, south, take blue, use blue south, south.
   - `key_behind_own_door()`: `(0,0)-(1,0)` locked `red` with the red key at `(1,0)`, and `(1,0)-(2,0)` open. Start `(0,0)`, exit `(2,0)`. **Unsolvable**.
   - Expose `REFERENCE: list[tuple[str, Layout, int | None]]` with these five entries: the name, the layout, and the known optimal length, or `None` when unsolvable (SC-008).
-- [ ] T008 Write `tests/dungeon/test_model.py`:
+- [X] T008 Write `tests/dungeon/test_model.py`:
   - `Layout.validate()` rejects each listed rule violation.
   - `Edge(a, b) == Edge(b, a)`; non-neighbor edges are rejected.
   - `LEVELS` matches FR-010.
@@ -110,24 +110,24 @@ solver, and confirm that the same seed reproduces the same dungeon.
 
 ### Tests for User Story 1 ⚠️ (write first, they must fail)
 
-- [ ] T009 [P] [US1] Write `tests/dungeon/test_generator.py`:
+- [X] T009 [P] [US1] Write `tests/dungeon/test_generator.py`:
   - For every level and every seed in `DEV_SEEDS`, `TEST_SEEDS` and `range(10_000, 11_000)`: `check_level_rules(d.layout, d.level)` returns no violations and `solve(d.layout)` equals `d.solution` (SC-001, FR-013).
   - Generating twice gives equal `to_dict()` (SC-003).
   - Golden SHA-256 fingerprints of `json.dumps(d.to_dict(), sort_keys=True)` for seeds 1000 and 2000 on each level, filled in after the first green run (FR-009).
   - At least 95 distinct fingerprints across 100 seeds per level (SC-004).
   - `ValueError` for level `"L9"`, seed `-1` and seed `1.5` (edge cases).
   - Generating and solving all dev and test seeds for all levels takes < 10 s (SC-006).
-- [ ] T010 [P] [US1] Write `tests/dungeon/test_labels.py` (SC-009):
+- [X] T010 [P] [US1] Write `tests/dungeon/test_labels.py` (SC-009):
   - Labels are unique per dungeon and identical across regeneration.
   - Across 100 seeds per level, every position receives at least 10 different labels.
   - Every label is in `LABEL_POOL`, and `len(LABEL_POOL) >= 100`.
-- [ ] T011 [P] [US1] Write `tests/dungeon/test_seeds.py`: `DEV_SEEDS` has 10 seeds, `TEST_SEEDS` has 20, and the two are disjoint (FR-023).
-- [ ] T012 [P] [US1] Write `tests/dungeon/test_rules.py`: hand-made layouts that break each rule make `check_level_rules` report that exact rule. Cover FR-001 to FR-008: a non-neighbor door, a disconnected room, start/exit too close, duplicate lock colors, a bypassable lock, a key in the start room, a key on the shortest route to its door, an L3 second key in front of the first door, and fewer than 2 empty dead ends on L3.
+- [X] T011 [P] [US1] Write `tests/dungeon/test_seeds.py`: `DEV_SEEDS` has 10 seeds, `TEST_SEEDS` has 20, and the two are disjoint (FR-023).
+- [X] T012 [P] [US1] Write `tests/dungeon/test_rules.py`: hand-made layouts that break each rule make `check_level_rules` report that exact rule. Cover FR-001 to FR-008: a non-neighbor door, a disconnected room, start/exit too close, duplicate lock colors, a bypassable lock, a key in the start room, a key on the shortest route to its door, an L3 second key in front of the first door, and fewer than 2 empty dead ends on L3.
 
 ### Implementation for User Story 1
 
-- [ ] T013 [P] [US1] Implement `src/apl/dungeon/seeds.py`: `DEV_SEEDS = range(1000, 1010)` and `TEST_SEEDS = range(2000, 2020)` (research R11).
-- [ ] T014 [P] [US1] Implement `check_level_rules(layout: Layout, level: Level) -> list[str]` in `src/apl/dungeon/rules.py`. It returns one message per violated rule from FR-001 to FR-008:
+- [X] T013 [P] [US1] Implement `src/apl/dungeon/seeds.py`: `DEV_SEEDS = range(1000, 1010)` and `TEST_SEEDS = range(2000, 2020)` (research R11).
+- [X] T014 [P] [US1] Implement `check_level_rules(layout: Layout, level: Level) -> list[str]` in `src/apl/dungeon/rules.py`. It returns one message per violated rule from FR-001 to FR-008:
   - grid size;
   - connected when locks are ignored;
   - start/exit distance ≥ 2·(N−1) with locks ignored;
@@ -137,7 +137,7 @@ solver, and confirm that the same seed reproduces the same dungeon.
   - on L3, the second key behind the first door;
   - on L3, ≥ 2 dead ends that are not start/exit and hold no key;
   - extra-door count = `len(doors) - (N*N - 1)`.
-- [ ] T015 [US1] Implement `generate(level_name: str, seed: int) -> Dungeon` and `LABEL_POOL` in `src/apl/dungeon/generator.py`, following research R1–R3 step by step:
+- [X] T015 [US1] Implement `generate(level_name: str, seed: int) -> Dungeon` and `LABEL_POOL` in `src/apl/dungeon/generator.py`, following research R1–R3 step by step:
   - RNG `random.Random(f"apl:{level}:{seed}")`.
   - Randomized Kruskal spanning tree.
   - Start/exit chosen among pairs with tree distance ≥ 2·(N−1).
@@ -149,7 +149,7 @@ solver, and confirm that the same seed reproduces the same dungeon.
   - `LABEL_POOL` = 23 letters `abcdefghjkmnpqrstuvwxyz` × digits `2–9` (184 labels).
   - Colors drawn from `("red", "blue", "green", "yellow")`.
   - Validate inputs first (edge cases). Depends on T013 and T014.
-- [ ] T016 [US1] Export `generate`, `solve`, `check_level_rules`, `LEVELS`, `DEV_SEEDS` and `TEST_SEEDS` from `src/apl/dungeon/__init__.py`, then run T009–T012 to green and fill in the golden fingerprints in `tests/dungeon/test_generator.py`.
+- [X] T016 [US1] Export `generate`, `solve`, `check_level_rules`, `LEVELS`, `DEV_SEEDS` and `TEST_SEEDS` from `src/apl/dungeon/__init__.py`, then run T009–T012 to green and fill in the golden fingerprints in `tests/dungeon/test_generator.py`.
 
 **Checkpoint**: Dungeons can be generated, checked and reproduced (MVP).
 
@@ -165,7 +165,7 @@ code, checking results, step counts and the outcome.
 
 ### Tests for User Story 2 ⚠️ (write first, they must fail)
 
-- [ ] T017 [P] [US2] Write `tests/dungeon/test_env.py` against contracts/tools.md and contracts/outcome.md, using `Dungeon.from_layout` on `tests/dungeon/reference.py` layouts:
+- [X] T017 [P] [US2] Write `tests/dungeon/test_env.py` against contracts/tools.md and contracts/outcome.md, using `Dungeon.from_layout` on `tests/dungeon/reference.py` layouts:
   - The free start description equals `look()`'s data, and `steps == 0` (FR-014).
   - One test per error code: `invalid_direction`, `no_door`, `locked` (the message names the color), `no_such_item`, `not_in_inventory`, `wrong_key`, `not_locked` and `episode_over`. Each asserts the step count afterwards: +1, or +0 for `episode_over` (SC-005).
   - Error precedence: `use("red key", "up")` without the key gives `invalid_direction`.
@@ -177,14 +177,14 @@ code, checking results, step counts and the outcome.
   - The outcome `to_dict()` keys and values match contracts/outcome.md, including `level`/`seed` `null` for hand-built dungeons.
   - The log records every call, with `step: null` for `episode_over`.
   - Revisiting a room shows the same label (Story 2, scenario 6).
-- [ ] T018 [P] [US2] Write `tests/dungeon/test_boundary.py`:
+- [X] T018 [P] [US2] Write `tests/dungeon/test_boundary.py`:
   - **SC-007:** walk every dev dungeon on each level with a scripted random walk of 200 calls (fixed RNG), mixing valid and invalid calls. For every result, assert that the JSON has only the keys in contracts/tools.md, that the only label it contains is the current room's, and that it holds no coordinates, budget or optimal length.
   - **Constitution II:** if `src/apl/arch/` exists, parse every `.py` file under it with `ast`, and fail on any import of `apl.dungeon` other than `apl.dungeon.tools` and `apl.dungeon.results`. The test passes while the directory is absent.
   - `AgentTools` has no public attributes besides `start`, `look`, `move`, `take` and `use`.
 
 ### Implementation for User Story 2
 
-- [ ] T019 [US2] Implement `src/apl/dungeon/env.py` per data-model.md "Episode", "LogEntry" and "Outcome":
+- [X] T019 [US2] Implement `src/apl/dungeon/env.py` per data-model.md "Episode", "LogEntry" and "Outcome":
   - `start_episode(dungeon) -> Episode`.
   - The mutable `Episode` with `position`, `inventory`, `opened`, `steps`, `invalid_actions`, `end_reason` and `log`.
   - Methods `look()`, `move(d)`, `take(item)`, `use(item, d)`, `stop()` and `outcome()`.
@@ -194,7 +194,7 @@ code, checking results, step counts and the outcome.
   - `LogEntry(index, step, action, result)`.
   - `Outcome` with `to_dict()` exactly as contracts/outcome.md.
   - Results are built only from `results.py` types and only from the current room.
-- [ ] T020 [US2] Implement `AgentTools` in `src/apl/dungeon/tools.py`:
+- [X] T020 [US2] Implement `AgentTools` in `src/apl/dungeon/tools.py`:
   - Wraps an `Episode` in a private attribute.
   - Exposes `start` (the free start description) and `look`, `move`, `take` and `use`, delegating to the episode; no other public attributes.
   - Re-export `AgentTools`, `start_episode`, `Episode` and `Outcome` from `src/apl/dungeon/__init__.py`.
@@ -213,15 +213,15 @@ every dev and test dungeon. Depends on US1 (generation) and US2 (environment).
 
 ### Tests for User Story 3 ⚠️
 
-- [ ] T021 [P] [US3] Write `tests/dungeon/test_solver.py`:
+- [X] T021 [P] [US3] Write `tests/dungeon/test_solver.py`:
   - For every entry in `REFERENCE`, `solve(layout)` returns `None` exactly when the known answer is `None`, and otherwise a solution whose `length` equals the known optimum (SC-008).
   - For `locked_shortcut_wins`, the solution contains a `use`; for `open_route_wins`, it contains none (Story 3, scenarios 1–2).
   - Solving the same layout twice gives identical actions.
-- [ ] T022 [P] [US3] Write `tests/dungeon/test_replay.py`: for every level and every seed in `DEV_SEEDS` and `TEST_SEEDS`, replaying `d.solution.actions` through `start_episode(d)` gives `ok: true` on every call and ends with `end_reason == "exit"` and `steps == d.solution.length` (SC-002).
+- [X] T022 [P] [US3] Write `tests/dungeon/test_replay.py`: for every level and every seed in `DEV_SEEDS` and `TEST_SEEDS`, replaying `d.solution.actions` through `start_episode(d)` gives `ok: true` on every call and ends with `end_reason == "exit"` and `steps == d.solution.length` (SC-002).
 
 ### Implementation for User Story 3
 
-- [ ] T023 [US3] Re-derive each reference optimum from T007 by hand and write the step-by-step reasoning into the builder docstrings in `tests/dungeon/reference.py`. Make T021 and T022 green. Where they fail, fix `src/apl/dungeon/solver.py` or `src/apl/dungeon/env.py`, never the known answers, unless the hand derivation itself was wrong. In that case, correct both T007's numbers and the docstring.
+- [X] T023 [US3] Re-derive each reference optimum from T007 by hand and write the step-by-step reasoning into the builder docstrings in `tests/dungeon/reference.py`. Make T021 and T022 green. Where they fail, fix `src/apl/dungeon/solver.py` or `src/apl/dungeon/env.py`, never the known answers, unless the hand derivation itself was wrong. In that case, correct both T007's numbers and the docstring.
 
 **Checkpoint**: Efficiency scores and budgets rest on a verified number.
 
@@ -236,17 +236,17 @@ and visit order. Depends on US1 and US2.
 
 ### Tests for User Story 4 ⚠️
 
-- [ ] T024 [P] [US4] Write `tests/dungeon/test_frames.py`:
+- [X] T024 [P] [US4] Write `tests/dungeon/test_frames.py`:
   - `build_frames(d, d.solution.actions)` has `len(actions) + 1` frames.
   - Frame 0 is the start state.
   - After each step, the frame's `position`, `inventory`, `keys_in_rooms` and `opened` equal a parallel `Episode`'s state (SC-012, for every dev dungeon).
   - Failed actions leave `position` unchanged.
   - Passing a log with a tampered result raises `ValueError` (research R7).
-- [ ] T025 [P] [US4] Write the text-map tests in `tests/dungeon/test_render.py`:
+- [X] T025 [P] [US4] Write the text-map tests in `tests/dungeon/test_render.py`:
   - For every dev dungeon, the map contains every label, `S`, `E`, every locked door's uppercase color letter and every key's lowercase letter (SC-010).
   - With the solution overlay, every route room has `*`, and the step table lists rooms in visit order, all visit numbers for revisited rooms, the `took`/`opened` events, error codes for failed actions and an `end:` line (FR-025).
   - Rendering twice gives identical text (SC-011).
-- [ ] T026 [P] [US4] Write `tests/dungeon/test_cli.py` (for the contracts/cli.md command), calling `apl.cli.main([...])` with `capsys`:
+- [X] T026 [P] [US4] Write `tests/dungeon/test_cli.py` (for the contracts/cli.md command), calling `apl.cli.main([...])` with `capsys`:
   - `dungeon show --level L3 --seed 1000` exits 0 and prints the map.
   - `--route solution` prints the step table ending in `(exit)`.
   - `--route FILE` accepts both route-file formats.
@@ -254,13 +254,13 @@ and visit order. Depends on US1 and US2.
 
 ### Implementation for User Story 4
 
-- [ ] T027 [US4] Implement `Frame` and `build_frames(dungeon, actions, expected_results=None) -> list[Frame]` in `src/apl/dungeon/frames.py`, per data-model.md "Frame" and research R7:
+- [X] T027 [US4] Implement `Frame` and `build_frames(dungeon, actions, expected_results=None) -> list[Frame]` in `src/apl/dungeon/frames.py`, per data-model.md "Frame" and research R7:
   - Replays through `start_episode`.
   - Snapshots the state after each step.
   - Compares against `expected_results` when they are given.
-  - Also add `actions_from_route_file(data: object) -> tuple[list[Action], list[ToolResult] | None]`, which accepts both formats from contracts/cli.md and raises `ValueError` on anything else.
-- [ ] T028 [US4] Implement `render_text(dungeon, frames: list[Frame] | None = None) -> str` in `src/apl/dungeon/render_text.py`, using the cell, wall, door and marker format and the step table from contracts/cli.md (research R8).
-- [ ] T029 [US4] Implement `apl dungeon show --level --seed [--route solution|PATH]` in `src/apl/cli.py`: generate, optionally build frames, print `render_text`, and map `ValueError` and JSON errors to exit code 2 with a message on stderr. Then run T024–T026 to green.
+  - Also add `parse_route_file(data: object) -> RouteFile` (actions, logged results and logged `end_reason`), which accepts both formats from contracts/cli.md and raises `ValueError` on anything else. `build_frames` takes the logged `end_reason` too: a `stopped` end is applied after the replay (stopping is not a tool call), and any other mismatch is an error.
+- [X] T028 [US4] Implement `render_text(dungeon, frames: list[Frame] | None = None) -> str` in `src/apl/dungeon/render_text.py`, using the cell, wall, door and marker format and the step table from contracts/cli.md (research R8).
+- [X] T029 [US4] Implement `apl dungeon show --level --seed [--route solution|PATH]` in `src/apl/cli.py`: generate, optionally build frames, print `render_text`, and map `ValueError` and JSON errors to exit code 2 with a message on stderr. Then run T024–T026 to green.
 
 **Checkpoint**: Routes are visible in the terminal.
 
@@ -276,7 +276,7 @@ determinism in tests, and play them in a browser offline. Depends on US4 (frames
 
 ### Tests for User Story 5 ⚠️
 
-- [ ] T030 [P] [US5] Add the HTML tests to `tests/dungeon/test_render.py`:
+- [X] T030 [P] [US5] Add the HTML tests to `tests/dungeon/test_render.py`:
   - For every dev dungeon, the SVG contains every label, the start and exit markers, each lock color and each key (SC-010).
   - With a route, `<script type="application/json" id="apl-frames">` parses to the `to_dict()` of `build_frames(...)` (SC-012 data side).
   - Without a route, the file has no `<script>` and no controls (Story 5, scenario 6).
@@ -287,20 +287,20 @@ determinism in tests, and play them in a browser offline. Depends on US4 (frames
 
 ### Implementation for User Story 5
 
-- [ ] T031 [P] [US5] Create `src/apl/dungeon/assets/player.html`, the player template with inline CSS and JS and no external references:
+- [X] T031 [P] [US5] Create `src/apl/dungeon/assets/player.html`, the player template with inline CSS and JS and no external references:
   - Placeholders for the SVG and the frames JSON.
   - Controls per contracts/cli.md: play/pause (Space), step back (←), step forward (→), a slider to jump, and a speed select of 0.5×, 1×, 2× and 4× (1× = 2 steps/s).
   - An info panel with the step number, action, result and inventory.
   - `render(i)` draws only from `frames[i]`: agent position, the trail of steps `0..i`, keys in rooms, open doors, and the highlighted failed action (FR-028).
   - Transitions turned off under `prefers-reduced-motion`.
-- [ ] T032 [US5] Implement `render_html(dungeon, frames: list[Frame] | None = None) -> str` in `src/apl/dungeon/render_html.py` (research R9):
+- [X] T032 [US5] Implement `render_html(dungeon, frames: list[Frame] | None = None) -> str` in `src/apl/dungeon/render_html.py` (research R9):
   - Builds the SVG with integer coordinates.
   - Escapes text with `html.escape`.
   - Embeds the frames via `json.dumps(..., sort_keys=True)` with `</` → `<\/`.
   - Fills `player.html` when there are frames; otherwise outputs a minimal HTML page with the SVG only.
   - The output is byte-deterministic.
-- [ ] T033 [US5] Add `--html OUT.html` to `apl dungeon show` in `src/apl/cli.py` to write `render_html`, extend `tests/dungeon/test_cli.py` to check that the file is written, and run T030 to green.
-- [ ] T034 [US5] Run `uv build --wheel --out-dir <scratch dir>` and confirm the wheel contains `apl/dungeon/assets/player.html` (plan.md, Structure Decision). If it doesn't, add the file to the build configuration in `pyproject.toml`.
+- [X] T033 [US5] Add `--html OUT.html` to `apl dungeon show` in `src/apl/cli.py` to write `render_html`, extend `tests/dungeon/test_cli.py` to check that the file is written, and run T030 to green.
+- [X] T034 [US5] Run `uv build --wheel --out-dir <scratch dir>` and confirm the wheel contains `apl/dungeon/assets/player.html` (plan.md, Structure Decision). If it doesn't, add the file to the build configuration in `pyproject.toml`.
 
 **Checkpoint**: Every story works on its own and together.
 
@@ -308,11 +308,11 @@ determinism in tests, and play them in a browser offline. Depends on US4 (frames
 
 ## Phase 8: Polish & Cross-Cutting Concerns
 
-- [ ] T035 [P] Update `README.md`: the status line (M1 done), a short "Try it" block with the `apl dungeon show` commands from quickstart.md, and change "Layout: Planned" so it marks `src/apl/dungeon/` as existing.
-- [ ] T036 [P] Add `uv run apl dungeon show --level L3 --seed 1000 --route solution` to the Commands block in `AGENTS.md`.
-- [ ] T037 Run all of `specs/001-dungeon-environment/quickstart.md`, steps 1–6. Open `/tmp/l3-1000.html` and `/tmp/l2-errors.html` in a browser with the network turned off, and check play, pause, step, jump, speed, failed-action highlighting, and that jumping to the end equals playing to the end.
-- [ ] T038 Run `uv run pytest`, `uv run ruff check .`, `uv run ruff format --check .` and `uv run mypy`, and fix everything until all four pass.
-- [ ] T039 Re-check the plan.md Constitution Check against the finished code. In particular, confirm that nothing under `src/apl/` outside `apl.dungeon` imports the solver into agent-facing code, and that `results.py` exposes no positions.
+- [X] T035 [P] Update `README.md`: the status line (M1 done), a short "Try it" block with the `apl dungeon show` commands from quickstart.md, and change "Layout: Planned" so it marks `src/apl/dungeon/` as existing.
+- [X] T036 [P] Add `uv run apl dungeon show --level L3 --seed 1000 --route solution` to the Commands block in `AGENTS.md`.
+- [X] T037 Run all of `specs/001-dungeon-environment/quickstart.md`, steps 1–6. Open `/tmp/l3-1000.html` and `/tmp/l2-errors.html` in a browser with the network turned off, and check play, pause, step, jump, speed, failed-action highlighting, and that jumping to the end equals playing to the end.
+- [X] T038 Run `uv run pytest`, `uv run ruff check .`, `uv run ruff format --check .` and `uv run mypy`, and fix everything until all four pass.
+- [X] T039 Re-check the plan.md Constitution Check against the finished code. In particular, confirm that nothing under `src/apl/` outside `apl.dungeon` imports the solver into agent-facing code, and that `results.py` exposes no positions.
 
 ---
 
