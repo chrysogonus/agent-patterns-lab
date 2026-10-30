@@ -142,7 +142,10 @@ Paperclip comes in from M4, when several architectures can be built as parallel 
 
 Decided:
 
-- Default model: `anthropic:claude-haiku-5-5`, set through `APL_MODEL`.
+- Default model: `openai:gpt-6-luna` on the OpenAI API, set through `APL_MODEL`.
+- The subscription gateway (`~/workspace/subscription-gateway`) is used wherever a step needs no
+  tool calls. It rejects `tools` and runs the request through an agent CLI, so it never runs
+  experiment episodes: every architecture must call the same raw model (constitution I).
 - License: MIT.
 
 Open:

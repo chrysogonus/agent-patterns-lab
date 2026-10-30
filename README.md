@@ -65,12 +65,11 @@ One setting chooses the model for every architecture, in LangChain's `provider:m
 
 ```bash
 # .env (never committed)
-APL_MODEL=anthropic:claude-haiku-5-5
-ANTHROPIC_API_KEY=...
+APL_MODEL=openai:gpt-6-luna
+OPENAI_API_KEY=...
 ```
 
-The default is Claude Haiku 5.5. It is cheap, and a weaker model leaves room for architectures
-to differ.
+The default is GPT-6 Luna on the OpenAI API.
 
 ## Development
 
