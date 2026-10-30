@@ -132,7 +132,13 @@ def format_plan(spec: RunSpec, settings: Settings, written: Mapping[str, bool]) 
         ("model", settings.model),
         ("temperature", str(record["temperature"])),
         ("reasoning", str(record["reasoning_effort"])),
-        *([("context", f"{settings.num_ctx:,} tokens")] if record["num_ctx"] else []),
+        *(
+            [("context", "from the server (read at --execute)")]
+            if settings.model.startswith("vllm:")
+            else [("context", f"{settings.num_ctx:,} tokens")]
+            if record["num_ctx"]
+            else []
+        ),
         ("max output", f"{settings.max_output_tokens:,} tokens per call"),
         ("token cap", f"{settings.token_cap:,} per episode"),
         ("prompt", str(record["prompt_fingerprint"])),

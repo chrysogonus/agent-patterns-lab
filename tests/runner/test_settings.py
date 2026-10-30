@@ -9,7 +9,7 @@ from apl.runner.settings import Settings, load_settings, required_key_var
 
 def test_defaults() -> None:
     assert load_settings({}) == Settings(
-        model="ollama:qwen3:8b",
+        model="vllm:qwen3.5-9b",
         temperature=None,
         reasoning_effort=None,
         token_cap=600_000,
@@ -18,7 +18,8 @@ def test_defaults() -> None:
         price_input=None,
         price_output=None,
         num_ctx=16_384,
-        max_output_tokens=4096,
+        max_output_tokens=1024,
+        base_url="http://localhost:8001/v1",
     )
 
 
@@ -35,10 +36,32 @@ def test_every_variable_is_read() -> None:
             "APL_PRICE_OUTPUT": "0.5",
             "APL_NUM_CTX": "8192",
             "APL_MAX_OUTPUT_TOKENS": "512",
+            "APL_BASE_URL": "http://gpu-box:9000/v1",
         }
     )
     assert settings == Settings(
-        "anthropic:claude-haiku-5-5", 0.5, "none", 1000, 0, 2.5, 0.1, 0.5, 8192, 512
+        "anthropic:claude-haiku-5-5",
+        0.5,
+        "none",
+        1000,
+        0,
+        2.5,
+        0.1,
+        0.5,
+        8192,
+        512,
+        "http://gpu-box:9000/v1",
+    )
+
+
+@pytest.mark.parametrize(
+    ("model", "expected"),
+    [("vllm:qwen3.5-9b", 1024), ("ollama:qwen3:8b", 4096), ("openai:gpt-6-luna", 4096)],
+)
+def test_output_limit_default_depends_on_the_provider(model: str, expected: int) -> None:
+    assert load_settings({"APL_MODEL": model}).max_output_tokens == expected
+    assert (
+        load_settings({"APL_MODEL": model, "APL_MAX_OUTPUT_TOKENS": "300"}).max_output_tokens == 300
     )
 
 
@@ -100,9 +123,13 @@ def test_record_marks_provider_defaults() -> None:
     record = load_settings({}).record()
     assert record["temperature"] == "provider default"
     assert record["reasoning_effort"] == "provider default"
-    assert record["model"] == "ollama:qwen3:8b" and record["token_cap"] == 600_000
-    assert record["num_ctx"] == 16_384 and record["max_output_tokens"] == 4096
-    assert Settings(model="openai:gpt-6-luna").record()["num_ctx"] is None
+    assert record["model"] == "vllm:qwen3.5-9b" and record["token_cap"] == 600_000
+    assert record["num_ctx"] == 16_384 and record["max_output_tokens"] == 1024
+    assert record["base_url"] == "http://localhost:8001/v1"
+    ollama = Settings(model="ollama:qwen3:8b").record()
+    assert ollama["num_ctx"] == 16_384 and ollama["base_url"] is None
+    openai = Settings(model="openai:gpt-6-luna").record()
+    assert openai["num_ctx"] is None and openai["base_url"] is None
     assert isinstance(record["prompt_fingerprint"], str) and len(record["prompt_fingerprint"]) == 12
     assert "price_input" not in record  # prices are not run conditions
 
@@ -111,3 +138,4 @@ def test_required_key_var() -> None:
     assert required_key_var("openai:gpt-6-luna") == "OPENAI_API_KEY"
     assert required_key_var("anthropic:claude-haiku-5-5") == "ANTHROPIC_API_KEY"
     assert required_key_var("ollama:qwen3:8b") is None
+    assert required_key_var("vllm:qwen3.5-9b") is None

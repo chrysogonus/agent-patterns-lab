@@ -18,6 +18,13 @@ from apl.dungeon.env import Episode
 from apl.kit import EpisodeEnded
 
 
+def message_key(message: BaseMessage) -> str:
+    """A message as sorted JSON: equal messages, equal keys (also used by the viewer)."""
+    data = message_to_dict(message)
+    flat = {"type": data["type"], **{k: v for k, v in data["data"].items() if k != "type"}}
+    return json.dumps(flat, sort_keys=True, default=str)
+
+
 @dataclass
 class Transcript:
     """Each distinct message once; each call refers to its messages by index (research R12)."""
@@ -27,9 +34,7 @@ class Transcript:
     _index: dict[str, int] = field(default_factory=dict)
 
     def add(self, message: BaseMessage) -> int:
-        data = message_to_dict(message)
-        flat = {"type": data["type"], **{k: v for k, v in data["data"].items() if k != "type"}}
-        key = json.dumps(flat, sort_keys=True, default=str)
+        key = message_key(message)
         if key not in self._index:
             self._index[key] = len(self.messages)
             self.messages.append(json.loads(key))

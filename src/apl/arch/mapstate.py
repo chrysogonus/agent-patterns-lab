@@ -1,0 +1,69 @@
+"""A2 map state: an explicit map in graph state replaces the message history.
+
+Each turn the model sees the base prompt with the map instructions, its previous reply with that
+reply's tool results, and the map (specs/003 contracts/mapstate.md). Written by the agent at the
+experimenter's request.
+"""
+
+import json
+from typing import TypedDict
+
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
+from langgraph.graph import END, START, StateGraph
+
+from apl.arch.dungeon_map import DungeonMap
+from apl.kit import Kit
+
+# Explains the map only; strategy advice would mix a prompt effect into the memory effect (R15).
+MAP_INSTRUCTIONS = """\
+You do not see the earlier conversation. Instead, every turn ends with your map. It is built \
+from your own tool results so far: every room you have seen with its exits, where each exit \
+leads once you have gone through it, the items in each room, your inventory, and the doors you \
+opened. "unexplored" means you have not gone through that exit yet; "locked (color)" means it \
+was locked when you last saw it. Your previous reply and its tool results come just before the \
+map."""
+
+
+class MapState(TypedDict):
+    # No reducers: each write replaces the value, so the history never builds up (R11).
+    messages: list[BaseMessage]  # the latest turn only
+    map: DungeonMap
+
+
+def play(kit: Kit) -> None:
+    model = kit.model.bind_tools(kit.tools)
+    system = SystemMessage(kit.base_prompt + "\n\n" + MAP_INSTRUCTIONS)
+    start = HumanMessage(kit.start)
+
+    def agent(state: MapState) -> dict[str, list[BaseMessage]]:
+        turn = state["messages"] or [start]
+        reply = model.invoke([system, *turn, HumanMessage(state["map"].render())])
+        return {"messages": [reply]}
+
+    def act(state: MapState) -> MapState:
+        reply = state["messages"][-1]
+        results = kit.tool_node(state)["messages"]
+        assert isinstance(reply, AIMessage)
+        calls = {c["id"]: c for c in [*reply.tool_calls, *reply.invalid_tool_calls]}
+        for result in results:
+            call = calls[result.tool_call_id]
+            args = call["args"] if isinstance(call["args"], dict) else {}
+            state["map"].apply(call["name"] or "", args, json.loads(str(result.content)))
+        return {"messages": [reply, *results], "map": state["map"]}
+
+    def route(state: MapState) -> str:
+        last = state["messages"][-1]
+        # Unparsable calls go to the tools too: they cost a step and get an error back.
+        has_calls = isinstance(last, AIMessage) and (last.tool_calls or last.invalid_tool_calls)
+        return "act" if has_calls else END
+
+    graph = StateGraph(MapState)
+    graph.add_node("agent", agent)
+    graph.add_node("act", act)
+    graph.add_edge(START, "agent")
+    graph.add_conditional_edges("agent", route)
+    graph.add_edge("act", "agent")
+    graph.compile().invoke(
+        {"messages": [], "map": DungeonMap.from_start(kit.start)},
+        config={"recursion_limit": kit.recursion_limit},
+    )

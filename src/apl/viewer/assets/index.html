@@ -1,0 +1,439 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent Viewer</title>
+<style>
+:root {
+  --bg: #f8f7f4; --ink: #1f2328; --muted: #6b7280; --line: #e5e3de; --card: #ffffff;
+  --floor: #ffffff; --wall: #1f2328; --trail: #7c3aed; --agent: #7c3aed;
+  --fail: rgba(220, 38, 38, 0.25); --exit: #16a34a; --fog: rgba(120, 120, 120, 0.55);
+  --solution: #0891b2; --red: #dc2626; --blue: #2563eb; --green: #16a34a; --yellow: #ca8a04;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #15171a; --ink: #e6e6e6; --muted: #9ca3af; --line: #2d3238; --card: #1c1f23;
+    --floor: #22262b; --wall: #e6e6e6; --trail: #a78bfa; --agent: #a78bfa;
+    --fail: rgba(248, 113, 113, 0.3); --exit: #4ade80; --fog: rgba(10, 10, 10, 0.6);
+    --solution: #22d3ee; --red: #f87171; --blue: #60a5fa; --green: #4ade80; --yellow: #facc15;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 system-ui, sans-serif; }
+header { padding: 12px 16px; border-bottom: 1px solid var(--line); }
+h1 { font-size: 17px; margin: 0 0 8px; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 6px 0; }
+.row label { color: var(--muted); }
+button, select, input { font: inherit; padding: 3px 8px; }
+#seed { width: 7em; }
+#dev-seeds button { padding: 1px 6px; font-size: 12px; }
+#message { min-height: 1.4em; color: var(--red); }
+#message.info { color: var(--muted); }
+main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 1fr); gap: 16px;
+  padding: 12px 16px; align-items: start; }
+@media (max-width: 860px) { main { grid-template-columns: 1fr; } }
+#map svg { width: 100%; height: auto; display: block; }
+.floor { fill: var(--floor); }
+.wall { stroke: var(--wall); stroke-width: 4; stroke-linecap: square; }
+.lock { stroke-width: 6; }
+.lock.open { opacity: 0.15; }
+.label { fill: var(--muted); font-size: 12px; font-family: ui-monospace, monospace; }
+.marker { fill: var(--ink); font-size: 16px; font-weight: 700; }
+#exit { fill: none; stroke: var(--exit); stroke-width: 3; stroke-dasharray: 6 4; }
+.key.taken { display: none; }
+.room { fill: transparent; pointer-events: none; }
+.room.fog { fill: var(--fog); }
+#trail { fill: none; stroke: var(--trail); stroke-width: 3; stroke-opacity: 0.5; }
+#agent { fill: var(--agent); transition: cx 0.25s, cy 0.25s; }
+#fail { fill: var(--fail); visibility: hidden; }
+#fail.show { visibility: visible; }
+#solution-line { fill: none; stroke: var(--solution); stroke-width: 3; stroke-dasharray: 2 6;
+  stroke-linecap: round; visibility: hidden; }
+#solution-line.show { visibility: visible; }
+.c-red { stroke: var(--red); fill: var(--red); }
+.c-blue { stroke: var(--blue); fill: var(--blue); }
+.c-green { stroke: var(--green); fill: var(--green); }
+.c-yellow { stroke: var(--yellow); fill: var(--yellow); }
+#slider { flex: 1 1 160px; }
+#stats { display: grid; grid-template-columns: max-content 1fr; gap: 2px 12px; margin-top: 8px; }
+#stats dt { color: var(--muted); }
+#stats dd { margin: 0; font-family: ui-monospace, monospace; }
+#panel { display: flex; flex-direction: column; gap: 8px; max-height: calc(100vh - 150px);
+  overflow-y: auto; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; }
+.card h3 { font-size: 13px; margin: 0 0 4px; color: var(--muted); font-weight: 600; }
+.card pre { white-space: pre-wrap; word-break: break-word; margin: 4px 0; font-size: 12px; }
+.card details summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+.card .text { margin: 4px 0; }
+.card ol { margin: 4px 0; padding-left: 20px; }
+.card li { font-family: ui-monospace, monospace; font-size: 12px; cursor: pointer; }
+.card li .result { color: var(--muted); }
+.card li .result.error { color: var(--red); }
+.card .waiting { color: var(--muted); font-style: italic; }
+.end { border-color: var(--trail); }
+@media (prefers-reduced-motion: reduce) { #agent { transition: none; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Agent Viewer</h1>
+  <div class="row">
+    <label for="level">Level</label> <select id="level"></select>
+    <label for="seed">Seed</label> <input id="seed" inputmode="numeric" value="1000">
+    <button id="random" type="button">Random</button>
+    <span id="dev-seeds" aria-label="Dev seeds"></span>
+    <button id="generate" type="button">Generate</button>
+  </div>
+  <div class="row">
+    <label for="arch">Agent</label> <select id="arch"></select>
+    <button id="run" type="button">Run</button>
+    <button id="stop" type="button" disabled>Stop</button>
+    <label for="saved">Saved episodes</label> <select id="saved"><option value="">—</option></select>
+  </div>
+  <div id="message" role="status" aria-live="polite"></div>
+</header>
+<main>
+  <section>
+    <div id="map"></div>
+    <div class="row">
+      <label><input id="fog" type="checkbox"> Agent's view</label>
+      <label><input id="solution" type="checkbox"> Shortest solution</label>
+    </div>
+    <div class="row">
+      <button id="play" type="button">Play</button>
+      <input id="slider" type="range" min="0" max="0" value="0" aria-label="Step">
+      <label><input id="follow" type="checkbox" checked> Follow live</label>
+      <label>Speed <select id="speed">
+        <option value="0.5">0.5×</option><option value="1" selected>1×</option>
+        <option value="2">2×</option><option value="4">4×</option>
+      </select></label>
+    </div>
+    <dl id="stats"></dl>
+  </section>
+  <section id="panel" aria-label="Model turns"></section>
+</main>
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const SVGNS = "http://www.w3.org/2000/svg";
+  const S = {
+    options: null, dungeon: null, frames: [], current: 0, episode: null, source: null,
+    turns: new Map(), steps: [], start: null, end: null, waitingSince: null, stopping: false,
+    timer: null,
+  };
+
+  function el(tag, text, cls) {
+    const node = document.createElement(tag);
+    if (text !== undefined && text !== null) node.textContent = String(text);
+    if (cls) node.className = cls;
+    return node;
+  }
+  function message(text, info) {
+    $("message").textContent = text || "";
+    $("message").classList.toggle("info", !!info);
+  }
+  async function api(path, options) {
+    const response = await fetch(path, options);
+    const data = await response.json().catch(() => ({ error: response.statusText }));
+    return { ok: response.ok, status: response.status, data };
+  }
+  const isTestSeed = (n) => S.options && n >= S.options.test_seeds[0] && n <= S.options.test_seeds[1];
+
+  /* ---------- the dungeon ---------- */
+  async function loadDungeon(level, seed) {
+    const { ok, data } = await api(`/api/dungeon?level=${encodeURIComponent(level)}&seed=${encodeURIComponent(seed)}`);
+    if (!ok) { message(data.error); return false; }
+    S.dungeon = data;
+    $("map").innerHTML = data.svg;
+    const line = document.createElementNS(SVGNS, "polyline");
+    line.id = "solution-line";
+    line.setAttribute("points", data.solution.map((f) => center(f.position).join(",")).join(" "));
+    $("map").querySelector("svg").insertBefore(line, $("trail"));
+    $("level").value = data.level;
+    $("seed").value = data.seed;
+    toggles();
+    return true;
+  }
+  function center(p) {
+    const C = S.dungeon.cell, M = S.dungeon.margin;
+    return [M + p[0] * C + C / 2, M + p[1] * C + C / 2];
+  }
+  function toggles() {
+    const line = $("solution-line");
+    if (line) line.classList.toggle("show", $("solution").checked);
+    render(S.current);
+  }
+
+  /* ---------- drawing one step (as the M1 player does) ---------- */
+  function render(n) {
+    if (!S.dungeon) return;
+    const frames = S.frames.length ? S.frames : [S.dungeon.solution[0]];
+    S.current = Math.max(0, Math.min(frames.length - 1, n));
+    const f = frames[S.current];
+    const [cx, cy] = center(f.position);
+    $("agent").setAttribute("cx", cx);
+    $("agent").setAttribute("cy", cy);
+    $("trail").setAttribute("points", frames.slice(0, S.current + 1).map((g) => center(g.position).join(",")).join(" "));
+    const doorId = (e) => `door-${e[0][0]}-${e[0][1]}-${e[1][0]}-${e[1][1]}`;
+    const opened = new Set(f.opened.map(doorId));
+    document.querySelectorAll(".lock").forEach((x) => x.classList.toggle("open", opened.has(x.id)));
+    document.querySelectorAll(".key").forEach((x) => x.classList.toggle("taken", !(x.dataset.color in f.keys)));
+    const fail = $("fail");
+    fail.classList.toggle("show", f.action !== null && !f.ok);
+    fail.setAttribute("x", S.dungeon.margin + f.position[0] * S.dungeon.cell);
+    fail.setAttribute("y", S.dungeon.margin + f.position[1] * S.dungeon.cell);
+    const visited = new Set(frames.slice(0, S.current + 1).map((g) => `room-${g.position[0]}-${g.position[1]}`));
+    const fog = $("fog").checked;
+    document.querySelectorAll(".room").forEach((x) => x.classList.toggle("fog", fog && !visited.has(x.id)));
+    $("slider").max = String(frames.length - 1);
+    $("slider").value = String(S.current);
+    stats();
+  }
+
+  /* ---------- statistics ---------- */
+  function stats() {
+    const d = S.dungeon, rows = [];
+    if (!d) return;
+    const f = S.frames[S.current];
+    const steps = Math.max(0, ...S.frames.slice(0, S.current + 1).map((g) => g.counted || 0));
+    rows.push(["Dungeon", `${d.level} seed ${d.seed}`]);
+    rows.push(["Steps", S.episode ? `${steps} / ${d.budget} (optimal ${d.optimal_steps})` : `budget ${d.budget}, optimal ${d.optimal_steps}`]);
+    if (S.episode) {
+      const turns = [...S.turns.values()];
+      const tokens = turns.reduce((sum, t) => sum + (t.usage ? t.usage.input_tokens + t.usage.output_tokens : 0), 0);
+      rows.push(["Agent", S.start ? `${S.start.arch} · ${S.start.model}` : ""]);
+      rows.push(["Model calls", String(turns.filter((t) => t.done).length)]);
+      rows.push(["Tokens", tokens.toLocaleString()]);
+      const seconds = S.end && S.end.row ? S.end.row.latency_s : S.startedAt && !S.end ? (Date.now() - S.startedAt) / 1000 : 0;
+      rows.push(["Time", `${seconds.toFixed(1)} s`]);
+      if (f && f.action) rows.push(["Step", `${f.action.tool} ${f.action.args.join(" ")} → ${f.ok ? "ok" : f.error}`]);
+      if (f) rows.push(["Inventory", f.inventory.length ? f.inventory.map((c) => `${c} key`).join(", ") : "empty"]);
+      if (S.end) {
+        const r = S.end.row;
+        const how = !r ? `error: ${S.end.error}` : r.status === "error" ? `error: ${r.error}` : r.end_reason + (r.arch_error ? ` (${r.arch_error})` : "");
+        rows.push(["Ended", how]);
+        if (r && r.success) rows.push(["Efficiency", r.efficiency.toFixed(2)]);
+      } else if (S.waitingSince) {
+        rows.push(["Model", `thinking… ${((Date.now() - S.waitingSince) / 1000).toFixed(0)} s`]);
+      }
+    }
+    const dl = $("stats");
+    dl.replaceChildren();
+    for (const [k, v] of rows) { dl.append(el("dt", k), el("dd", v)); }
+  }
+
+  /* ---------- the model turns ---------- */
+  function card(call) {
+    if (!S.turns.has(call)) {
+      const node = el("div", null, "card");
+      node.append(el("h3", `Model call ${call}`));
+      $("panel").append(node);
+      S.turns.set(call, { node, items: [], done: false, usage: null });
+    }
+    return S.turns.get(call);
+  }
+  function details(summary, text) {
+    const box = el("details");
+    box.append(el("summary", summary), el("pre", text));
+    return box;
+  }
+  function onThinking(data) {
+    const t = card(data.call);
+    if (data.new_input.length) {
+      const box = el("details");
+      box.append(el("summary", `New input (${data.new_input.length} message${data.new_input.length === 1 ? "" : "s"})`));
+      for (const m of data.new_input) box.append(el("pre", `[${m.type}] ${m.content}`));
+      t.node.append(box);
+    }
+    t.wait = el("div", "waiting for the model…", "waiting");
+    t.node.append(t.wait);
+    S.waitingSince = Date.now();
+  }
+  function onTurn(data) {
+    const t = card(data.call);
+    if (t.wait) t.wait.remove();
+    S.waitingSince = null;
+    t.done = true;
+    t.usage = data.usage;
+    if (data.reasoning) t.node.append(details("Reasoning", data.reasoning));
+    if (data.text) t.node.append(el("div", data.text, "text"));
+    const calls = [...data.tool_calls, ...data.invalid_tool_calls];
+    if (calls.length) {
+      const list = el("ol");
+      for (const c of calls) {
+        const item = el("li", `${c.name || "?"}(${JSON.stringify(c.args)})`);
+        const result = el("span", " …", "result");
+        item.append(result);
+        list.append(item);
+        t.items.push({ item, result });
+      }
+      t.node.append(list);
+    } else if (!data.text) {
+      t.node.append(el("div", "(no tool call and no text)", "waiting"));
+    }
+    const usage = data.usage ? `${data.usage.input_tokens.toLocaleString()} in / ${data.usage.output_tokens.toLocaleString()} out · ` : "";
+    t.node.append(el("div", `${usage}${data.latency_s.toFixed(1)} s${data.output_limit_hit ? " · cut off by the output limit" : ""}`, "waiting"));
+  }
+  function onStep(data) {
+    data.frame.counted = data.step; // null for calls after the end, which cost no step
+    S.frames.push(data.frame);
+    const index = S.frames.length - 1;
+    const t = S.turns.get(data.call);
+    const slot = t && t.items[(t.used = (t.used || 0) + 1) - 1];
+    if (slot) {
+      const r = data.result;
+      slot.result.textContent = r.ok ? " → ok" : ` → ${r.error.code}: ${r.error.message}`;
+      slot.result.classList.toggle("error", !r.ok);
+      slot.item.addEventListener("click", () => { $("follow").checked = false; render(index); });
+    }
+    if ($("follow").checked) render(index); else render(S.current);
+  }
+  function onEnd(data) {
+    S.end = data;
+    S.waitingSince = null;
+    for (const t of S.turns.values()) if (t.wait && !t.done) t.wait.textContent = "(no answer)";
+    const r = data.row;
+    const node = el("div", null, "card end");
+    node.append(el("h3", "Episode over"));
+    node.append(el("div", !r ? `Error: ${data.error}` : r.status === "error" ? `Infrastructure error: ${r.error}` :
+      `${r.end_reason}${r.success ? ` in ${r.steps} steps (optimal ${r.optimal_steps})` : ""}${r.arch_error ? ` — ${r.arch_error}` : ""}`));
+    $("panel").append(node);
+    if (S.source) { S.source.close(); S.source = null; }
+    $("stop").disabled = true;
+    message("", true);
+    refreshSaved();
+    render($("follow").checked ? S.frames.length - 1 : S.current);
+  }
+
+  /* ---------- attaching to an episode (live or saved) ---------- */
+  async function attach(id, live) {
+    if (S.source) S.source.close();
+    Object.assign(S, { episode: id, frames: [], current: 0, turns: new Map(), start: null, end: null,
+      waitingSince: null, startedAt: null });
+    $("panel").replaceChildren();
+    $("follow").checked = live;
+    $("stop").disabled = !live;
+    const source = new EventSource(`/api/episodes/${encodeURIComponent(id)}/events`);
+    S.source = source;
+    source.addEventListener("start", async (e) => {
+      const data = JSON.parse(e.data);
+      S.start = data;
+      S.startedAt = Date.parse(data.started) || Date.now();
+      S.frames = [data.frame]; // before the await: steps may arrive while the dungeon loads
+      if (!S.dungeon || S.dungeon.level !== data.level || S.dungeon.seed !== data.seed) {
+        await loadDungeon(data.level, data.seed);
+      }
+      render(live ? S.frames.length - 1 : 0);
+    });
+    source.addEventListener("thinking", (e) => onThinking(JSON.parse(e.data)));
+    source.addEventListener("turn", (e) => onTurn(JSON.parse(e.data)));
+    source.addEventListener("step", (e) => onStep(JSON.parse(e.data)));
+    source.addEventListener("stopping", () => message("Stopping after the current model turn…", true));
+    source.addEventListener("end", (e) => onEnd(JSON.parse(e.data)));
+    // A saved episode is complete once sent; a live one reconnects and resumes after its last id.
+    source.onerror = () => { if (S.end || !live) source.close(); };
+  }
+
+  async function refreshSaved() {
+    const { ok, data } = await api("/api/episodes");
+    if (!ok) return [];
+    const select = $("saved"), keep = select.value;
+    select.replaceChildren(el("option", "—"));
+    select.firstChild.value = "";
+    for (const e of data) {
+      const label = `${e.running ? "▶ running: " : ""}${e.arch} ${e.level} ${e.seed} · ${e.end_reason || ""} · ${e.id.slice(0, 15)}`;
+      const option = el("option", label);
+      option.value = e.id;
+      select.append(option);
+    }
+    select.value = keep;
+    return data;
+  }
+
+  /* ---------- controls ---------- */
+  async function generate() {
+    const seed = $("seed").value.trim();
+    if (!/^\d+$/.test(seed)) { message(`seed must be a whole number ≥ 0, got "${seed}"`); return; }
+    if (S.source && !S.end) { message("An episode is running; stop it first or wait for it to end."); return; }
+    if (await loadDungeon($("level").value, seed)) {
+      Object.assign(S, { episode: null, frames: [], current: 0, start: null, end: null });
+      $("panel").replaceChildren();
+      $("saved").value = "";
+      message("", true);
+      render(0);
+    }
+  }
+  $("generate").addEventListener("click", generate);
+  $("seed").addEventListener("keydown", (e) => { if (e.key === "Enter") generate(); });
+  $("level").addEventListener("change", generate);
+  $("random").addEventListener("click", () => {
+    let n;
+    do { n = Math.floor(Math.random() * 1000000); } while (isTestSeed(n));
+    $("seed").value = String(n);
+    generate();
+  });
+  $("fog").addEventListener("change", toggles);
+  $("solution").addEventListener("change", toggles);
+  $("run").addEventListener("click", async () => {
+    if (!S.dungeon) return;
+    const body = JSON.stringify({ arch: $("arch").value, level: S.dungeon.level, seed: S.dungeon.seed });
+    const { ok, data } = await api("/api/episodes", { method: "POST", headers: { "Content-Type": "application/json" }, body });
+    if (!ok) { message(data.error); return; }
+    message("", true);
+    await attach(data.id, true);
+    refreshSaved();
+  });
+  $("stop").addEventListener("click", async () => {
+    if (!S.episode) return;
+    const { ok, data } = await api(`/api/episodes/${encodeURIComponent(S.episode)}/stop`, { method: "POST" });
+    if (!ok) message(data.error);
+  });
+  $("saved").addEventListener("change", async () => {
+    const id = $("saved").value;
+    if (!id) return;
+    const running = (await refreshSaved()).some((e) => e.id === id && e.running);
+    await attach(id, running);
+  });
+  $("slider").addEventListener("input", () => { $("follow").checked = false; pause(); render(Number($("slider").value)); });
+  $("follow").addEventListener("change", () => { if ($("follow").checked) render(S.frames.length - 1); });
+
+  let player = null;
+  function pause() { clearInterval(player); player = null; $("play").textContent = "Play"; }
+  $("play").addEventListener("click", () => {
+    if (player) { pause(); return; }
+    $("follow").checked = false;
+    if (S.current >= S.frames.length - 1) render(0);
+    $("play").textContent = "Pause";
+    player = setInterval(() => {
+      if (S.current >= S.frames.length - 1) pause(); else render(S.current + 1);
+    }, 500 / Number($("speed").value));
+  });
+  $("speed").addEventListener("change", () => { if (player) { pause(); $("play").click(); } });
+  setInterval(() => { if (S.episode && !S.end) stats(); }, 500);
+
+  /* ---------- start ---------- */
+  (async () => {
+    const { ok, data } = await api("/api/options");
+    if (!ok) { message(data.error); return; }
+    S.options = data;
+    for (const level of data.levels) { const o = el("option", level); o.value = level; $("level").append(o); }
+    for (const name of data.architectures) { const o = el("option", name); o.value = name; $("arch").append(o); }
+    for (const seed of data.dev_seeds) {
+      const b = el("button", seed);
+      b.type = "button";
+      b.title = `dev seed ${seed}`;
+      b.addEventListener("click", () => { $("seed").value = String(seed); generate(); });
+      $("dev-seeds").append(b);
+    }
+    if (!data.can_run) { $("run").disabled = true; $("run").title = data.cannot_run_reason; message(data.cannot_run_reason, true); }
+    if (!data.architectures.length) $("run").disabled = true;
+    await generate();
+    const episodes = await refreshSaved();
+    const running = episodes.find((e) => e.running);
+    if (running) { $("saved").value = running.id; await attach(running.id, true); }
+  })();
+})();
+</script>
+</body>
+</html>

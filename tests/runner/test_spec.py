@@ -32,7 +32,7 @@ def test_matrix_order_and_size() -> None:
 
 
 def test_known_architectures_are_checked() -> None:
-    with pytest.raises(ValueError, match="registered: react"):
+    with pytest.raises(ValueError, match="registered: mapstate, react"):
         _spec(architectures=["nope"])
     spec = RunSpec.build(["loop"], ["L1"], "dev", known={"loop"})
     assert spec.architectures == ("loop",)

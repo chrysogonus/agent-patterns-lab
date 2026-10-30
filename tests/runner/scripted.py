@@ -6,7 +6,7 @@ from typing import Any
 
 from langchain_core.callbacks import BaseCallbackHandler, CallbackManagerForLLMRun
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
+from langchain_core.messages import AIMessage, BaseMessage
 from langchain_core.messages.ai import UsageMetadata
 from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_core.runnables import Runnable
@@ -78,16 +78,13 @@ def tool_calls(*calls: tuple[str, Mapping[str, object]]) -> AIMessage:
     )
 
 
-def _answered(messages: list[BaseMessage]) -> int:
-    return sum(isinstance(m, ToolMessage) for m in messages)
-
-
 def replay_solution(dungeon: Dungeon, per_turn: int = 1) -> Strategy:
     """The shortest solution as tool calls, `per_turn` calls per model turn."""
     actions = dungeon.solution.actions
+    calls = itertools.count()  # counts its own calls: A2 does not send the history (R17)
 
     def strategy(messages: list[BaseMessage]) -> AIMessage:
-        done = _answered(messages)
+        done = next(calls) * per_turn
         if done >= len(actions):
             return AIMessage("Done.")
         return tool_calls(*((a.tool, _args(a)) for a in actions[done : done + per_turn]))
@@ -123,6 +120,7 @@ def then(first: Strategy, calls: int, after: Strategy) -> Strategy:
 class FakeProviderError(Exception):
     """Stands in for a provider error; the runner classifies by `status_code` (research R8)."""
 
-    def __init__(self, status_code: int) -> None:
-        super().__init__(f"HTTP {status_code}")
+    def __init__(self, status_code: int, message: str = "", code: str | None = None) -> None:
+        super().__init__(f"HTTP {status_code}" + (f": {message}" if message else ""))
         self.status_code = status_code
+        self.code = code

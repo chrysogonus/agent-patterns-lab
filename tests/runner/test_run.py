@@ -211,13 +211,16 @@ def test_local_server_down_is_not_scored(tmp_path: Path) -> None:
 
 
 def test_default_model_factory_for_ollama() -> None:
-    model = default_model_factory(Settings(reasoning_effort="none"), [])
+    settings = Settings(model="ollama:qwen3:8b", reasoning_effort="none", max_output_tokens=4096)
+    model = default_model_factory(settings, [])
     assert type(model).__name__ == "ChatOllama"
     assert model.model == "qwen3:8b" and model.num_ctx == 16_384  # type: ignore[attr-defined]
     assert model.client_kwargs == {"timeout": 120}  # type: ignore[attr-defined]
     assert model.reasoning is False  # type: ignore[attr-defined]
     assert model.num_predict == 4096  # type: ignore[attr-defined]
-    openai_model = default_model_factory(Settings(model="openai:gpt-6-luna"), [])
+    openai_model = default_model_factory(
+        Settings(model="openai:gpt-6-luna", max_output_tokens=4096), []
+    )
     assert type(openai_model).__name__ == "ChatOpenAI"
     assert openai_model.max_tokens == 4096  # type: ignore[attr-defined]
 
@@ -292,6 +295,6 @@ def test_ollama_episode_survives_a_transient_error(tmp_path: Path) -> None:
 
 
 def test_ollama_model_gets_the_retry_transport() -> None:
-    model = default_model_factory(Settings(max_retries=3), [])
+    model = default_model_factory(Settings(model="ollama:qwen3:8b", max_retries=3), [])
     transport = model.sync_client_kwargs["transport"]  # type: ignore[attr-defined]
     assert isinstance(transport, RetryTransport) and transport.retries == 3

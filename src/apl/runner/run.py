@@ -13,6 +13,7 @@ from typing import Any
 import httpx
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.language_models import BaseChatModel
+from langchain_core.utils import convert_to_secret_str
 
 from apl.runner import registry
 from apl.runner.episode import EpisodeResult, ModelFactory, PermanentProviderError, play_episode
@@ -73,6 +74,21 @@ def default_model_factory(
     extra: dict[str, Any] = {}
     if settings.temperature is not None:
         extra["temperature"] = settings.temperature
+    if settings.model.startswith("vllm:"):
+        from apl.runner.vllm import VLLMChat
+
+        if settings.reasoning_effort is not None:
+            extra["reasoning_effort"] = settings.reasoning_effort
+        return VLLMChat(
+            model=settings.model.removeprefix("vllm:"),
+            base_url=settings.base_url,
+            api_key=convert_to_secret_str("EMPTY"),  # vLLM needs no key
+            callbacks=callbacks,
+            max_retries=settings.max_retries,
+            max_tokens=settings.max_output_tokens,  # type: ignore[call-arg]
+            timeout=settings.timeout_s,
+            **extra,
+        )
     if settings.model.startswith("ollama:"):
         # The Ollama client has no retries of its own and takes its timeout through client_kwargs.
         if settings.reasoning_effort is not None:
@@ -136,12 +152,12 @@ def _git(*args: str) -> str | None:
         return None
 
 
-def _code_version() -> dict[str, Any]:
+def code_version() -> dict[str, Any]:
     commit, status = _git("rev-parse", "HEAD"), _git("status", "--porcelain")
     return {"commit": commit, "dirty": None if status is None else bool(status)}
 
 
-def _versions() -> dict[str, str]:
+def package_versions() -> dict[str, str]:
     versions = {"python": platform.python_version()}
     for package in _PACKAGES:
         try:
@@ -178,8 +194,8 @@ def execute(
         seeds=spec.seeds,
         repeats=spec.repeats,
         settings=settings.record(),
-        code=_code_version(),
-        versions=_versions(),
+        code=code_version(),
+        versions=package_versions(),
     )
     write_json(path / "run.json", record.to_dict())
     episodes = path / "episodes"

@@ -11,7 +11,7 @@ PROVIDER_DEFAULT = "provider default"
 
 @dataclass(frozen=True, slots=True)
 class Settings:
-    model: str = "ollama:qwen3:8b"
+    model: str = "vllm:qwen3.5-9b"
     temperature: float | None = None  # None: not sent, the provider's default applies
     reasoning_effort: str | None = None
     token_cap: int = 600_000
@@ -19,11 +19,14 @@ class Settings:
     timeout_s: float = 120
     price_input: float | None = None  # USD per 1M tokens; for the dry run's cost only
     price_output: float | None = None
-    # Ollama's context window. Its own default (4,096) would silently cut off long episodes.
+    # Ollama's context window. Its own default (4,096) would silently cut off long episodes. For
+    # vLLM the server sets it; the runner puts the server's value here before recording it.
     num_ctx: int = 16_384
     # Output tokens per model call. Without it a local model can think endlessly inside one call,
     # where neither the token cap (checked after a call) nor the timeout (per read) can stop it.
-    max_output_tokens: int = 4096
+    # 1,024 suits vLLM's 8,192-token context; load_settings uses 4,096 for other providers.
+    max_output_tokens: int = 1024
+    base_url: str = "http://localhost:8001/v1"  # the vLLM server
 
     def record(self) -> dict[str, object]:
         """The run conditions, as stored in run.json and compared by the report."""
@@ -36,8 +39,9 @@ class Settings:
             "token_cap": self.token_cap,
             "max_retries": self.max_retries,
             "timeout_s": self.timeout_s,
-            "num_ctx": self.num_ctx if self.model.startswith("ollama:") else None,
+            "num_ctx": self.num_ctx if self.model.startswith(("ollama:", "vllm:")) else None,
             "max_output_tokens": self.max_output_tokens,
+            "base_url": self.base_url if self.model.startswith("vllm:") else None,
             "prompt_fingerprint": prompt_fingerprint(),
         }
 
@@ -88,15 +92,19 @@ def load_settings(environ: Mapping[str, str] | None = None) -> Settings:
     num_ctx = _parse(values, "APL_NUM_CTX", int, _positive, "int > 0")
     max_output = _parse(values, "APL_MAX_OUTPUT_TOKENS", int, _positive, "int > 0")
     defaults = Settings()
+    model = values.get("APL_MODEL") or defaults.model
+    if max_output is None:
+        max_output = defaults.max_output_tokens if model.startswith("vllm:") else 4096
     return Settings(
-        model=values.get("APL_MODEL") or defaults.model,
+        model=model,
         temperature=_parse(values, "APL_TEMPERATURE", float, _non_negative, "float ≥ 0 when set"),
         reasoning_effort=effort,
         token_cap=defaults.token_cap if token_cap is None else token_cap,
         max_retries=defaults.max_retries if max_retries is None else max_retries,
         timeout_s=defaults.timeout_s if timeout_s is None else timeout_s,
         num_ctx=defaults.num_ctx if num_ctx is None else num_ctx,
-        max_output_tokens=defaults.max_output_tokens if max_output is None else max_output,
+        max_output_tokens=max_output,
+        base_url=values.get("APL_BASE_URL") or defaults.base_url,
         price_input=price_input,
         price_output=price_output,
     )

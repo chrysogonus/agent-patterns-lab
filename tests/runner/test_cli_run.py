@@ -25,9 +25,9 @@ def test_dry_run_prints_the_plan_and_writes_nothing(
     out = capsys.readouterr().out
     for line in [
         "episodes       6",
-        "model          ollama:qwen3:8b",
-        "context        16,384 tokens",
-        "max output     4,096 tokens per call",
+        "model          vllm:qwen3.5-9b",
+        "context        from the server (read at --execute)",
+        "max output     1,024 tokens per call",
         "temperature    provider default",
         "reasoning      provider default",
         "token cap      600,000 per episode",
@@ -39,6 +39,15 @@ def test_dry_run_prints_the_plan_and_writes_nothing(
     ]:
         assert line in out
     assert list(workdir.iterdir()) == []  # SC-001; the network guard would have raised
+
+
+def test_dry_run_for_ollama_shows_its_context(
+    workdir: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("APL_MODEL", "ollama:qwen3:8b")
+    assert main(DRY) == 0
+    out = capsys.readouterr().out
+    assert "context        16,384 tokens" in out and "max output     4,096 tokens per call" in out
 
 
 def test_dry_run_with_prices(
@@ -58,7 +67,7 @@ def test_test_seeds_are_for_reporting(workdir: Path, capsys: pytest.CaptureFixtu
 @pytest.mark.parametrize(
     ("args", "message"),
     [
-        (["--arch", "nope", "--level", "L1"], "registered: react"),
+        (["--arch", "nope", "--level", "L1"], "registered: mapstate, react"),
         (["--arch", "react", "--level", "L9"], "unknown level 'L9' (levels: L1, L2, L3, all)"),
         (["--arch", "react", "--level", "L1", "--only", "5"], "not in the dev seeds"),
         (["--arch", "react", "--level", "L1", "--only", "x"], "--only"),
@@ -93,11 +102,12 @@ EXECUTE = ["run", "--arch", "loop", "--level", "L1", "--seeds", "dev", "--limit"
 @pytest.fixture
 def scripted_loop(monkeypatch: pytest.MonkeyPatch) -> None:
     """Registers the test-only loop architecture and swaps in the scripted model."""
-    from apl.runner import run
+    from apl.runner import run, vllm
     from tests.runner.scripted import scripted_factory, text_answer
 
     monkeypatch.setitem(registry.ARCHITECTURES, "loop", "tests.runner.loop_arch")
     monkeypatch.setattr(run, "default_model_factory", scripted_factory(text_answer()))
+    monkeypatch.setattr(vllm, "with_server_context", lambda settings: settings)
 
 
 def test_execute_needs_the_api_key(
@@ -156,15 +166,13 @@ def test_report_command(
 
 
 def test_report_refuses_bad_input(
-    workdir: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+    workdir: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    scripted_loop: None,
 ) -> None:
     assert main(["report", str(workdir)]) == 2
     assert "no run.json" in capsys.readouterr().err
-    from apl.runner import run
-    from tests.runner.scripted import scripted_factory, text_answer
-
-    monkeypatch.setitem(registry.ARCHITECTURES, "loop", "tests.runner.loop_arch")
-    monkeypatch.setattr(run, "default_model_factory", scripted_factory(text_answer()))
     main(EXECUTE)
     monkeypatch.setenv("APL_TOKEN_CAP", "1000")
     main(EXECUTE)

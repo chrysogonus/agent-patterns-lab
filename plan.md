@@ -127,10 +127,11 @@ Each milestone after M0 is one Spec Kit feature (`/speckit-specify` through
 | M0 | Repository, README, this plan, Spec Kit for Claude Code and Codex | `specify` is set up for both agents |
 | M1 | Generator, environment, tools, solver. No model | Tests show every generated dungeon is solvable and the solver finds the shortest solution |
 | M2 | Runner, results format, report, A1 ReAct | One dry run and one small paid run produce a report |
-| M3 | A2 map state and the first comparison | 2 architectures × 3 levels × 10 dev seeds × 3 repeats = 180 episodes, with a written conclusion |
-| M4+ | One architecture per feature: A3, A4, A5, A6 | Each one is added to the comparison on the same seeds |
+| M3 | Browser viewer and A2 map state | In the browser, any level and seed can be shown and regenerated, and A1 or A2 can be watched playing it live; episodes are saved and replayable |
+| M4 | First comparison, A1 vs A2 | Continuable runs, a comparison report and a written conclusion; the episode count is decided then (the parked design in `docs/parked/m4-comparison/` assumed 180) |
+| M5+ | One architecture per feature: A3, A4, A5, A6 | Each one can be watched in the viewer and is added to the comparison on the same seeds |
 
-Paperclip comes in from M4, when several architectures can be built as parallel tickets.
+Paperclip comes in from M5, when several architectures can be built as parallel tickets.
 
 ## 8. Cost control
 
@@ -142,8 +143,10 @@ Paperclip comes in from M4, when several architectures can be built as parallel 
 
 Decided:
 
-- Default model: `ollama:qwen3:8b` on the local Ollama server (free), set through `APL_MODEL`,
-  with a fixed 16,384-token context (`APL_NUM_CTX`). `openai:gpt-6-luna` remains an option.
+- Default model (since M3): `vllm:qwen3.5-9b`, Qwen3.5 9B on a local vLLM server (free, about
+  2 s per call, 8,192-token context set on the server), through `APL_MODEL` and `APL_BASE_URL`.
+  `ollama:qwen3:8b` (the M2 default, 16,384-token `APL_NUM_CTX`) and `openai:gpt-6-luna` remain
+  options. Runs with different models are never combined.
 - The subscription gateway (`~/workspace/subscription-gateway`) is used wherever a step needs no
   tool calls. It rejects `tools` and runs the request through an agent CLI, so it never runs
   experiment episodes: every architecture must call the same raw model (constitution I).

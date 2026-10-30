@@ -38,7 +38,8 @@ def _wall(layout: Layout, a: Pos, b: Pos | None, x1: int, y1: int, x2: int, y2: 
     return parts
 
 
-def _svg(layout: Layout, animated: bool) -> str:
+def svg(layout: Layout, animated: bool) -> str:
+    """The dungeon as inline SVG; the viewer draws this too (specs/003 research R6)."""
     n, size = layout.size, 2 * MARGIN + layout.size * CELL
     out = [
         f'<svg viewBox="0 0 {size} {size}" role="img" aria-label="Dungeon map">',
@@ -73,6 +74,12 @@ def _svg(layout: Layout, animated: bool) -> str:
             f'<circle class="key c-{color}" id="key-{color}" data-color="{color}" '
             f'cx="{cx}" cy="{cy}" r="7"><title>{color} key</title></circle>'
         )
+    # Room overlays above the drawing and below the agent: the viewer's "agent's view" dims them.
+    for x, y in layout.rooms():
+        out.append(
+            f'<rect class="room" id="room-{x}-{y}" x="{MARGIN + x * CELL}" '
+            f'y="{MARGIN + y * CELL}" width="{CELL}" height="{CELL}"/>'
+        )
     if animated:
         start_x, start_y = (MARGIN + c * CELL + CELL // 2 for c in layout.start)
         out.append('<polyline id="trail" points=""/>')
@@ -91,7 +98,7 @@ def render_html(dungeon: Dungeon, frames: list[Frame] | None = None) -> str:
     else:
         title = "Hand-built dungeon"
     page = template.replace("{{TITLE}}", html.escape(title))
-    page = page.replace("{{SVG}}", _svg(dungeon.layout, animated=frames is not None))
+    page = page.replace("{{SVG}}", svg(dungeon.layout, animated=frames is not None))
     head, _, rest = page.partition("<!--PLAYER-->\n")
     player, _, tail = rest.partition("<!--/PLAYER-->\n")
     if frames is None:

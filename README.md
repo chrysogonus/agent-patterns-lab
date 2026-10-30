@@ -3,9 +3,9 @@
 A playground for comparing LangGraph agent architectures on the same generated dungeon,
 scored by code.
 
-> **Status: M2 in progress.** The dungeon, the runner, the results files and the report work.
-> The first architecture, A1 ReAct, is written; its first small paid run is next. The design and
-> milestones are in [`plan.md`](plan.md).
+> **Status: M3 in progress.** M2 is done: the dungeon, the runner, the results files, the report
+> and A1 ReAct work. M3 adds a browser viewer to watch agents play live, and A2 map state. The
+> design and milestones are in [`plan.md`](plan.md).
 
 ## What this is
 
@@ -65,15 +65,21 @@ One setting chooses the model for every architecture, in LangChain's `provider:m
 
 ```bash
 # .env (never committed; see .env.example for every setting)
-APL_MODEL=ollama:qwen3:8b          # local, free; or e.g. openai:gpt-6-luna with OPENAI_API_KEY
+APL_MODEL=vllm:qwen3.5-9b          # local vLLM, free; also ollama:qwen3:8b or openai:gpt-6-luna
 ```
 
-The default is Qwen3 8B on a local [Ollama](https://ollama.com) server (`ollama pull qwen3:8b`).
-The runner sets its context window to 16,384 tokens (`APL_NUM_CTX`), because Ollama's own default
-of 4,096 would silently cut off long episodes. Optional settings, the same for every architecture
-in a run: `APL_TEMPERATURE`, `APL_REASONING_EFFORT` (both default to the provider's default),
-`APL_MAX_OUTPUT_TOKENS` (per model call, default 4,096), `APL_TOKEN_CAP` (tokens per episode,
-default 600,000), and `APL_PRICE_INPUT` /
+The default is Qwen3.5 9B served by a local [vLLM](https://docs.vllm.ai) server at
+`http://localhost:8001/v1` (`APL_BASE_URL`), started with `--reasoning-parser qwen3` and
+`--enable-auto-tool-choice --tool-call-parser qwen3_coder`. A model call takes about 2 seconds.
+The model's reasoning is shown in the viewer and kept in the transcripts, but never sent back to
+it. The context window is the server's (`--max-model-len`, 8,192 here), and the runner records
+it. A prompt that outgrows it ends the episode as the architecture's failure.
+
+`ollama:` models still work (`APL_NUM_CTX` sets their context, default 16,384, because Ollama's
+own 4,096 would silently cut off long episodes). Optional settings, the same for every
+architecture in a run: `APL_TEMPERATURE`, `APL_REASONING_EFFORT` (both default to the provider's
+default), `APL_MAX_OUTPUT_TOKENS` (per model call; 1,024 for vLLM, otherwise 4,096),
+`APL_TOKEN_CAP` (tokens per episode, default 600,000), and `APL_PRICE_INPUT` /
 `APL_PRICE_OUTPUT` (USD per 1M tokens, for the dry run's worst-case cost).
 
 ## Development
@@ -116,6 +122,28 @@ per episode), the tool log and model conversation of every episode, and `report.
 `src/apl/arch/<name>.py` with `play(kit)`; see
 [`contracts/kit.md`](specs/002-runner-react/contracts/kit.md).
 
+### Watch an agent
+
+```bash
+uv run apl serve        # then open http://127.0.0.1:8765/
+```
+
+The viewer is a local page (reachable only from this machine):
+
+- Pick a level and any seed: the same seed always builds the same dungeon. Test seeds
+  (2000–2019) are refused, so they stay unseen for reported results.
+- Pick an architecture (`react`, `mapstate`) and press Run. Every step appears on the map as it
+  happens, and every model turn in the side panel: its new input (for A2, its map), reasoning,
+  tool calls and their results. Stats count up as it goes.
+- "Agent's view" dims the rooms the agent has not been in yet. "Shortest solution" draws the
+  solver's route. The slider goes back to any step; Stop ends the episode after the current
+  model turn.
+- Every episode is saved under `results/viewer/<id>/` (events, outcome, conversation, settings)
+  and can be replayed from "Saved episodes".
+
+Local models (`vllm:`, `ollama:`) run without a flag; a paid provider needs
+`apl serve --execute`. See [`contracts/viewer-api.md`](specs/003-viewer-mapstate/contracts/viewer-api.md).
+
 ## Working with Spec Kit
 
 The repository uses [Spec Kit](https://github.com/github/spec-kit) for Claude Code and Codex.
@@ -139,7 +167,9 @@ src/apl/dungeon/   generator, environment, tools, solver, text map, HTML view
 src/apl/cli.py     the `apl` command
 src/apl/kit.py     what an architecture gets per episode (model, tools, prompt)
 src/apl/arch/      one module per architecture, written by hand
-src/apl/runner/    run matrix, results, report
+src/apl/runner/    run matrix, results, report, model providers
+src/apl/viewer/    `apl serve`: the browser viewer
+docs/parked/       designs set aside for a later milestone
 tests/
 specs/             Spec Kit feature specs
 .specify/          Spec Kit configuration and templates

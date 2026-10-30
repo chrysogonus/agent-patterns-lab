@@ -9,7 +9,7 @@ import pytest
 from apl.dungeon import DEV_SEEDS, LEVELS, generate
 from apl.dungeon.frames import build_frames
 from apl.dungeon.model import Action, Dungeon, Edge, Layout
-from apl.dungeon.render_html import CELL, GAP, MARGIN, render_html
+from apl.dungeon.render_html import CELL, GAP, MARGIN, render_html, svg
 from apl.dungeon.render_text import render_text
 from tests.dungeon.reference import chained_keys
 
@@ -201,3 +201,15 @@ def test_step_table_shows_an_unknown_tool() -> None:
     dungeon = Dungeon.from_layout(chained_keys())
     frames = build_frames(dungeon, [Action("unknown", ("open",))])
     assert "unknown open" in render_text(dungeon, frames)
+
+
+@pytest.mark.parametrize("level", sorted(LEVELS))
+def test_picture_has_one_room_rect_per_room(level: str) -> None:
+    layout = generate(level, 1000).layout
+    for animated in (False, True):
+        drawing = svg(layout, animated)
+        rects = re.findall(r'<rect class="room" id="room-(\d+)-(\d+)"', drawing)
+        assert sorted((int(x), int(y)) for x, y in rects) == sorted(layout.rooms())
+        # Above the drawing, below the agent: fog dims labels and keys, never the agent.
+        if animated:
+            assert drawing.rindex('class="room"') < drawing.index('id="trail"')

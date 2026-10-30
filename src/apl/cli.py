@@ -88,6 +88,7 @@ def _progress(i: int, n: int, result: "EpisodeResult") -> None:
 def _execute(spec: "RunSpec", settings: "Settings") -> int:
     from apl.runner import registry, run
     from apl.runner.settings import required_key_var
+    from apl.runner.vllm import with_server_context
 
     key_var = required_key_var(settings.model)
     if key_var and not os.environ.get(key_var):
@@ -95,6 +96,7 @@ def _execute(spec: "RunSpec", settings: "Settings") -> int:
         return 2
     try:
         plays = {name: registry.load(name) for name in spec.architectures}
+        settings = with_server_context(settings)
     except ValueError as error:
         print(f"apl: {error}", file=sys.stderr)
         return 2
@@ -137,6 +139,42 @@ def _report(paths: list[Path]) -> int:
     return 0
 
 
+def _serve(args: argparse.Namespace) -> int:
+    from apl.runner.settings import load_settings
+    from apl.runner.vllm import with_server_context
+    from apl.viewer.app import Viewer
+    from apl.viewer.server import make_server
+
+    try:
+        settings = load_settings()
+    except ValueError as error:
+        print(f"apl: {error}", file=sys.stderr)
+        return 2
+    try:
+        settings = with_server_context(settings)
+    except ValueError as error:  # browsing and replay still work; starting an agent will fail
+        print(f"apl: warning: {error}", file=sys.stderr)
+    viewer = Viewer(settings, execute=args.execute)
+    try:
+        server = make_server(viewer, args.port)
+    except OSError as error:
+        print(f"apl: cannot listen on 127.0.0.1:{args.port}: {error}", file=sys.stderr)
+        return 2
+    print(
+        f"Viewer: http://127.0.0.1:{args.port}/ (model {settings.model}; Ctrl-C to stop)",
+        flush=True,
+    )
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        print("apl: stopping; a running episode is stopped and saved", flush=True)
+        viewer.shutdown(timeout=settings.timeout_s)
+        return 130
+    finally:
+        server.server_close()
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="apl")
     commands = parser.add_subparsers(dest="command")
@@ -155,6 +193,11 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--only", help="only these seeds of the set, comma-separated")
     run.add_argument("--repeats", type=int, default=1, help="repeats per seed (default 1)")
     run.add_argument("--execute", action="store_true", help="actually run: this costs money")
+    serve = commands.add_parser("serve", help="open the viewer: watch agents play live")
+    serve.add_argument("--port", type=int, default=8765, help="port on 127.0.0.1 (default 8765)")
+    serve.add_argument(
+        "--execute", action="store_true", help="allow agents with a paid provider: costs money"
+    )
     report = commands.add_parser("report", help="build a report from run folders")
     report.add_argument("runs", nargs="+", type=Path, metavar="RUN_DIR")
     args = parser.parse_args(argv)
@@ -164,5 +207,7 @@ def main(argv: list[str] | None = None) -> int:
         return _run(args)
     if args.command == "report":
         return _report(args.runs)
+    if args.command == "serve":
+        return _serve(args)
     (dungeon if args.command == "dungeon" else parser).print_help()
     return 2

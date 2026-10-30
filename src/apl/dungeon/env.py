@@ -89,6 +89,7 @@ class Episode:
         self.invalid_actions = 0
         self.end_reason: EndReason | None = None
         self.log: list[LogEntry] = []
+        self.on_step: Callable[[LogEntry], None] | None = None  # an observer, e.g. the viewer
 
     @property
     def keys_in_rooms(self) -> dict[str, Pos]:
@@ -156,7 +157,7 @@ class Episode:
     def _call(self, action: Action, handler: Callable[[], ToolResult]) -> ToolResult:
         if self.end_reason is not None:
             result = ToolResult.failure(ErrorCode.EPISODE_OVER, "The episode is over.")
-            self.log.append(LogEntry(len(self.log), None, action, result))
+            self._append(LogEntry(len(self.log), None, action, result))
             return result
         self.steps += 1
         result = handler()
@@ -167,8 +168,13 @@ class Episode:
             self.end_reason = EndReason.EXIT
         elif self.steps >= self.dungeon.budget:
             self.end_reason = EndReason.BUDGET
-        self.log.append(LogEntry(len(self.log), self.steps, action, result))
+        self._append(LogEntry(len(self.log), self.steps, action, result))
         return result
+
+    def _append(self, entry: LogEntry) -> None:
+        self.log.append(entry)
+        if self.on_step is not None:
+            self.on_step(entry)
 
     def _door(self, raw: object) -> tuple[Direction, Edge] | ToolResult:
         direction = _direction(raw)

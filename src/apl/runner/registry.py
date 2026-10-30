@@ -7,7 +7,7 @@ from typing import cast
 
 from apl.kit import Kit
 
-ARCHITECTURES: dict[str, str] = {"react": "apl.arch.react"}
+ARCHITECTURES: dict[str, str] = {"react": "apl.arch.react", "mapstate": "apl.arch.mapstate"}
 
 Play = Callable[[Kit], None]
 

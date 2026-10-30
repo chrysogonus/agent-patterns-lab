@@ -1,7 +1,7 @@
 """Plays one episode and sorts out how it ended (data-model "Episode flow", research R7, R8)."""
 
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
 import httpx
@@ -10,7 +10,7 @@ from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.language_models import BaseChatModel
 
 from apl.dungeon import generate, start_episode
-from apl.dungeon.env import Outcome
+from apl.dungeon.env import Episode, Outcome
 from apl.kit import EpisodeEnded, Kit, build_kit
 from apl.runner.meter import Meter, Transcript
 from apl.runner.results import EpisodeRow
@@ -45,6 +45,13 @@ def _is_provider_error(error: BaseException) -> bool:
     )
 
 
+def _is_context_overflow(error: BaseException) -> bool:
+    """The prompt no longer fits the model's context: the architecture's failure (R10)."""
+    if getattr(error, "code", None) == "context_length_exceeded":
+        return True
+    return getattr(error, "status_code", None) == 400 and "maximum context length" in str(error)
+
+
 def play_episode(
     key: EpisodeKey,
     run_id: str,
@@ -52,10 +59,16 @@ def play_episode(
     settings: Settings,
     play: Callable[[Kit], None],
     model_factory: ModelFactory,
+    *,
+    callbacks: Sequence[BaseCallbackHandler] = (),
+    on_episode: Callable[[Episode], None] | None = None,
 ) -> EpisodeResult:
+    """Plays one episode. `callbacks` and `on_episode` let an observer (the viewer) watch it."""
     episode = start_episode(generate(key.level, key.seed))
+    if on_episode is not None:
+        on_episode(episode)
     meter = Meter(episode, settings.token_cap)
-    kit = build_kit(episode, model_factory(settings, [meter]))
+    kit = build_kit(episode, model_factory(settings, [meter, *callbacks]))
     arch_error = None
     started = time.perf_counter()
     try:
@@ -65,6 +78,8 @@ def play_episode(
     except Exception as error:
         if not _is_provider_error(error):
             arch_error = _describe(error)  # the architecture failed: scored as a failure
+        elif _is_context_overflow(error):
+            arch_error = "context window exceeded: " + _describe(error)
         elif getattr(error, "status_code", None) in PERMANENT_STATUS:
             raise PermanentProviderError(_describe(error)) from error
         else:  # retries are used up: an infrastructure error, not scored

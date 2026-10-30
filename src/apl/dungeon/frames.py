@@ -36,7 +36,7 @@ class Frame:
         }
 
 
-def _snapshot(
+def snapshot(
     episode: Episode, step: int, action: Action | None, result: ToolResult | None
 ) -> Frame:
     return Frame(
@@ -88,7 +88,7 @@ def build_frames(
         raise ValueError("the log has a different number of actions and results")
     stopped = end_reason == EndReason.STOPPED
     episode = start_episode(dungeon)
-    frames = [_snapshot(episode, 0, None, None)]
+    frames = [snapshot(episode, 0, None, None)]
     for i, action in enumerate(actions, start=1):
         expected = expected_results[i - 1] if expected_results is not None else None
         if stopped and episode.end_reason is None and _is_episode_over(expected):
@@ -96,7 +96,7 @@ def build_frames(
         result = call(episode, action)
         if expected is not None and result.to_dict() != expected:
             raise ValueError(f"step {i}: the replayed result differs from the logged one")
-        frames.append(_snapshot(episode, i, action, result))
+        frames.append(snapshot(episode, i, action, result))
     if stopped and episode.end_reason is None:
         episode.stop()
         frames[-1] = replace(frames[-1], end_reason=EndReason.STOPPED)

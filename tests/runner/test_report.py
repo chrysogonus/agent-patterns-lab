@@ -138,7 +138,7 @@ def test_single_repeat_has_no_spread_and_empty_medians(tmp_path: Path) -> None:
 
 def test_header_shows_the_model_limits(tmp_path: Path) -> None:
     report = render([load_run(_write(tmp_path / "run-a", ROWS_A[:1]))])
-    assert "· context 16,384 · max output 4,096 ·" in report
+    assert "· context 16,384 · max output 1,024 ·" in report
 
 
 def test_medians_are_whole_numbers(tmp_path: Path) -> None:
