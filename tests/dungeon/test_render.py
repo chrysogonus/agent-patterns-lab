@@ -195,3 +195,9 @@ def test_embedded_json_cannot_close_the_script() -> None:
 def test_player_template_ships_with_the_package() -> None:
     template = importlib.resources.files("apl.dungeon") / "assets" / "player.html"
     assert "{{SVG}}" in template.read_text(encoding="utf-8")
+
+
+def test_step_table_shows_an_unknown_tool() -> None:
+    dungeon = Dungeon.from_layout(chained_keys())
+    frames = build_frames(dungeon, [Action("unknown", ("open",))])
+    assert "unknown open" in render_text(dungeon, frames)

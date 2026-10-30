@@ -125,6 +125,14 @@ class Episode:
     def use(self, item: str, direction: str) -> ToolResult:
         return self._call(Action("use", (item, direction)), lambda: self._use(item, direction))
 
+    def unknown(self, name: str) -> ToolResult:
+        """A call to a tool that does not exist. It still costs a step (Constitution III)."""
+        message = f"There is no tool named {name!r}. The tools are look, move, take and use."
+        return self._call(
+            Action("unknown", (name,)),
+            lambda: ToolResult.failure(ErrorCode.UNKNOWN_TOOL, message),
+        )
+
     def stop(self) -> None:
         """End the episode early (the architecture gave up). Costs no step."""
         if self.end_reason is None:

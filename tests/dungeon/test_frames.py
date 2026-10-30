@@ -89,3 +89,18 @@ def test_log_end_reason_must_match() -> None:
 def test_bad_route_files_are_rejected(data: object) -> None:
     with pytest.raises(ValueError):
         parse_route_file(data)
+
+
+def test_log_with_an_unknown_tool_replays() -> None:
+    dungeon = Dungeon.from_layout(locked_shortcut_wins())
+    episode = start_episode(dungeon)
+    episode.move("east")
+    episode.unknown("open")
+    episode.stop()
+    record = episode.outcome().to_dict()
+    frames = parse_route_file(record).frames(dungeon)
+    assert [f.action for f in frames[1:]] == [
+        Action("move", ("east",)),
+        Action("unknown", ("open",)),
+    ]
+    assert frames[-1].error_code == "unknown_tool" and frames[-1].end_reason == EndReason.STOPPED

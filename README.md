@@ -3,8 +3,8 @@
 A playground for comparing LangGraph agent architectures on the same generated dungeon,
 scored by code.
 
-> **Status: M1 done.** The dungeon generator, environment, tools and solver work, with a text
-> map and an animated HTML view. No architecture exists yet. The design and milestones are in
+> **Status: M2 in progress.** The dungeon, the runner, the results files and the report work.
+> The first architecture, A1 ReAct, is being written by hand. The design and milestones are in
 > [`plan.md`](plan.md).
 
 ## What this is
@@ -64,12 +64,15 @@ it gets `--execute`.
 One setting chooses the model for every architecture, in LangChain's `provider:model` form:
 
 ```bash
-# .env (never committed)
+# .env (never committed; see .env.example for every setting)
 APL_MODEL=openai:gpt-6-luna
 OPENAI_API_KEY=...
 ```
 
-The default is GPT-6 Luna on the OpenAI API.
+The default is GPT-6 Luna on the OpenAI API. Optional settings, the same for every architecture
+in a run: `APL_TEMPERATURE`, `APL_REASONING_EFFORT` (both default to the provider's default),
+`APL_TOKEN_CAP` (tokens per episode, default 600,000), and `APL_PRICE_INPUT` /
+`APL_PRICE_OUTPUT` (USD per 1M tokens, for the dry run's worst-case cost).
 
 ## Development
 
@@ -95,6 +98,22 @@ Open `l3.html` in a browser to play the route back step by step. `--route` also 
 file with an action list or a recorded outcome; see
 [`contracts/cli.md`](specs/001-dungeon-environment/contracts/cli.md).
 
+### Run an experiment
+
+```bash
+uv run apl run --arch react --level all --seeds dev --limit 2            # plan only, free
+uv run apl run --arch react --level all --seeds dev --limit 2 --execute  # costs money
+uv run apl report results/<run-id>                                       # report again
+uv run apl dungeon show --level L2 --seed 1001 \
+  --route results/<run-id>/episodes/react-L2-1001-r1.outcome.json --html episode.html
+```
+
+Each run gets a folder under `results/` with `run.json` (settings), `episodes.jsonl` (one row
+per episode), the tool log and model conversation of every episode, and `report.md`. See
+[`contracts/results.md`](specs/002-runner-react/contracts/results.md). An architecture is a module
+`src/apl/arch/<name>.py` with `play(kit)`; see
+[`contracts/kit.md`](specs/002-runner-react/contracts/kit.md).
+
 ## Working with Spec Kit
 
 The repository uses [Spec Kit](https://github.com/github/spec-kit) for Claude Code and Codex.
@@ -116,8 +135,9 @@ Repeat implement and converge until converge reports `Converged`.
 ```text
 src/apl/dungeon/   generator, environment, tools, solver, text map, HTML view
 src/apl/cli.py     the `apl` command
-src/apl/arch/      one module per architecture (planned, M2+)
-src/apl/runner/    run matrix, results, report (planned, M2)
+src/apl/kit.py     what an architecture gets per episode (model, tools, prompt)
+src/apl/arch/      one module per architecture, written by hand
+src/apl/runner/    run matrix, results, report
 tests/
 specs/             Spec Kit feature specs
 .specify/          Spec Kit configuration and templates

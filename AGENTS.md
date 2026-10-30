@@ -13,6 +13,7 @@ uv run ruff check .          # lint
 uv run ruff format --check . # formatting
 uv run mypy                  # type check (strict)
 uv run apl dungeon show --level L3 --seed 1000 --route solution  # inspect a dungeon
+uv run apl run --arch react --level all --seeds dev --limit 2  # plan a run (free dry run)
 ```
 
 All four checks must pass before a feature counts as done.
@@ -21,8 +22,9 @@ All four checks must pass before a feature counts as done.
 
 - The user writes the architecture graphs in `src/apl/arch/`. Do not write graph logic there
   unless asked.
-- Architectures reach the dungeon only through `look`, `move`, `take` and `use`: they may
-  import only `apl.dungeon.tools` and `apl.dungeon.results` (enforced by a test).
+- Architectures reach the dungeon only through `look`, `move`, `take` and `use`. From `apl`
+  they may import only `apl.kit`, `apl.dungeon.tools` and `apl.dungeon.results`, and they must
+  use `kit.model` instead of creating a model (both enforced by a test).
 - No paid model call without an explicit `--execute`. Tests never make paid calls.
 - Never commit `.env`; it holds the provider API key.
 - Each milestone after M0 is one Spec Kit feature: `/speckit-specify` through

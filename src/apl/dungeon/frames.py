@@ -63,6 +63,8 @@ def call(episode: Episode, action: Action) -> ToolResult:
             return episode.take(*action.args)
         case "use":
             return episode.use(*action.args)
+        case "unknown":
+            return episode.unknown(*action.args)
 
 
 def _is_episode_over(result: Mapping[str, object] | None) -> bool:

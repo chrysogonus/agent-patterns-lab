@@ -8,9 +8,9 @@ from enum import StrEnum
 from typing import Literal, cast
 
 Pos = tuple[int, int]  # (x, y): x is the column, y the row, (0, 0) is the north-west corner
-Tool = Literal["look", "move", "take", "use"]
+Tool = Literal["look", "move", "take", "use", "unknown"]  # unknown: a call to no such tool
 
-_ARITY: dict[str, int] = {"look": 0, "move": 1, "take": 1, "use": 2}
+_ARITY: dict[str, int] = {"look": 0, "move": 1, "take": 1, "use": 2, "unknown": 1}
 
 
 class Direction(StrEnum):

@@ -2,14 +2,22 @@
 
 import argparse
 import json
+import os
 import sys
+from datetime import datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from apl.dungeon import LEVELS, generate
 from apl.dungeon.frames import Frame, build_frames, parse_route_file
 from apl.dungeon.model import Dungeon
 from apl.dungeon.render_html import render_html
 from apl.dungeon.render_text import render_text
+
+if TYPE_CHECKING:
+    from apl.runner.episode import EpisodeResult
+    from apl.runner.settings import Settings
+    from apl.runner.spec import RunSpec
 
 
 def _frames(dungeon: Dungeon, route: str | None) -> list[Frame] | None:
@@ -33,6 +41,102 @@ def _show(args: argparse.Namespace) -> int:
     return 0
 
 
+def _csv(text: str) -> list[str]:
+    return [part.strip() for part in text.split(",") if part.strip()]
+
+
+def _run(args: argparse.Namespace) -> int:
+    # LangChain is imported only here, so `apl dungeon show` stays fast.
+    from apl.runner import registry
+    from apl.runner.settings import load_settings
+    from apl.runner.spec import RunSpec, format_plan
+
+    try:
+        only = [int(s) for s in _csv(args.only)] if args.only is not None else None
+    except ValueError:
+        print("apl: --only takes seed numbers, e.g. --only 1000,1004", file=sys.stderr)
+        return 2
+    try:
+        settings = load_settings()
+        spec = RunSpec.build(
+            _csv(args.arch), _csv(args.level), args.seeds, args.limit, only, args.repeats
+        )
+    except ValueError as error:
+        print(f"apl: {error}", file=sys.stderr)
+        return 2
+    written = {name: registry.is_written(name) for name in spec.architectures}
+    if not args.execute:
+        print(format_plan(spec, settings, written))
+        return 0
+    return _execute(spec, settings)
+
+
+def _progress(i: int, n: int, result: "EpisodeResult") -> None:
+    row = result.row
+    head = f"[{i}/{n}] {row.arch} {row.level} {row.seed} r{row.repeat}"
+    if row.status == "error":
+        print(f"{head}  error  {row.error}", flush=True)
+        return
+    tokens = "?" if row.input_tokens is None else f"{row.input_tokens + (row.output_tokens or 0):,}"
+    print(
+        f"{head}  {row.end_reason}  steps {row.steps}/{row.budget} (optimal {row.optimal_steps})"
+        f"  calls {row.llm_calls}  tokens {tokens}  {row.latency_s:.1f}s",
+        flush=True,
+    )
+
+
+def _execute(spec: "RunSpec", settings: "Settings") -> int:
+    from apl.runner import registry, run
+    from apl.runner.settings import required_key_var
+
+    key_var = required_key_var(settings.model)
+    if key_var and not os.environ.get(key_var):
+        print(f"apl: {key_var} is not set (needed for {settings.model})", file=sys.stderr)
+        return 2
+    try:
+        plays = {name: registry.load(name) for name in spec.architectures}
+    except ValueError as error:
+        print(f"apl: {error}", file=sys.stderr)
+        return 2
+    try:
+        outcome = run.execute(
+            spec,
+            settings,
+            model_factory=run.default_model_factory,
+            architectures=plays,
+            on_episode=_progress,
+        )
+    except KeyboardInterrupt:
+        print("apl: interrupted; finished episodes are kept, the run is marked incomplete")
+        return 130
+    print(outcome.path)
+    if outcome.exit_code:
+        print(
+            f"apl: the provider rejected a request, run stopped: {outcome.error}", file=sys.stderr
+        )
+        return outcome.exit_code
+    return _report([outcome.path])
+
+
+def _report(paths: list[Path]) -> int:
+    from apl.runner.report import load_run, render
+
+    try:
+        report = render([load_run(path) for path in paths])
+    except ValueError as error:
+        print(f"apl: {error}", file=sys.stderr)
+        return 2
+    if len(paths) == 1:
+        out = paths[0] / "report.md"
+    else:
+        out = Path("results") / f"report-{datetime.now():%Y%m%d-%H%M%S}.md"
+        out.parent.mkdir(exist_ok=True)
+    out.write_text(report, encoding="utf-8")
+    print(report, end="")
+    print(f"(written to {out})")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="apl")
     commands = parser.add_subparsers(dest="command")
@@ -43,8 +147,22 @@ def main(argv: list[str] | None = None) -> int:
     show.add_argument("--seed", required=True, type=int)
     show.add_argument("--route", help='"solution", or a route file (contracts/cli.md)')
     show.add_argument("--html", metavar="OUT", help="also write a picture; animated with --route")
+    run = commands.add_parser("run", help="plan a run, or play it with --execute")
+    run.add_argument("--arch", required=True, help="architecture names, comma-separated")
+    run.add_argument("--level", required=True, help="L1, L2, L3, comma-separated, or all")
+    run.add_argument("--seeds", required=True, help="the seed set: dev or test")
+    run.add_argument("--limit", type=int, help="only the first K seeds of the set")
+    run.add_argument("--only", help="only these seeds of the set, comma-separated")
+    run.add_argument("--repeats", type=int, default=1, help="repeats per seed (default 1)")
+    run.add_argument("--execute", action="store_true", help="actually run: this costs money")
+    report = commands.add_parser("report", help="build a report from run folders")
+    report.add_argument("runs", nargs="+", type=Path, metavar="RUN_DIR")
     args = parser.parse_args(argv)
     if args.command == "dungeon" and args.dungeon_command == "show":
         return _show(args)
+    if args.command == "run":
+        return _run(args)
+    if args.command == "report":
+        return _report(args.runs)
     (dungeon if args.command == "dungeon" else parser).print_help()
     return 2

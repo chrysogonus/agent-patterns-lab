@@ -12,7 +12,18 @@ from apl.dungeon.env import start_episode
 from apl.dungeon.tools import AgentTools
 
 ARCH_DIR = Path(__file__).resolve().parents[2] / "src" / "apl" / "arch"
-ALLOWED = {"apl.dungeon.tools", "apl.dungeon.results"}
+# Architectures may import from apl only these (and each other, inside apl.arch).
+ALLOWED = {"apl.kit", "apl.dungeon.tools", "apl.dungeon.results", "apl.arch"}
+# They must use kit.model, never create a model of their own (Constitution I, research R15).
+MODEL_MODULES = (
+    "openai",
+    "anthropic",
+    "langchain_openai",
+    "langchain_anthropic",
+    "langchain.chat_models",
+    "langchain_core.language_models",
+)
+MODEL_NAMES = {"init_chat_model", "ChatOpenAI", "ChatAnthropic"}
 
 ENVELOPE = {"ok", "error", "data"}
 ERROR = {"code", "message"}
@@ -84,9 +95,23 @@ def _imports(path: Path, package: str) -> set[str]:
             names.update(f"{module}.{alias.name}" for alias in node.names)
         elif isinstance(node, ast.Constant) and isinstance(node.value, str):
             # A module named in a string is a dynamic import, e.g. importlib.import_module(...).
-            if node.value == "apl.dungeon" or node.value.startswith("apl.dungeon."):
+            if _within(node.value, ("apl",)):
                 names.add(node.value)
     return names
+
+
+def _within(name: str, modules: tuple[str, ...] | set[str]) -> bool:
+    return any(name == m or name.startswith(f"{m}.") for m in modules)
+
+
+def _model_names(path: Path) -> set[str]:
+    """Uses of names that create a model, as in `init_chat_model(...)` or `x.ChatOpenAI(...)`."""
+    found = set()
+    for node in ast.walk(ast.parse(path.read_text(), str(path))):
+        name = node.id if isinstance(node, ast.Name) else getattr(node, "attr", None)
+        if name in MODEL_NAMES:
+            found.add(f"name {name}")
+    return found
 
 
 def _reaches_episode(path: Path) -> bool:
@@ -104,11 +129,13 @@ def _forbidden(root: Path, package: str = "apl.arch") -> list[str]:
     for path in sorted(root.rglob("*.py")):
         file_package = ".".join([package, *path.parent.relative_to(root).parts])
         for name in sorted(_imports(path, file_package)):
-            if name == "apl.dungeon" or name.startswith("apl.dungeon."):
-                if not any(name == a or name.startswith(f"{a}.") for a in ALLOWED):
-                    found.append(f"{path.name}: {name}")
+            if _within(name, ("apl",)) and not _within(name, ALLOWED):
+                found.append(f"{path.name}: {name}")
+            elif _within(name, MODEL_MODULES):
+                found.append(f"{path.name}: {name}")
         if _reaches_episode(path):
             found.append(f"{path.name}: _episode")
+        found += [f"{path.name}: {name}" for name in sorted(_model_names(path))]
     return found
 
 
@@ -138,13 +165,32 @@ def test_boundary_scan_catches_forbidden_imports(tmp_path: Path) -> None:
     (tmp_path / "dyn_ok.py").write_text(
         "import importlib\ntools = importlib.import_module('apl.dungeon.tools')\n"
     )
+    (tmp_path / "kit_ok.py").write_text(
+        "from apl.kit import Kit\nfrom langgraph.graph import StateGraph\n"
+        "from langchain_core.messages import HumanMessage\nfrom . import helpers\n"
+    )
+    (tmp_path / "model_own.py").write_text(
+        "from langchain.chat_models import init_chat_model\nm = init_chat_model('openai:x')\n"
+    )
+    (tmp_path / "model_sdk.py").write_text(
+        "import openai\nfrom langchain_openai import ChatOpenAI\n"
+    )
+    (tmp_path / "model_attr.py").write_text("import langchain_x as lc\nm = lc.ChatAnthropic()\n")
+    (tmp_path / "runner_peek.py").write_text("from apl.runner import registry\nimport apl\n")
     assert _forbidden(tmp_path) == [
         "dyn_peek.py: apl.dungeon.env",
         "dyn_peek.py: apl.dungeon.solver",
         "deep.py: apl.dungeon.generator.generate",
+        "model_attr.py: name ChatAnthropic",
+        "model_own.py: langchain.chat_models.init_chat_model",
+        "model_own.py: name init_chat_model",
+        "model_sdk.py: langchain_openai.ChatOpenAI",
+        "model_sdk.py: openai",
         "peek.py: apl.dungeon.env",
         "peek.py: apl.dungeon.solver",
         "rel_peek.py: apl.dungeon.solver",
+        "runner_peek.py: apl",
+        "runner_peek.py: apl.runner.registry",
         "sneak_attr.py: _episode",
         "sneak_getattr.py: _episode",
     ]

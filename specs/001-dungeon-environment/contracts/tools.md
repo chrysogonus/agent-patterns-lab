@@ -79,6 +79,9 @@ Every error counts one step, except `episode_over` (FR-018, edge cases).
 When more than one error applies, the first matching row in this table wins. For example,
 `use("red key", "up")` returns `invalid_direction` even if the agent has no red key.
 
+M2 adds `unknown_tool` for calls to a tool that does not exist (see
+[specs/002-runner-react/contracts/kit.md](../../002-runner-react/contracts/kit.md)).
+
 ## Episode end (runner side, not agent-facing)
 
 - Entering the exit room ends the episode with `exit`. The `move` result is still a normal room

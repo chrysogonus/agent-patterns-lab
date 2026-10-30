@@ -3,7 +3,7 @@
 import pytest
 
 from apl.dungeon.env import Episode, start_episode
-from apl.dungeon.model import Dungeon, Layout
+from apl.dungeon.model import Action, Dungeon, Layout
 from apl.dungeon.results import EndReason, ErrorCode, RoomView, ToolResult
 from tests.dungeon.reference import chained_keys, locked_shortcut_wins, two_open_routes
 
@@ -199,3 +199,21 @@ def test_revisit_shows_the_same_label() -> None:
     episode.move("north")
     episode.move("north")
     assert episode.describe().label == first
+
+
+def test_unknown_tool_costs_a_step() -> None:
+    episode = _episode(two_open_routes())
+    result = episode.unknown("open")
+    _assert_error(episode, result, ErrorCode.UNKNOWN_TOOL, 1)
+    assert result.error is not None and "'open'" in result.error.message
+    assert all(t in result.error.message for t in ("look", "move", "take", "use"))
+    assert episode.invalid_actions == 1
+    assert episode.log[-1].to_dict()["action"] == {"tool": "unknown", "args": ["open"]}
+    episode.stop()
+    _assert_error(episode, episode.unknown("open"), ErrorCode.EPISODE_OVER, 1)
+
+
+def test_unknown_is_a_one_argument_pseudo_tool() -> None:
+    assert Action.parse({"tool": "unknown", "args": ["open"]}) == Action("unknown", ("open",))
+    with pytest.raises(ValueError):
+        Action("unknown", ())

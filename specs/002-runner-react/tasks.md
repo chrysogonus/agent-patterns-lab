@@ -40,10 +40,10 @@ Single project: `src/apl/` and `tests/` at the repository root, as in plan.md.
 
 **Purpose**: Dependencies, packages and the test safety net
 
-- [ ] T001 Add the runtime dependencies with `uv add "langgraph>=1.2.18,<1.3" "langchain>=1.4.7,<2" "langchain-openai>=1.7.3,<2"` (updates `pyproject.toml` and `uv.lock`); run `uv sync` and confirm `uv run apl dungeon show --level L1 --seed 1000` still works
-- [ ] T002 [P] Create the packages `src/apl/runner/__init__.py` (docstring: "Runner side: settings, runs, results and reports. Architectures must not import this package."), `src/apl/arch/__init__.py` (docstring only: "Architectures, written by the experimenter. Each module defines play(kit)."), `tests/runner/__init__.py` and `tests/arch/__init__.py` (empty). Creating `src/apl/arch/` activates `test_architectures_import_only_the_agent_surface`; confirm it passes
-- [ ] T003 [P] Create `.env.example` listing every setting of data-model "Settings" with a one-line comment each and no values for secrets (`OPENAI_API_KEY=`), and the defaults commented out; confirm `.gitignore` ignores `.env` but not `.env.example`
-- [ ] T004 Create `tests/conftest.py` with an autouse fixture that, for every test: (a) replaces `socket.socket.connect`, `socket.socket.connect_ex` and `socket.create_connection` with functions raising `RuntimeError("network access is blocked in tests")` via `monkeypatch`; (b) sets `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` to `"test-key-not-real"`; (c) deletes every `APL_*` variable from the environment and sets `APL_ENV_FILE` to a path under `tmp_path` that does not exist, so the real `.env` (which holds the API key) is never read. Run `uv run pytest` and confirm the M1 suite still passes
+- [X] T001 Add the runtime dependencies with `uv add "langgraph>=1.2.18,<1.3" "langchain>=1.4.7,<2" "langchain-openai>=1.7.3,<2"` (updates `pyproject.toml` and `uv.lock`); run `uv sync` and confirm `uv run apl dungeon show --level L1 --seed 1000` still works
+- [X] T002 [P] Create the packages `src/apl/runner/__init__.py` (docstring: "Runner side: settings, runs, results and reports. Architectures must not import this package."), `src/apl/arch/__init__.py` (docstring only: "Architectures, written by the experimenter. Each module defines play(kit)."), `tests/runner/__init__.py` and `tests/arch/__init__.py` (empty). Creating `src/apl/arch/` activates `test_architectures_import_only_the_agent_surface`; confirm it passes
+- [X] T003 [P] Create `.env.example` listing every setting of data-model "Settings" with a one-line comment each and no values for secrets (`OPENAI_API_KEY=`), and the defaults commented out; confirm `.gitignore` ignores `.env` but not `.env.example`
+- [X] T004 Create `tests/conftest.py` with an autouse fixture that, for every test: (a) replaces `socket.socket.connect`, `socket.socket.connect_ex` and `socket.create_connection` with functions raising `RuntimeError("network access is blocked in tests")` via `monkeypatch`; (b) sets `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` to `"test-key-not-real"`; (c) deletes every `APL_*` variable from the environment and sets `APL_ENV_FILE` to a path under `tmp_path` that does not exist, so the real `.env` (which holds the API key) is never read. Run `uv run pytest` and confirm the M1 suite still passes
 
 ---
 
@@ -56,9 +56,9 @@ that every story builds on
 
 ### Tests for Phase 2 ⚠️ (write first, they must fail)
 
-- [ ] T005 [P] Extend `tests/dungeon/test_env.py` and `tests/dungeon/test_frames.py` for research R5: `Episode.unknown("open")` returns `ok: false` with code `unknown_tool` and a message naming the tool and listing look, move, take and use; it counts one step and one invalid action; it is logged as `{"tool": "unknown", "args": ["open"]}`; after the episode ended it returns `episode_over` without a step; `Action.parse({"tool": "unknown", "args": ["open"]})` works and `Action("unknown", ())` raises; a log containing an unknown call replays through `build_frames` with `expected_results` and matches; the text map step table shows `unknown open`
-- [ ] T006 [P] Write `tests/runner/test_settings.py` for `apl.runner.settings` (data-model "Settings"): defaults (`model` `openai:gpt-6-luna`, `temperature` and `reasoning_effort` `None`, `token_cap` 600000, `max_retries` 4, `timeout_s` 120, prices `None`); each variable is read; `.env` parsing (`KEY=VALUE`, `#` comment lines, blank lines, values in single or double quotes, `export ` prefix ignored) from the file named by `APL_ENV_FILE`; real environment variables win over `.env`; invalid values raise `ValueError` naming the variable for each rule: "float ≥ 0 when set" (temperature), "non-empty string when set" (reasoning effort), "int > 0" (token cap), "int ≥ 0" (retries), "number > 0" (timeout), "USD per 1M tokens, ≥ 0; both or neither" (prices); `record()` gives `"provider default"` for unset temperature and reasoning effort; `required_key_var("openai:gpt-6-luna") == "OPENAI_API_KEY"`, `"anthropic:x"` → `"ANTHROPIC_API_KEY"`, other providers → `None`
-- [ ] T007 [P] Write `tests/runner/test_kit.py` for `apl.kit` (contracts/kit.md), using a hand-built or generated dungeon and a real `Episode`:
+- [X] T005 [P] Extend `tests/dungeon/test_env.py` and `tests/dungeon/test_frames.py` for research R5: `Episode.unknown("open")` returns `ok: false` with code `unknown_tool` and a message naming the tool and listing look, move, take and use; it counts one step and one invalid action; it is logged as `{"tool": "unknown", "args": ["open"]}`; after the episode ended it returns `episode_over` without a step; `Action.parse({"tool": "unknown", "args": ["open"]})` works and `Action("unknown", ())` raises; a log containing an unknown call replays through `build_frames` with `expected_results` and matches; the text map step table shows `unknown open`
+- [X] T006 [P] Write `tests/runner/test_settings.py` for `apl.runner.settings` (data-model "Settings"): defaults (`model` `openai:gpt-6-luna`, `temperature` and `reasoning_effort` `None`, `token_cap` 600000, `max_retries` 4, `timeout_s` 120, prices `None`); each variable is read; `.env` parsing (`KEY=VALUE`, `#` comment lines, blank lines, values in single or double quotes, `export ` prefix ignored) from the file named by `APL_ENV_FILE`; real environment variables win over `.env`; invalid values raise `ValueError` naming the variable for each rule: "float ≥ 0 when set" (temperature), "non-empty string when set" (reasoning effort), "int > 0" (token cap), "int ≥ 0" (retries), "number > 0" (timeout), "USD per 1M tokens, ≥ 0; both or neither" (prices); `record()` gives `"provider default"` for unset temperature and reasoning effort; `required_key_var("openai:gpt-6-luna") == "OPENAI_API_KEY"`, `"anthropic:x"` → `"ANTHROPIC_API_KEY"`, other providers → `None`
+- [X] T007 [P] Write `tests/runner/test_kit.py` for `apl.kit` (contracts/kit.md), using a hand-built or generated dungeon and a real `Episode`:
   - `TOOL_SCHEMAS` has exactly the four tools with the parameters in the contract (`move.direction` an enum of the four directions, `use` with `item` and `direction`), and each description says that every call costs a step;
   - `BASE_PROMPT` contains no digit characters (so no budget or length can leak) and mentions the exit, steps, keys and JSON results;
   - `prompt_fingerprint()` is 12 hex characters, stable across calls, and changes if a schema description changes (monkeypatch);
@@ -69,13 +69,13 @@ that every story builds on
   - when the episode has already ended before the node runs, it raises `EpisodeEnded` and logs nothing;
   - it accepts a dict state `{"messages": [...]}` and an object with a `messages` attribute;
   - `build_kit(...)` returns a `Kit` whose `start` is the JSON of `AgentTools(episode).start.to_dict()`, `recursion_limit == 1000`, and no public attribute holds the `Episode` or `AgentTools`
-- [ ] T008 [P] Write `tests/runner/test_meter.py` for `apl.runner.meter` using the scripted model (T011): every model call increments `llm_calls`; tokens add up from `usage_metadata`; a call without usage sets `usage_missing`; passing `token_cap` sets `token_cap_hit` and stops the episode (`end_reason == "stopped"`); a model call after the episode ended raises `EpisodeEnded` and is not counted; the meter still fires after `bind_tools(...)` and after `.with_config(callbacks=[])` (research R3); the transcript stores each distinct message once, each call's `input` as indices, `output` index, `usage` (or `None`) and `latency_s`, and `to_dict()` matches contracts/results.md "`*.conversation.json`"
+- [X] T008 [P] Write `tests/runner/test_meter.py` for `apl.runner.meter` using the scripted model (T011): every model call increments `llm_calls`; tokens add up from `usage_metadata`; a call without usage sets `usage_missing`; passing `token_cap` sets `token_cap_hit` and stops the episode (`end_reason == "stopped"`); a model call after the episode ended raises `EpisodeEnded` and is not counted; the meter still fires after `bind_tools(...)` and after `.with_config(callbacks=[])` (research R3); the transcript stores each distinct message once, each call's `input` as indices, `output` index, `usage` (or `None`) and `latency_s`, and `to_dict()` matches contracts/results.md "`*.conversation.json`"
 
 ### Implementation for Phase 2
 
-- [ ] T009 Implement the R5 extension of M1 so T005 passes: `ErrorCode.UNKNOWN_TOOL = "unknown_tool"` in `src/apl/dungeon/results.py`; `Tool` gains `"unknown"` and `_ARITY["unknown"] = 1` in `src/apl/dungeon/model.py`; `Episode.unknown(name: str) -> ToolResult` in `src/apl/dungeon/env.py` through `_call(Action("unknown", (name,)), ...)` returning `ToolResult.failure(ErrorCode.UNKNOWN_TOOL, f"There is no tool named {name!r}. The tools are look, move, take and use.")`; `case "unknown": return episode.unknown(*action.args)` in `frames.call` in `src/apl/dungeon/frames.py`. `AgentTools` stays unchanged (`test_agent_tools_expose_only_the_four_tools` must still pass)
-- [ ] T010 Implement `src/apl/runner/settings.py` so T006 passes: frozen `Settings` with the fields and defaults of data-model "Settings"; `load_settings(environ: Mapping[str, str] | None = None) -> Settings` that parses the `.env` file named by `APL_ENV_FILE`, looked up in `environ` first and then in `os.environ` (so a test passing its own `environ` dict still gets the conftest's harmless path), defaulting to `.env` in the current directory (a missing file is fine), and lets `environ` (default `os.environ`) win over the file; `Settings.record() -> dict[str, object]` (the `settings` object of `run.json`, with `prompt_fingerprint` from `apl.kit.prompt_fingerprint()`); `required_key_var(model: str) -> str | None`. Do not import LangChain here
-- [ ] T011 [P] Write the test doubles in `tests/runner/scripted.py`:
+- [X] T009 Implement the R5 extension of M1 so T005 passes: `ErrorCode.UNKNOWN_TOOL = "unknown_tool"` in `src/apl/dungeon/results.py`; `Tool` gains `"unknown"` and `_ARITY["unknown"] = 1` in `src/apl/dungeon/model.py`; `Episode.unknown(name: str) -> ToolResult` in `src/apl/dungeon/env.py` through `_call(Action("unknown", (name,)), ...)` returning `ToolResult.failure(ErrorCode.UNKNOWN_TOOL, f"There is no tool named {name!r}. The tools are look, move, take and use.")`; `case "unknown": return episode.unknown(*action.args)` in `frames.call` in `src/apl/dungeon/frames.py`. `AgentTools` stays unchanged (`test_agent_tools_expose_only_the_four_tools` must still pass)
+- [X] T010 Implement `src/apl/runner/settings.py` so T006 passes: frozen `Settings` with the fields and defaults of data-model "Settings"; `load_settings(environ: Mapping[str, str] | None = None) -> Settings` that parses the `.env` file named by `APL_ENV_FILE`, looked up in `environ` first and then in `os.environ` (so a test passing its own `environ` dict still gets the conftest's harmless path), defaulting to `.env` in the current directory (a missing file is fine), and lets `environ` (default `os.environ`) win over the file; `Settings.record() -> dict[str, object]` (the `settings` object of `run.json`, with `prompt_fingerprint` from `apl.kit.prompt_fingerprint()`); `required_key_var(model: str) -> str | None`. Do not import LangChain here
+- [X] T011 [P] Write the test doubles in `tests/runner/scripted.py`:
   - `ScriptedChatModel(BaseChatModel)`, driven by `strategy: Callable[[list[BaseMessage]], AIMessage]`. `_generate` returns that message, with `usage_metadata` from a configurable `usage(messages) -> dict | None` (default: input = number of messages × 10, output = 5). `bind_tools` returns `self.bind()`, and `_llm_type` is `"scripted"`. Tool call ids are unique (`call_<n>`).
   - Strategies:
     - `replay_solution(dungeon)`: the next solution action as a tool call, chosen by counting the `ToolMessage`s seen so far.
@@ -86,8 +86,8 @@ that every story builds on
     - `raise_error(exc)`
   - `FakeProviderError(Exception)` with a `status_code: int` attribute, for research R8 classification.
   - `scripted_factory(strategy, usage=...)`: a model factory with the runner's signature (T018) that returns a `ScriptedChatModel` with the given callbacks.
-- [ ] T012 [P] Write the test-only architecture `tests/runner/loop_arch.py`: `play(kit)` as a plain Python `while` loop (no `StateGraph`; research R14). It binds `kit.model.bind_tools(kit.tools)`, starts from `[SystemMessage(kit.base_prompt), HumanMessage(kit.start)]`, invokes the model, returns when the reply has no tool calls, and otherwise appends the reply and `kit.tool_node({"messages": [...]})["messages"]`. Also `def crash(kit): raise ValueError("boom")`
-- [ ] T013 Implement `src/apl/kit.py` so T007 passes (contracts/kit.md):
+- [X] T012 [P] Write the test-only architecture `tests/runner/loop_arch.py`: `play(kit)` as a plain Python `while` loop (no `StateGraph`; research R14). It binds `kit.model.bind_tools(kit.tools)`, starts from `[SystemMessage(kit.base_prompt), HumanMessage(kit.start)]`, invokes the model, returns when the reply has no tool calls, and otherwise appends the reply and `kit.tool_node({"messages": [...]})["messages"]`. Also `def crash(kit): raise ValueError("boom")`
+- [X] T013 Implement `src/apl/kit.py` so T007 passes (contracts/kit.md):
   - Constants: `BASE_PROMPT` (the content listed under "Base prompt", no digits), `TOOL_SCHEMAS` (four OpenAI-style function dicts `{"type": "function", "function": {"name", "description", "parameters"}}`) and `RECURSION_LIMIT = 1000`.
   - `prompt_fingerprint() -> str`: SHA-256 over the canonical JSON (`sort_keys=True`, `separators=(",", ":")`) of `{"prompt": BASE_PROMPT, "tools": TOOL_SCHEMAS}`, first 12 hex characters.
   - `class EpisodeEnded(Exception)`.
@@ -100,8 +100,8 @@ that every story builds on
     - It returns `{"messages": [...]}`.
 
   `apl.kit` may import `apl.dungeon.env` and `apl.dungeon.tools`, but nothing from `apl.runner`.
-- [ ] T014 Implement `src/apl/runner/meter.py` so T008 passes (data-model "Meter", "Transcript"): `Meter(BaseCallbackHandler)` with `raise_error = True`, `on_chat_model_start` (guard, count, record input), `on_llm_end` (record output, usage from `response.generations[0][0].message.usage_metadata`, latency since the matching start keyed by `run_id`, add tokens, stop the episode and set `token_cap_hit` once `input_tokens + output_tokens > token_cap`); `Transcript` deduplicating messages by canonical JSON of `langchain_core.messages.message_to_dict`, with `to_dict()`
-- [ ] T015 Implement `src/apl/runner/registry.py`: `ARCHITECTURES: dict[str, str] = {"react": "apl.arch.react"}`; `is_written(name) -> bool` via `importlib.util.find_spec`; `load(name) -> Callable[[Kit], None]` importing the module and returning its `play`, raising `ValueError` with "unknown architecture … (registered: react)" or "architecture react is not written yet (src/apl/arch/react.py)"
+- [X] T014 Implement `src/apl/runner/meter.py` so T008 passes (data-model "Meter", "Transcript"): `Meter(BaseCallbackHandler)` with `raise_error = True`, `on_chat_model_start` (guard, count, record input), `on_llm_end` (record output, usage from `response.generations[0][0].message.usage_metadata`, latency since the matching start keyed by `run_id`, add tokens, stop the episode and set `token_cap_hit` once `input_tokens + output_tokens > token_cap`); `Transcript` deduplicating messages by canonical JSON of `langchain_core.messages.message_to_dict`, with `to_dict()`
+- [X] T015 Implement `src/apl/runner/registry.py`: `ARCHITECTURES: dict[str, str] = {"react": "apl.arch.react"}`; `is_written(name) -> bool` via `importlib.util.find_spec`; `load(name) -> Callable[[Kit], None]` importing the module and returning its `play`, raising `ValueError` with "unknown architecture … (registered: react)" or "architecture react is not written yet (src/apl/arch/react.py)"
 
 **Checkpoint**: `uv run pytest tests/dungeon tests/runner/test_settings.py tests/runner/test_kit.py tests/runner/test_meter.py` passes.
 
@@ -117,7 +117,7 @@ present; compare with hand-worked counts; confirm no file is written.
 
 ### Tests for User Story 1 ⚠️ (write first, they must fail)
 
-- [ ] T016 [P] [US1] Write `tests/runner/test_spec.py` for `apl.runner.spec` (data-model "RunSpec"):
+- [X] T016 [P] [US1] Write `tests/runner/test_spec.py` for `apl.runner.spec` (data-model "RunSpec"):
   - Matrix order is architecture, level, seed, repeat, with repeats starting at 1. "A1 on L2, dev seeds, 3 repeats" gives 30 episodes (US1/AC1).
   - `all` expands to L1, L2, L3.
   - `--limit 2` takes the first two dev seeds. `--only 1000,1004` takes those seeds.
@@ -126,7 +126,7 @@ present; compare with hand-worked counts; confirm no file is written.
     - model calls are Σ budgets + episodes. For react, L1–L3 and dev seeds 1000 and 1001 this is 228.
     - tokens are episodes × token cap.
     - cost is tokens × max(price_in, price_out) / 1e6. With prices 0.10 and 0.50 it is $1.80, and `None` without prices.
-- [ ] T017 [P] [US1] Write the dry-run tests in `tests/runner/test_cli_run.py`. Each runs `main([...])` in a `tmp_path` working directory with `capsys`:
+- [X] T017 [P] [US1] Write the dry-run tests in `tests/runner/test_cli_run.py`. Each runs `main([...])` in a `tmp_path` working directory with `capsys`:
   - The output contains these lines from contracts/cli.md: `episodes       6`, `model          openai:gpt-6-luna`, `temperature    provider default`, `model calls    228` and `tokens         3,600,000`.
   - With `APL_PRICE_INPUT=0.10` and `APL_PRICE_OUTPUT=0.50`, the cost line shows `$1.80`. Without prices it shows the "no estimate" line (US1/AC3).
   - Dev seeds print `development only, must not be reported` and test seeds print `for reporting` (US1/AC4).
@@ -136,8 +136,8 @@ present; compare with hand-worked counts; confirm no file is written.
 
 ### Implementation for User Story 1
 
-- [ ] T018 [US1] Implement `src/apl/runner/spec.py` so T016 passes: frozen `RunSpec` and `EpisodeKey(arch, level, seed, repeat)`; `RunSpec.build(archs, levels, seed_set, limit, only, repeats) -> RunSpec` with every rule of data-model "RunSpec" quoted in its `ValueError` messages; `episodes()`; `upper_bounds(settings) -> Bounds(calls, tokens, cost | None)` generating the dungeons to sum budgets; `format_plan(spec, settings, written: Mapping[str, bool]) -> str` producing the block in contracts/cli.md (numbers with thousands separators, cost as `$X.XX (at $in / $out per 1M tokens)`)
-- [ ] T019 [US1] Add the `run` subcommand to `src/apl/cli.py` per contracts/cli.md (`--arch`, `--level`, `--seeds`, `--limit`, `--only`, `--repeats`, `--execute`); without `--execute`, load settings, build the spec, print `format_plan` and return 0; argument and settings errors print `apl: <message>` to stderr and return 2. Import `apl.runner` modules inside the handler so `apl dungeon show` stays LangChain-free. T017 passes
+- [X] T018 [US1] Implement `src/apl/runner/spec.py` so T016 passes: frozen `RunSpec` and `EpisodeKey(arch, level, seed, repeat)`; `RunSpec.build(archs, levels, seed_set, limit, only, repeats) -> RunSpec` with every rule of data-model "RunSpec" quoted in its `ValueError` messages; `episodes()`; `upper_bounds(settings) -> Bounds(calls, tokens, cost | None)` generating the dungeons to sum budgets; `format_plan(spec, settings, written: Mapping[str, bool]) -> str` producing the block in contracts/cli.md (numbers with thousands separators, cost as `$X.XX (at $in / $out per 1M tokens)`)
+- [X] T019 [US1] Add the `run` subcommand to `src/apl/cli.py` per contracts/cli.md (`--arch`, `--level`, `--seeds`, `--limit`, `--only`, `--repeats`, `--execute`); without `--execute`, load settings, build the spec, print `format_plan` and return 0; argument and settings errors print `apl: <message>` to stderr and return 2. Import `apl.runner` modules inside the handler so `apl dungeon show` stays LangChain-free. T017 passes
 
 **Checkpoint**: `uv run apl run --arch react --level all --seeds dev --limit 2` prints the plan;
 `results/` is untouched.
@@ -154,13 +154,13 @@ rows, files, counts and error handling.
 
 ### Tests for User Story 2 ⚠️ (write first, they must fail)
 
-- [ ] T020 [P] [US2] Write `tests/runner/test_results.py` for `apl.runner.results`:
+- [X] T020 [P] [US2] Write `tests/runner/test_results.py` for `apl.runner.results`:
   - `EpisodeRow.completed(...)` derives `efficiency = round(optimal / steps, 3)` on success and `None` on failure, and `tool_calls = len(outcome.log)`. Tokens are `None` when `usage_missing`. `budget_hit` and `token_cap_hit` are passed through.
   - `EpisodeRow.failed(...)` sets `status: "error"`, the error text, `optimal_steps` and `budget`, and `null` for the outcome fields (contracts/results.md).
   - `to_dict()` key order matches the contract example.
   - `EpisodeRow.parse` round-trips and rejects a wrong type, an unknown `status` or a missing field with `ValueError` naming the field.
   - `RunRecord` round-trips through JSON with every field of data-model "RunRecord".
-- [ ] T021 [P] [US2] Write `tests/runner/test_run.py` for `apl.runner.run.execute(...)`. It uses `scripted_factory`, an injected architecture mapping (`{"loop": loop_arch.play, "crash": loop_arch.crash}`) and `results_dir=tmp_path`. Cases:
+- [X] T021 [P] [US2] Write `tests/runner/test_run.py` for `apl.runner.run.execute(...)`. It uses `scripted_factory`, an injected architecture mapping (`{"loop": loop_arch.play, "crash": loop_arch.crash}`) and `results_dir=tmp_path`. Cases:
   - `replay_solution` on dev seed 1000 of L1, L2 and L3: success, steps = optimal, efficiency 1.0, `invalid_actions` 0, `llm_calls` = steps (the last move ends the episode inside the tool node, so no final model call), tokens match the scripted usage (US2/AC1, SC-002).
   - `text_answer`: `stopped`, 0 steps, failure (US2/AC2).
   - `bump_wall`: `budget_hit`, `llm_calls == budget`, and no model call after the end (US2/AC3, SC-003).
@@ -174,15 +174,15 @@ rows, files, counts and error handling.
   - `run.json` has every field of contracts/results.md, including `prompt_fingerprint` and `code.dirty` (US2/AC6).
   - Two runs in the same second get distinct folders (`-2` suffix).
   - Average runner overhead per episode with the scripted model over all dev dungeons of L1 is under 1 s (SC-010).
-- [ ] T022 [P] [US2] Add execute-path tests to `tests/runner/test_cli_run.py`:
+- [X] T022 [P] [US2] Add execute-path tests to `tests/runner/test_cli_run.py`:
   - `--execute` with `OPENAI_API_KEY` removed exits 2 with `OPENAI_API_KEY is not set` and creates no folder.
   - `--execute` for an architecture that is not written yet exits 2.
   - `--execute` with the scripted factory and loop architecture monkeypatched in prints one progress line per episode in the contract's format and the run folder path.
 
 ### Implementation for User Story 2
 
-- [ ] T023 [US2] Implement `src/apl/runner/results.py` so T020 passes: `EpisodeRow` (frozen, fields and order of contracts/results.md) with `completed`, `failed`, `to_dict`, `parse`; `RunRecord` with `to_dict`/`parse`; `append_row(path, row)` (append one JSON line and flush); `write_json(path, data)` (UTF-8, indent 2)
-- [ ] T024 [US2] Implement `src/apl/runner/episode.py`: `play_episode(key, settings, play, model_factory) -> EpisodeResult(row, outcome | None, transcript)`. It does the following:
+- [X] T023 [US2] Implement `src/apl/runner/results.py` so T020 passes: `EpisodeRow` (frozen, fields and order of contracts/results.md) with `completed`, `failed`, `to_dict`, `parse`; `RunRecord` with `to_dict`/`parse`; `append_row(path, row)` (append one JSON line and flush); `write_json(path, data)` (UTF-8, indent 2)
+- [X] T024 [US2] Implement `src/apl/runner/episode.py`: `play_episode(key, settings, play, model_factory) -> EpisodeResult(row, outcome | None, transcript)`. It does the following:
   - Generates the dungeon and starts the episode.
   - Creates the `Meter` and the model with `model_factory(settings, callbacks=[meter])`.
   - Builds the kit, times `play(kit)`, and catches `EpisodeEnded`.
@@ -191,7 +191,7 @@ rows, files, counts and error handling.
   - It calls `episode.stop()` if `play` returned early, and builds the row.
 
   Provider exceptions are recognized as `openai.APIError` instances or any exception with an int `status_code`.
-- [ ] T025 [US2] Implement `src/apl/runner/run.py` so T021 passes:
+- [X] T025 [US2] Implement `src/apl/runner/run.py` so T021 passes:
   - `default_model_factory(settings, callbacks)` calls `init_chat_model(settings.model, callbacks=callbacks, max_retries=..., timeout=...)`. It adds `temperature` and `reasoning_effort` only when set.
   - `execute(spec, settings, *, model_factory=default_model_factory, architectures=None, results_dir=Path("results"), on_episode=None) -> RunOutcome` does the following:
     - Creates the run folder with `mkdir(parents=True, exist_ok=False)`, named `YYYYMMDD-HHMMSS-<arch>[+<arch>]` with a `-2`, `-3`… suffix on a clash.
@@ -201,7 +201,7 @@ rows, files, counts and error handling.
     - On `PermanentProviderError` it stops and returns exit code 3.
     - On `KeyboardInterrupt` it leaves `completed: false` and re-raises.
   - `code` comes from `git rev-parse HEAD` and `git status --porcelain`, run via `subprocess`, or `null` without git. `versions` come from `importlib.metadata` for `langgraph`, `langchain`, `langchain-core`, `langchain-openai`, plus the Python version.
-- [ ] T026 [US2] Wire `--execute` into `src/apl/cli.py`:
+- [X] T026 [US2] Wire `--execute` into `src/apl/cli.py`:
   - Check `required_key_var(settings.model)` and refuse with exit 2 if it isn't set. Refuse architectures that are not written yet with exit 2.
   - Call `execute` with an `on_episode` callback that prints `[i/n] <arch> <level> <seed> r<repeat>  <end>  steps <s>/<budget> (optimal <o>)  calls <c>  tokens <t>  <latency>s` (for an error row: `error  <message>`).
   - Print the folder path.
@@ -223,19 +223,19 @@ contracts/results.md.
 
 ### Tests for User Story 3 ⚠️ (write first, they must fail)
 
-- [ ] T027 [P] [US3] Write `tests/runner/test_report.py`. A helper writes run folders (`run.json` plus `episodes.jsonl`) into `tmp_path` from hand-written rows. Cases:
+- [X] T027 [P] [US3] Write `tests/runner/test_report.py`. A helper writes run folders (`run.json` plus `episodes.jsonl`) into `tmp_path` from hand-written rows. Cases:
   - **Group statistics:** one run, react, L1 and L2, 2 seeds, 3 repeats, with chosen numbers. Every figure is checked against a hand calculation written as a comment: success rate, median efficiency over successes, invalid per episode, budget-hit rate, token-cap rate, median calls, median input and output tokens, median latency (US3/AC1, SC-005).
   - **Spread:** min and max of the per-repeat success rate and median efficiency (US3/AC2).
   - **Combining runs:** two runs with different architectures and equal settings give one table (US3/AC3). A combination is refused naming each differing field among `seed_set`, `model`, `temperature`, `reasoning_effort`, `token_cap` and `prompt_fingerprint`, one case per field (US3/AC4, SC-006). Differing seed lists add a note.
   - **Errors and gaps:** error rows are excluded from scores and listed in the error section (US3/AC5). Rows with `null` tokens are skipped in token medians and counted in the notes. A median with no values shows `—`. An incomplete run is noted.
   - **Headers:** a dev run has the development header and a test run the test header (US3/AC6).
   - **Bad input:** a folder without `run.json`, or with a malformed row, raises `ValueError` naming the file and line.
-- [ ] T028 [P] [US3] Add report CLI tests to `tests/runner/test_cli_run.py`: `apl report <run>` prints the report and writes `<run>/report.md`; with two runs it writes `results/report-<timestamp>.md` (run in `tmp_path`); incompatible runs exit 2 with `apl: cannot combine runs: ...`
+- [X] T028 [P] [US3] Add report CLI tests to `tests/runner/test_cli_run.py`: `apl report <run>` prints the report and writes `<run>/report.md`; with two runs it writes `results/report-<timestamp>.md` (run in `tmp_path`); incompatible runs exit 2 with `apl: cannot combine runs: ...`
 
 ### Implementation for User Story 3
 
-- [ ] T029 [US3] Implement `src/apl/runner/report.py` so T027 passes (data-model "Report", contracts/results.md "Report"): `load_run(path) -> LoadedRun`, `check_compatible(runs) -> list[str]` (notes; raises `ValueError` naming differing fields), `group_stats`, `spread`, `render(runs) -> str` using `statistics.median`, percentages without decimals, efficiency with 2 decimals, numbers with thousands separators, latency with one decimal and `s`, `—` for missing; sections and notes only when needed; rows sorted by architecture, then level
-- [ ] T030 [US3] Add the `report` subcommand to `src/apl/cli.py` (contracts/cli.md) and call the report at the end of a completed `apl run --execute` (print it and write `<run>/report.md`). T028 passes
+- [X] T029 [US3] Implement `src/apl/runner/report.py` so T027 passes (data-model "Report", contracts/results.md "Report"): `load_run(path) -> LoadedRun`, `check_compatible(runs) -> list[str]` (notes; raises `ValueError` naming differing fields), `group_stats`, `spread`, `render(runs) -> str` using `statistics.median`, percentages without decimals, efficiency with 2 decimals, numbers with thousands separators, latency with one decimal and `s`, `—` for missing; sections and notes only when needed; rows sorted by architecture, then level
+- [X] T030 [US3] Add the `report` subcommand to `src/apl/cli.py` (contracts/cli.md) and call the report at the end of a completed `apl run --execute` (print it and write `<run>/report.md`). T028 passes
 
 **Checkpoint**: `uv run pytest tests/runner` passes; a scripted run ends with a printed report.
 
@@ -250,12 +250,12 @@ boundary check, and one small paid run produces a report.
 
 ### Tests for User Story 4 ⚠️ (write first)
 
-- [ ] T031 [P] [US4] Extend `tests/dungeon/test_boundary.py` for research R15:
+- [X] T031 [P] [US4] Extend `tests/dungeon/test_boundary.py` for research R15:
   - `ALLOWED` becomes `{"apl.kit", "apl.dungeon.tools", "apl.dungeon.results"}`. Any other `apl.` import from `src/apl/arch/` is forbidden, including `apl.runner` and `apl.dungeon` internals.
   - Imports of `openai`, `anthropic`, `langchain_openai`, `langchain_anthropic`, `langchain.chat_models` and `langchain_core.language_models`, and their submodules, are forbidden.
   - Any use of the names `init_chat_model`, `ChatOpenAI` or `ChatAnthropic` (as `ast.Name` or `ast.Attribute`) is forbidden.
   - Extend `test_boundary_scan_catches_forbidden_imports` with files that do each of these, plus an allowed file importing `apl.kit`, `langgraph.graph` and `langchain_core.messages`. Keep the existing cases and their sorted expected list (SC-007).
-- [ ] T032 [P] [US4] Write `tests/arch/test_react.py`, skipped with `pytest.skip("src/apl/arch/react.py is not written yet")` when `registry.is_written("react")` is false. It plays `apl.arch.react.play` through `play_episode` with `scripted_factory`:
+- [X] T032 [P] [US4] Write `tests/arch/test_react.py`, skipped with `pytest.skip("src/apl/arch/react.py is not written yet")` when `registry.is_written("react")` is false. It plays `apl.arch.react.play` through `play_episode` with `scripted_factory`:
   - `replay_solution` on dev seed 1000 of L1, L2 and L3 succeeds with efficiency 1.0 (US4/AC1, SC-008).
   - `text_answer` ends as `stopped` with no `arch_error` (US4/AC2).
   - `bump_wall` on L1 ends with `budget_hit` and no `arch_error`, which shows the recursion limit is passed through.
@@ -263,7 +263,7 @@ boundary check, and one small paid run produces a report.
 
 ### Implementation for User Story 4
 
-- [ ] T033 [US4] Update the boundary scanner in `tests/dungeon/test_boundary.py` so T031 passes, and update the rule in `AGENTS.md` ("Architectures ... may import only `apl.kit`, `apl.dungeon.tools` and `apl.dungeon.results`, and must use `kit.model` instead of creating a model (enforced by a test)")
+- [X] T033 [US4] Update the boundary scanner in `tests/dungeon/test_boundary.py` so T031 passes, and update the rule in `AGENTS.md` ("Architectures ... may import only `apl.kit`, `apl.dungeon.tools` and `apl.dungeon.results`, and must use `kit.model` instead of creating a model (enforced by a test)")
 - [ ] T034 [US4] ⚠️ **Experimenter task, agents MUST NOT do it** (Constitution, Development Workflow): write `src/apl/arch/react.py` with `play(kit)` per contracts/kit.md "A1 ReAct": a `StateGraph` over `MessagesState`, a model node using `kit.model.bind_tools(kit.tools)`, `kit.tool_node` as the tool node, a conditional edge (`tools_condition` or your own) back to the model while there are tool calls, invoked with `[SystemMessage(kit.base_prompt), HumanMessage(kit.start)]` and `config={"recursion_limit": kit.recursion_limit}`. `/speckit-implement` stops here and waits
 - [ ] T035 [US4] Run `uv run pytest tests/arch tests/dungeon/test_boundary.py` and fix any failure outside `src/apl/arch/` (report failures inside it to the experimenter instead of editing the graph)
 - [ ] T036 [US4] Small paid run (SC-009): the experimenter runs `uv run apl run --arch react --level all --seeds dev --limit 2 --execute` (an agent may start it only after the experimenter explicitly approves that run). Confirm 6 rows, 12 episode files, `completed: true` and the printed report; then open one episode with `apl dungeon show --route .../react-L2-1001-r1.outcome.json --html` (quickstart steps 4 and 5)
@@ -277,10 +277,10 @@ report.
 
 **Purpose**: Documentation and the final gate
 
-- [ ] T037 [P] Add a test in `tests/runner/test_cli_run.py` that runs `python -c "import apl.cli, sys; sys.exit('langchain' in sys.modules or 'langgraph' in sys.modules)"` in a subprocess and asserts exit 0, so `apl dungeon show` stays free of LangChain (plan.md Constraints)
-- [ ] T038 [P] Add one line to `specs/001-dungeon-environment/contracts/tools.md` under the error codes: "M2 adds `unknown_tool` for calls to a tool that does not exist (see specs/002-runner-react/contracts/kit.md)."
-- [ ] T039 [P] Update `README.md`: status line (M2: runner, results, report; A1 when written), a "Run an experiment" block with the dry run, the `--execute` run and `apl report` from quickstart.md, and the `.env` variables (`APL_MODEL`, `OPENAI_API_KEY`, optional `APL_TEMPERATURE`, `APL_REASONING_EFFORT`, `APL_TOKEN_CAP`, `APL_PRICE_INPUT`, `APL_PRICE_OUTPUT`); remove "(planned, M2)" from the runner line in the layout
-- [ ] T040 Run the free steps of `specs/002-runner-react/quickstart.md` (1, 2, 6 with a scripted run folder) and all four checks: `uv run pytest`, `uv run ruff check .`, `uv run ruff format --check .`, `uv run mypy`
+- [X] T037 [P] Add a test in `tests/runner/test_cli_run.py` that runs `python -c "import apl.cli, sys; sys.exit('langchain' in sys.modules or 'langgraph' in sys.modules)"` in a subprocess and asserts exit 0, so `apl dungeon show` stays free of LangChain (plan.md Constraints)
+- [X] T038 [P] Add one line to `specs/001-dungeon-environment/contracts/tools.md` under the error codes: "M2 adds `unknown_tool` for calls to a tool that does not exist (see specs/002-runner-react/contracts/kit.md)."
+- [X] T039 [P] Update `README.md`: status line (M2: runner, results, report; A1 when written), a "Run an experiment" block with the dry run, the `--execute` run and `apl report` from quickstart.md, and the `.env` variables (`APL_MODEL`, `OPENAI_API_KEY`, optional `APL_TEMPERATURE`, `APL_REASONING_EFFORT`, `APL_TOKEN_CAP`, `APL_PRICE_INPUT`, `APL_PRICE_OUTPUT`); remove "(planned, M2)" from the runner line in the layout
+- [X] T040 Run the free steps of `specs/002-runner-react/quickstart.md` (1, 2, 6 with a scripted run folder) and all four checks: `uv run pytest`, `uv run ruff check .`, `uv run ruff format --check .`, `uv run mypy`
 
 ---
 

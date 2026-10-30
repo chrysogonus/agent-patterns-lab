@@ -17,6 +17,7 @@ class ErrorCode(StrEnum):
     WRONG_KEY = "wrong_key"
     NOT_LOCKED = "not_locked"
     EPISODE_OVER = "episode_over"
+    UNKNOWN_TOOL = "unknown_tool"
 
 
 class EndReason(StrEnum):

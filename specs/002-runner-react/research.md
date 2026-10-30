@@ -10,7 +10,8 @@ CLARIFICATION.
 
 - **Decision**: Add three runtime dependencies: `langgraph>=1.2.18,<1.3`, `langchain>=1.4.7,<2`
   (for `init_chat_model`) and `langchain-openai>=1.7.3,<2` (the provider for the default model).
-  `langchain-core` (1.7.3) and `openai` (3.41.0) come in through them. Other providers are
+  `langchain-core` (1.7.3) and `openai` (3.41.0) come in through them and are declared too,
+  because the runner imports them directly (callbacks and provider error types). Other providers are
   added by installing their LangChain package; no code changes.
 - **Rationale**: These are the current releases on PyPI (2026-10-30), and the constitution fixes
   LangGraph 1.2.x and `init_chat_model`. The probe ran on exactly these versions.

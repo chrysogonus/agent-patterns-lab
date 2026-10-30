@@ -10,6 +10,7 @@ A module `src/apl/arch/<name>.py`, written by the experimenter, with:
 ```python
 from apl.kit import Kit
 
+
 def play(kit: Kit) -> None:
     """Build the graph with StateGraph, invoke it, return when done."""
 ```
