@@ -417,4 +417,4 @@ Commit after each checkpoint.
 
 ## Phase 10: Convergence
 
-- [ ] T043 Extend `_forbidden` in `tests/dungeon/test_boundary.py` to also flag string constants in `src/apl/arch/` that name an `apl.dungeon` module other than `apl.dungeon.tools` or `apl.dungeon.results`, such as `importlib.import_module("apl.dungeon.solver")` or `__import__("apl.dungeon.env")`; add both forms, plus an allowed `"apl.dungeon.tools"` string, to `test_boundary_scan_catches_forbidden_imports`, per Constitution II and plan R5 (partial)
+- [X] T043 Extend `_forbidden` in `tests/dungeon/test_boundary.py` to also flag string constants in `src/apl/arch/` that name an `apl.dungeon` module other than `apl.dungeon.tools` or `apl.dungeon.results`, such as `importlib.import_module("apl.dungeon.solver")` or `__import__("apl.dungeon.env")`; add both forms, plus an allowed `"apl.dungeon.tools"` string, to `test_boundary_scan_catches_forbidden_imports`, per Constitution II and plan R5 (partial)

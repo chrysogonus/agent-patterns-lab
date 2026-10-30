@@ -71,7 +71,7 @@ def test_agent_tools_expose_only_the_four_tools() -> None:
 
 
 def _imports(path: Path, package: str) -> set[str]:
-    """Absolute names imported by a file in `package`; relative imports are resolved."""
+    """Absolute names a file in `package` imports, by statement or by string."""
     names: set[str] = set()
     for node in ast.walk(ast.parse(path.read_text(), str(path))):
         if isinstance(node, ast.Import):
@@ -82,6 +82,10 @@ def _imports(path: Path, package: str) -> set[str]:
             )
             module = ".".join([*parts, *([node.module] if node.module else [])])
             names.update(f"{module}.{alias.name}" for alias in node.names)
+        elif isinstance(node, ast.Constant) and isinstance(node.value, str):
+            # A module named in a string is a dynamic import, e.g. importlib.import_module(...).
+            if node.value == "apl.dungeon" or node.value.startswith("apl.dungeon."):
+                names.add(node.value)
     return names
 
 
@@ -127,7 +131,16 @@ def test_boundary_scan_catches_forbidden_imports(tmp_path: Path) -> None:
     (tmp_path / "graphs" / "deep.py").write_text("from ...dungeon.generator import generate\n")
     (tmp_path / "sneak_attr.py").write_text("def f(tools):\n    return tools._episode.dungeon\n")
     (tmp_path / "sneak_getattr.py").write_text("def f(t):\n    return getattr(t, '_episode')\n")
+    (tmp_path / "dyn_peek.py").write_text(
+        "import importlib\nsolver = importlib.import_module('apl.dungeon.solver')\n"
+        "env = __import__('apl.dungeon.env')\n"
+    )
+    (tmp_path / "dyn_ok.py").write_text(
+        "import importlib\ntools = importlib.import_module('apl.dungeon.tools')\n"
+    )
     assert _forbidden(tmp_path) == [
+        "dyn_peek.py: apl.dungeon.env",
+        "dyn_peek.py: apl.dungeon.solver",
         "deep.py: apl.dungeon.generator.generate",
         "peek.py: apl.dungeon.env",
         "peek.py: apl.dungeon.solver",
