@@ -72,7 +72,8 @@ The default is Qwen3 8B on a local [Ollama](https://ollama.com) server (`ollama 
 The runner sets its context window to 16,384 tokens (`APL_NUM_CTX`), because Ollama's own default
 of 4,096 would silently cut off long episodes. Optional settings, the same for every architecture
 in a run: `APL_TEMPERATURE`, `APL_REASONING_EFFORT` (both default to the provider's default),
-`APL_TOKEN_CAP` (tokens per episode, default 600,000), and `APL_PRICE_INPUT` /
+`APL_MAX_OUTPUT_TOKENS` (per model call, default 4,096), `APL_TOKEN_CAP` (tokens per episode,
+default 600,000), and `APL_PRICE_INPUT` /
 `APL_PRICE_OUTPUT` (USD per 1M tokens, for the dry run's worst-case cost).
 
 ## Development

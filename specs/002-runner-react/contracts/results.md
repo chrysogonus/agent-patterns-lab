@@ -34,6 +34,7 @@ No file ever contains an API key.
     "max_retries": 4,
     "timeout_s": 120,
     "num_ctx": 16384,
+    "max_output_tokens": 4096,
     "prompt_fingerprint": "a1b2c3d4e5f6"
   },
   "code": {"commit": "71c274a…", "dirty": false},

@@ -34,6 +34,7 @@ Plan (dry run, nothing is sent or written)
   temperature    provider default
   reasoning      provider default
   context        16,384 tokens
+  max output     4,096 tokens per call
   token cap      600,000 per episode
   prompt         a1b2c3d4e5f6
 At most

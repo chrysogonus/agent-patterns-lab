@@ -207,5 +207,7 @@ def test_default_model_factory_for_ollama() -> None:
     assert model.model == "qwen3:8b" and model.num_ctx == 16_384  # type: ignore[attr-defined]
     assert model.client_kwargs == {"timeout": 120}  # type: ignore[attr-defined]
     assert model.reasoning is False  # type: ignore[attr-defined]
+    assert model.num_predict == 4096  # type: ignore[attr-defined]
     openai_model = default_model_factory(Settings(model="openai:gpt-6-luna"), [])
     assert type(openai_model).__name__ == "ChatOpenAI"
+    assert openai_model.max_tokens == 4096  # type: ignore[attr-defined]

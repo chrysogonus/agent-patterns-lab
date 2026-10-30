@@ -18,6 +18,7 @@ def test_defaults() -> None:
         price_input=None,
         price_output=None,
         num_ctx=16_384,
+        max_output_tokens=4096,
     )
 
 
@@ -33,10 +34,11 @@ def test_every_variable_is_read() -> None:
             "APL_PRICE_INPUT": "0.1",
             "APL_PRICE_OUTPUT": "0.5",
             "APL_NUM_CTX": "8192",
+            "APL_MAX_OUTPUT_TOKENS": "512",
         }
     )
     assert settings == Settings(
-        "anthropic:claude-haiku-5-5", 0.5, "none", 1000, 0, 2.5, 0.1, 0.5, 8192
+        "anthropic:claude-haiku-5-5", 0.5, "none", 1000, 0, 2.5, 0.1, 0.5, 8192, 512
     )
 
 
@@ -76,6 +78,7 @@ def test_env_file_path_falls_back_to_the_process_environment(
         ("APL_MAX_RETRIES", "-1", "int ≥ 0"),
         ("APL_TIMEOUT_S", "0", "number > 0"),
         ("APL_NUM_CTX", "0", "int > 0"),
+        ("APL_MAX_OUTPUT_TOKENS", "-5", "int > 0"),
         ("APL_PRICE_INPUT", "-0.1", "USD per 1M tokens, ≥ 0; both or neither"),
     ],
 )
@@ -98,7 +101,7 @@ def test_record_marks_provider_defaults() -> None:
     assert record["temperature"] == "provider default"
     assert record["reasoning_effort"] == "provider default"
     assert record["model"] == "ollama:qwen3:8b" and record["token_cap"] == 600_000
-    assert record["num_ctx"] == 16_384
+    assert record["num_ctx"] == 16_384 and record["max_output_tokens"] == 4096
     assert Settings(model="openai:gpt-6-luna").record()["num_ctx"] is None
     assert isinstance(record["prompt_fingerprint"], str) and len(record["prompt_fingerprint"]) == 12
     assert "price_input" not in record  # prices are not run conditions

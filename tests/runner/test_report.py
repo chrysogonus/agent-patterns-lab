@@ -147,6 +147,7 @@ def test_two_compatible_runs_share_a_table(tmp_path: Path) -> None:
         ("reasoning_effort", "none"),
         ("token_cap", 1000),
         ("num_ctx", 8192),
+        ("max_output_tokens", 512),
         ("prompt_fingerprint", "000000000000"),
     ],
 )

@@ -39,6 +39,7 @@ def default_model_factory(
             settings.model,
             callbacks=callbacks,
             num_ctx=settings.num_ctx,
+            num_predict=settings.max_output_tokens,
             client_kwargs={"timeout": settings.timeout_s},
             **extra,
         )
@@ -50,6 +51,7 @@ def default_model_factory(
         settings.model,
         callbacks=callbacks,
         max_retries=settings.max_retries,
+        max_tokens=settings.max_output_tokens,
         timeout=settings.timeout_s,
         **extra,
     )

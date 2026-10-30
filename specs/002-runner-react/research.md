@@ -287,3 +287,8 @@ CLARIFICATION.
   base URL (no new dependency, but the context stays at the server default unless the systemd
   service is changed, which the runner cannot record); raising `OLLAMA_CONTEXT_LENGTH` in the
   service (needs sudo and is invisible in the results).
+- **Output limit per call** (added after the first local run): `APL_MAX_OUTPUT_TOKENS`, default
+  4,096, sent as `num_predict` to Ollama and `max_tokens` to other providers, recorded and
+  compared. In the first local run, one `qwen3:8b` call in an L2 episode generated for over
+  20 minutes. The token cap is only checked after a call returns, and the timeout applies per
+  read, so neither stopped it. A normal call used about 250 output tokens.

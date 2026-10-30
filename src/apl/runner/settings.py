@@ -21,6 +21,9 @@ class Settings:
     price_output: float | None = None
     # Ollama's context window. Its own default (4,096) would silently cut off long episodes.
     num_ctx: int = 16_384
+    # Output tokens per model call. Without it a local model can think endlessly inside one call,
+    # where neither the token cap (checked after a call) nor the timeout (per read) can stop it.
+    max_output_tokens: int = 4096
 
     def record(self) -> dict[str, object]:
         """The run conditions, as stored in run.json and compared by the report."""
@@ -34,6 +37,7 @@ class Settings:
             "max_retries": self.max_retries,
             "timeout_s": self.timeout_s,
             "num_ctx": self.num_ctx if self.model.startswith("ollama:") else None,
+            "max_output_tokens": self.max_output_tokens,
             "prompt_fingerprint": prompt_fingerprint(),
         }
 
@@ -82,6 +86,7 @@ def load_settings(environ: Mapping[str, str] | None = None) -> Settings:
     max_retries = _parse(values, "APL_MAX_RETRIES", int, _non_negative, "int ≥ 0")
     timeout_s = _parse(values, "APL_TIMEOUT_S", float, _positive, "number > 0")
     num_ctx = _parse(values, "APL_NUM_CTX", int, _positive, "int > 0")
+    max_output = _parse(values, "APL_MAX_OUTPUT_TOKENS", int, _positive, "int > 0")
     defaults = Settings()
     return Settings(
         model=values.get("APL_MODEL") or defaults.model,
@@ -91,6 +96,7 @@ def load_settings(environ: Mapping[str, str] | None = None) -> Settings:
         max_retries=defaults.max_retries if max_retries is None else max_retries,
         timeout_s=defaults.timeout_s if timeout_s is None else timeout_s,
         num_ctx=defaults.num_ctx if num_ctx is None else num_ctx,
+        max_output_tokens=defaults.max_output_tokens if max_output is None else max_output,
         price_input=price_input,
         price_output=price_output,
     )

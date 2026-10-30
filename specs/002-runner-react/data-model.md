@@ -30,6 +30,7 @@ The shared configuration (FR-001). Read once per run from the environment after 
 | `max_retries` | `APL_MAX_RETRIES` | `4` | int ≥ 0 |
 | `timeout_s` | `APL_TIMEOUT_S` | `120` | number > 0 |
 | `price_input`, `price_output` | `APL_PRICE_INPUT`, `APL_PRICE_OUTPUT` | `None` | USD per 1M tokens, ≥ 0; both or neither |
+| `max_output_tokens` | `APL_MAX_OUTPUT_TOKENS` | `4096` | int > 0; Ollama `num_predict`, otherwise `max_tokens` (research R16) |
 | `num_ctx` | `APL_NUM_CTX` | `16_384` | int > 0; sent to Ollama models only, recorded as `null` for others (research R16) |
 
 An invalid value is an argument error (exit 2) naming the variable. `prompt_fingerprint` is a

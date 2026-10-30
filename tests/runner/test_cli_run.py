@@ -27,6 +27,7 @@ def test_dry_run_prints_the_plan_and_writes_nothing(
         "episodes       6",
         "model          ollama:qwen3:8b",
         "context        16,384 tokens",
+        "max output     4,096 tokens per call",
         "temperature    provider default",
         "reasoning      provider default",
         "token cap      600,000 per episode",

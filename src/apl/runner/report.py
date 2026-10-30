@@ -16,6 +16,7 @@ COMPARED = (
     "reasoning_effort",
     "token_cap",
     "num_ctx",
+    "max_output_tokens",
     "prompt_fingerprint",
 )
 
