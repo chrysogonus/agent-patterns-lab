@@ -6,9 +6,9 @@ Besides this module, architectures may import only `apl.dungeon.tools` and `apl.
 import copy
 import hashlib
 import json
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Protocol
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import ToolMessage
@@ -92,7 +92,10 @@ class EpisodeEnded(Exception):  # noqa: N818 (an event, not an error)
     """The episode is over. The runner catches this; architectures must not."""
 
 
-ToolNode = Callable[[Any], dict[str, list[ToolMessage]]]
+class ToolNode(Protocol):
+    """A graph node; the parameter is named `state` so that `StateGraph.add_node` accepts it."""
+
+    def __call__(self, state: Any) -> dict[str, list[ToolMessage]]: ...
 
 
 @dataclass(frozen=True, slots=True)

@@ -27,12 +27,13 @@ No file ever contains an API key.
   "seeds": [1000, 1001],
   "repeats": 1,
   "settings": {
-    "model": "openai:gpt-6-luna",
+    "model": "ollama:qwen3:8b",
     "temperature": "provider default",
     "reasoning_effort": "provider default",
     "token_cap": 600000,
     "max_retries": 4,
     "timeout_s": 120,
+    "num_ctx": 16384,
     "prompt_fingerprint": "a1b2c3d4e5f6"
   },
   "code": {"commit": "71c274a…", "dirty": false},
@@ -102,7 +103,7 @@ that made at least one model call, including `error` episodes.
 
 > Development result (dev seeds). Must not be reported.
 
-Runs: 20261030-151200-react · model openai:gpt-6-luna · temperature provider default ·
+Runs: 20261030-151200-react · model ollama:qwen3:8b · temperature provider default ·
 reasoning provider default · token cap 600,000 · prompt a1b2c3d4e5f6 · seeds dev 1000, 1001 ·
 repeats 1
 

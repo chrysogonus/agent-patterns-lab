@@ -11,7 +11,7 @@ PROVIDER_DEFAULT = "provider default"
 
 @dataclass(frozen=True, slots=True)
 class Settings:
-    model: str = "openai:gpt-6-luna"
+    model: str = "ollama:qwen3:8b"
     temperature: float | None = None  # None: not sent, the provider's default applies
     reasoning_effort: str | None = None
     token_cap: int = 600_000
@@ -19,6 +19,8 @@ class Settings:
     timeout_s: float = 120
     price_input: float | None = None  # USD per 1M tokens; for the dry run's cost only
     price_output: float | None = None
+    # Ollama's context window. Its own default (4,096) would silently cut off long episodes.
+    num_ctx: int = 16_384
 
     def record(self) -> dict[str, object]:
         """The run conditions, as stored in run.json and compared by the report."""
@@ -31,6 +33,7 @@ class Settings:
             "token_cap": self.token_cap,
             "max_retries": self.max_retries,
             "timeout_s": self.timeout_s,
+            "num_ctx": self.num_ctx if self.model.startswith("ollama:") else None,
             "prompt_fingerprint": prompt_fingerprint(),
         }
 
@@ -78,6 +81,7 @@ def load_settings(environ: Mapping[str, str] | None = None) -> Settings:
     token_cap = _parse(values, "APL_TOKEN_CAP", int, _positive, "int > 0")
     max_retries = _parse(values, "APL_MAX_RETRIES", int, _non_negative, "int ≥ 0")
     timeout_s = _parse(values, "APL_TIMEOUT_S", float, _positive, "number > 0")
+    num_ctx = _parse(values, "APL_NUM_CTX", int, _positive, "int > 0")
     defaults = Settings()
     return Settings(
         model=values.get("APL_MODEL") or defaults.model,
@@ -86,6 +90,7 @@ def load_settings(environ: Mapping[str, str] | None = None) -> Settings:
         token_cap=defaults.token_cap if token_cap is None else token_cap,
         max_retries=defaults.max_retries if max_retries is None else max_retries,
         timeout_s=defaults.timeout_s if timeout_s is None else timeout_s,
+        num_ctx=defaults.num_ctx if num_ctx is None else num_ctx,
         price_input=price_input,
         price_output=price_output,
     )

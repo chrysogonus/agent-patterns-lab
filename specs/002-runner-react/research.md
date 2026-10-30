@@ -258,3 +258,32 @@ CLARIFICATION.
   keeps them away from runner internals (FR-010, SC-007).
 - **Alternatives considered**: Checking only at run time (would catch a violation only on the
   path that runs).
+
+## R16. Local model through Ollama (decided 2026-10-30, replaces R2's default)
+
+- **Decision**: The default model is `ollama:qwen3:8b`, served by the local Ollama server
+  (0.21.2, systemd service in WSL, `http://localhost:11434`), through LangChain's native
+  `langchain-ollama` provider (1.1.0). The runner passes `num_ctx` (`APL_NUM_CTX`, default
+  16,384) and the timeout (`client_kwargs={"timeout": APL_TIMEOUT_S}`). `num_ctx` is recorded in
+  `run.json` and compared by the report, like the other run conditions. `APL_REASONING_EFFORT`
+  maps to Ollama's `reasoning` (`none` turns thinking off). No API key is needed.
+- **Rationale**:
+  - The experimenter wants to run locally and free.
+  - Ollama loaded `qwen3:8b` with a 4,096-token context. A long L3 episode needs about
+    9–10K tokens (640 fixed plus about 110 per step, up to 78 steps), and Ollama cuts off the
+    start of an over-long prompt silently, so the rules would be lost mid-episode.
+  - The OpenAI-compatible endpoint (`/v1`) cannot set the context per request. The native
+    provider can, which makes the context a recorded run condition instead of hidden server
+    configuration.
+  - Checked with one local call: a correct tool call (`move north`), usage reported
+    (662 input, 246 output tokens), 16,384 context loaded in 7.4 GB of the 16 GB GPU, about 9 s
+    from load.
+- **Errors**: The Ollama client has no retries. A server that is down or too slow raises an
+  `httpx.TransportError`, which counts as an infrastructure error (not scored); an Ollama
+  `ResponseError` carries a `status_code` and is sorted like any provider error (R7, R8).
+- **SC-009**: plan.md's "small paid run" becomes a small `--execute` run on the configured model,
+  free on the local one. The `--execute` gate stays (Principle VI).
+- **Alternatives considered**: Ollama's OpenAI-compatible endpoint with `openai:qwen3:8b` and a
+  base URL (no new dependency, but the context stays at the server default unless the systemd
+  service is changed, which the runner cannot record); raising `OLLAMA_CONTEXT_LENGTH` in the
+  service (needs sudo and is invisible in the results).

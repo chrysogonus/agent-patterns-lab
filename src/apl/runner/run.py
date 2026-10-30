@@ -30,10 +30,23 @@ def default_model_factory(
     extra: dict[str, Any] = {}
     if settings.temperature is not None:
         extra["temperature"] = settings.temperature
+    if settings.model.startswith("ollama:"):
+        # The Ollama client has no retries; its timeout goes through client_kwargs.
+        if settings.reasoning_effort is not None:
+            effort = settings.reasoning_effort
+            extra["reasoning"] = False if effort == "none" else effort
+        model: BaseChatModel = init_chat_model(
+            settings.model,
+            callbacks=callbacks,
+            num_ctx=settings.num_ctx,
+            client_kwargs={"timeout": settings.timeout_s},
+            **extra,
+        )
+        return model
     if settings.reasoning_effort is not None:
         extra["reasoning_effort"] = settings.reasoning_effort
     # The provider client retries rate limits, timeouts and 5xx with growing pauses (R8).
-    model: BaseChatModel = init_chat_model(
+    model = init_chat_model(
         settings.model,
         callbacks=callbacks,
         max_retries=settings.max_retries,

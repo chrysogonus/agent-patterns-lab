@@ -146,6 +146,7 @@ def test_two_compatible_runs_share_a_table(tmp_path: Path) -> None:
         ("temperature", 0.0),
         ("reasoning_effort", "none"),
         ("token_cap", 1000),
+        ("num_ctx", 8192),
         ("prompt_fingerprint", "000000000000"),
     ],
 )

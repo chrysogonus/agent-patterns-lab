@@ -142,7 +142,8 @@ Paperclip comes in from M4, when several architectures can be built as parallel 
 
 Decided:
 
-- Default model: `openai:gpt-6-luna` on the OpenAI API, set through `APL_MODEL`.
+- Default model: `ollama:qwen3:8b` on the local Ollama server (free), set through `APL_MODEL`,
+  with a fixed 16,384-token context (`APL_NUM_CTX`). `openai:gpt-6-luna` remains an option.
 - The subscription gateway (`~/workspace/subscription-gateway`) is used wherever a step needs no
   tool calls. It rejects `tools` and runs the request through an agent CLI, so it never runs
   experiment episodes: every architecture must call the same raw model (constitution I).

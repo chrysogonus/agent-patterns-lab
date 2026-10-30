@@ -345,7 +345,8 @@ graph's wiring is checked without paid calls. Then do one small paid run and bui
 
 ## Assumptions
 
-- The default model is `openai:gpt-6-luna` on the OpenAI API, with its key in `.env`
+- The default model is `ollama:qwen3:8b` on a local Ollama server (changed from
+  `openai:gpt-6-luna` on 2026-10-30, research R16); a paid provider's key goes in `.env`
   (plan.md §9). Any provider the model setting can name works the same way.
 - The subscription gateway is not used in this feature: every model call here needs tool calls,
   which the gateway rejects, and experiment episodes must call the raw model (plan.md §9).

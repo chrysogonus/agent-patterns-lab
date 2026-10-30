@@ -5,13 +5,14 @@ types in [data-model.md](data-model.md).
 
 ## Prerequisites
 
-- `uv sync` (installs LangGraph, LangChain and the OpenAI integration).
-- For the paid step only: `.env` in the repository root with `OPENAI_API_KEY=...`. Optional:
+- `uv sync` (installs LangGraph, LangChain and the Ollama and OpenAI integrations).
+- A local Ollama server with `qwen3:8b` (`ollama pull qwen3:8b`), the default model. For a paid
+  provider instead, `.env` in the repository root with its key. Optional:
 
   ```bash
-  APL_MODEL=openai:gpt-6-luna
-  APL_PRICE_INPUT=0.10     # USD per 1M input tokens: confirm on OpenAI's pricing page
-  APL_PRICE_OUTPUT=0.50    # USD per 1M output tokens
+  APL_MODEL=ollama:qwen3:8b   # or e.g. openai:gpt-6-luna with OPENAI_API_KEY
+  APL_PRICE_INPUT=0           # USD per 1M input tokens (0.10 for gpt-6-luna)
+  APL_PRICE_OUTPUT=0          # USD per 1M output tokens (0.50 for gpt-6-luna)
   ```
 
 ## 1. Checks (free)
@@ -31,7 +32,7 @@ provider. `tests/arch/test_react.py` and the arch boundary guard are skipped unt
 uv run apl run --arch react --level all --seeds dev --limit 2
 ```
 
-Expected: the plan from contracts/cli.md: 6 episodes, model `openai:gpt-6-luna`, at most 228 model
+Expected: the plan from contracts/cli.md: 6 episodes, model `ollama:qwen3:8b`, at most 228 model
 calls and 3,600,000 tokens, and a cost line if prices are set. Nothing appears under `results/`.
 Also try an unknown architecture (`--arch nope`) and `--only 5`: both exit with code 2 and a
 message.
@@ -47,7 +48,7 @@ uv run pytest tests/arch tests/dungeon/test_boundary.py
 Expected: the A1 tests pass (scripted model replays the shortest solution on L1–L3; a text answer
 ends the episode as stopped) and the boundary guard now runs and passes.
 
-## 4. Small paid run (costs money)
+## 4. Small run (free on the local model; costs money on a paid provider)
 
 ```bash
 uv run apl run --arch react --level all --seeds dev --limit 2 --execute

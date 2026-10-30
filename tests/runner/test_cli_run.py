@@ -25,7 +25,8 @@ def test_dry_run_prints_the_plan_and_writes_nothing(
     out = capsys.readouterr().out
     for line in [
         "episodes       6",
-        "model          openai:gpt-6-luna",
+        "model          ollama:qwen3:8b",
+        "context        16,384 tokens",
         "temperature    provider default",
         "reasoning      provider default",
         "token cap      600,000 per episode",
@@ -33,7 +34,7 @@ def test_dry_run_prints_the_plan_and_writes_nothing(
         "tokens         3,600,000",
         "cost           no estimate (set APL_PRICE_INPUT and APL_PRICE_OUTPUT)",
         "seeds          dev: 1000, 1001 (2 of 10)  -> development only, must not be reported",
-        "Run with --execute to spend money.",
+        "Run with --execute to start it (a paid provider then costs money).",
     ]:
         assert line in out
     assert list(workdir.iterdir()) == []  # SC-001; the network guard would have raised
@@ -102,6 +103,7 @@ def test_execute_needs_the_api_key(
     workdir: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.delenv("OPENAI_API_KEY")
+    monkeypatch.setenv("APL_MODEL", "openai:gpt-6-luna")
     assert main([*DRY, "--execute"]) == 2
     assert "OPENAI_API_KEY is not set (needed for openai:gpt-6-luna)" in capsys.readouterr().err
     assert list(workdir.iterdir()) == []

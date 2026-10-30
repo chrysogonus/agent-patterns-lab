@@ -4,6 +4,7 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 
+import httpx
 import openai
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.language_models import BaseChatModel
@@ -38,7 +39,8 @@ def _describe(error: BaseException) -> str:
 
 
 def _is_provider_error(error: BaseException) -> bool:
-    return isinstance(error, openai.APIError) or isinstance(
+    # httpx: a local server (Ollama) that is down or too slow; the OpenAI client wraps these itself.
+    return isinstance(error, openai.APIError | httpx.TransportError) or isinstance(
         getattr(error, "status_code", None), int
     )
 

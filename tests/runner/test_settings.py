@@ -9,7 +9,7 @@ from apl.runner.settings import Settings, load_settings, required_key_var
 
 def test_defaults() -> None:
     assert load_settings({}) == Settings(
-        model="openai:gpt-6-luna",
+        model="ollama:qwen3:8b",
         temperature=None,
         reasoning_effort=None,
         token_cap=600_000,
@@ -17,6 +17,7 @@ def test_defaults() -> None:
         timeout_s=120,
         price_input=None,
         price_output=None,
+        num_ctx=16_384,
     )
 
 
@@ -31,9 +32,12 @@ def test_every_variable_is_read() -> None:
             "APL_TIMEOUT_S": "2.5",
             "APL_PRICE_INPUT": "0.1",
             "APL_PRICE_OUTPUT": "0.5",
+            "APL_NUM_CTX": "8192",
         }
     )
-    assert settings == Settings("anthropic:claude-haiku-5-5", 0.5, "none", 1000, 0, 2.5, 0.1, 0.5)
+    assert settings == Settings(
+        "anthropic:claude-haiku-5-5", 0.5, "none", 1000, 0, 2.5, 0.1, 0.5, 8192
+    )
 
 
 def test_env_file_is_parsed_and_the_environment_wins(tmp_path: Path) -> None:
@@ -71,6 +75,7 @@ def test_env_file_path_falls_back_to_the_process_environment(
         ("APL_TOKEN_CAP", "1.5", "int > 0"),
         ("APL_MAX_RETRIES", "-1", "int ≥ 0"),
         ("APL_TIMEOUT_S", "0", "number > 0"),
+        ("APL_NUM_CTX", "0", "int > 0"),
         ("APL_PRICE_INPUT", "-0.1", "USD per 1M tokens, ≥ 0; both or neither"),
     ],
 )
@@ -92,7 +97,9 @@ def test_record_marks_provider_defaults() -> None:
     record = load_settings({}).record()
     assert record["temperature"] == "provider default"
     assert record["reasoning_effort"] == "provider default"
-    assert record["model"] == "openai:gpt-6-luna" and record["token_cap"] == 600_000
+    assert record["model"] == "ollama:qwen3:8b" and record["token_cap"] == 600_000
+    assert record["num_ctx"] == 16_384
+    assert Settings(model="openai:gpt-6-luna").record()["num_ctx"] is None
     assert isinstance(record["prompt_fingerprint"], str) and len(record["prompt_fingerprint"]) == 12
     assert "price_input" not in record  # prices are not run conditions
 
@@ -100,4 +107,4 @@ def test_record_marks_provider_defaults() -> None:
 def test_required_key_var() -> None:
     assert required_key_var("openai:gpt-6-luna") == "OPENAI_API_KEY"
     assert required_key_var("anthropic:claude-haiku-5-5") == "ANTHROPIC_API_KEY"
-    assert required_key_var("ollama:llama3") is None
+    assert required_key_var("ollama:qwen3:8b") is None

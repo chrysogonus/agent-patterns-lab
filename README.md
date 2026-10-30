@@ -4,8 +4,8 @@ A playground for comparing LangGraph agent architectures on the same generated d
 scored by code.
 
 > **Status: M2 in progress.** The dungeon, the runner, the results files and the report work.
-> The first architecture, A1 ReAct, is being written by hand. The design and milestones are in
-> [`plan.md`](plan.md).
+> The first architecture, A1 ReAct, is written; its first small paid run is next. The design and
+> milestones are in [`plan.md`](plan.md).
 
 ## What this is
 
@@ -65,11 +65,12 @@ One setting chooses the model for every architecture, in LangChain's `provider:m
 
 ```bash
 # .env (never committed; see .env.example for every setting)
-APL_MODEL=openai:gpt-6-luna
-OPENAI_API_KEY=...
+APL_MODEL=ollama:qwen3:8b          # local, free; or e.g. openai:gpt-6-luna with OPENAI_API_KEY
 ```
 
-The default is GPT-6 Luna on the OpenAI API. Optional settings, the same for every architecture
+The default is Qwen3 8B on a local [Ollama](https://ollama.com) server (`ollama pull qwen3:8b`).
+The runner sets its context window to 16,384 tokens (`APL_NUM_CTX`), because Ollama's own default
+of 4,096 would silently cut off long episodes. Optional settings, the same for every architecture
 in a run: `APL_TEMPERATURE`, `APL_REASONING_EFFORT` (both default to the provider's default),
 `APL_TOKEN_CAP` (tokens per episode, default 600,000), and `APL_PRICE_INPUT` /
 `APL_PRICE_OUTPUT` (USD per 1M tokens, for the dry run's worst-case cost).
@@ -102,7 +103,7 @@ file with an action list or a recorded outcome; see
 
 ```bash
 uv run apl run --arch react --level all --seeds dev --limit 2            # plan only, free
-uv run apl run --arch react --level all --seeds dev --limit 2 --execute  # costs money
+uv run apl run --arch react --level all --seeds dev --limit 2 --execute  # plays it
 uv run apl report results/<run-id>                                       # report again
 uv run apl dungeon show --level L2 --seed 1001 \
   --route results/<run-id>/episodes/react-L2-1001-r1.outcome.json --html episode.html

@@ -4,13 +4,14 @@ import json
 import time
 from pathlib import Path
 
+import httpx
 import pytest
 
 from apl.dungeon import generate
 from apl.dungeon.frames import parse_route_file
 from apl.dungeon.model import Direction
 from apl.runner.results import EpisodeRow, RunRecord
-from apl.runner.run import RunOutcome, _new_folder, execute
+from apl.runner.run import RunOutcome, _new_folder, default_model_factory, execute
 from apl.runner.settings import Settings
 from apl.runner.spec import RunSpec
 from tests.runner import loop_arch
@@ -193,3 +194,18 @@ def test_runner_overhead_is_small(tmp_path: Path) -> None:
         on_episode=advance,
     )
     assert (time.perf_counter() - started) / len(spec.seeds) < 1.0  # SC-010
+
+
+def test_local_server_down_is_not_scored(tmp_path: Path) -> None:
+    (row,) = _rows(_run(tmp_path, raise_error(httpx.ConnectError("connection refused"))))
+    assert row.status == "error" and row.error == "ConnectError: connection refused"
+
+
+def test_default_model_factory_for_ollama() -> None:
+    model = default_model_factory(Settings(reasoning_effort="none"), [])
+    assert type(model).__name__ == "ChatOllama"
+    assert model.model == "qwen3:8b" and model.num_ctx == 16_384  # type: ignore[attr-defined]
+    assert model.client_kwargs == {"timeout": 120}  # type: ignore[attr-defined]
+    assert model.reasoning is False  # type: ignore[attr-defined]
+    openai_model = default_model_factory(Settings(model="openai:gpt-6-luna"), [])
+    assert type(openai_model).__name__ == "ChatOpenAI"

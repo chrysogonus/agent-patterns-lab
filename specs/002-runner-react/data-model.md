@@ -23,13 +23,14 @@ The shared configuration (FR-001). Read once per run from the environment after 
 
 | Field | Env variable | Default | Rule |
 | --- | --- | --- | --- |
-| `model` | `APL_MODEL` | `openai:gpt-6-luna` | `provider:model` form |
+| `model` | `APL_MODEL` | `ollama:qwen3:8b` | `provider:model` form |
 | `temperature` | `APL_TEMPERATURE` | `None` (provider default) | float ≥ 0 when set |
 | `reasoning_effort` | `APL_REASONING_EFFORT` | `None` (provider default) | non-empty string when set |
 | `token_cap` | `APL_TOKEN_CAP` | `600_000` | int > 0 |
 | `max_retries` | `APL_MAX_RETRIES` | `4` | int ≥ 0 |
 | `timeout_s` | `APL_TIMEOUT_S` | `120` | number > 0 |
 | `price_input`, `price_output` | `APL_PRICE_INPUT`, `APL_PRICE_OUTPUT` | `None` | USD per 1M tokens, ≥ 0; both or neither |
+| `num_ctx` | `APL_NUM_CTX` | `16_384` | int > 0; sent to Ollama models only, recorded as `null` for others (research R16) |
 
 An invalid value is an argument error (exit 2) naming the variable. `prompt_fingerprint` is a
 derived property (research R11). `record()` returns the `settings` object of `run.json`.

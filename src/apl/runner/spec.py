@@ -132,6 +132,7 @@ def format_plan(spec: RunSpec, settings: Settings, written: Mapping[str, bool]) 
         ("model", settings.model),
         ("temperature", str(record["temperature"])),
         ("reasoning", str(record["reasoning_effort"])),
+        *([("context", f"{settings.num_ctx:,} tokens")] if record["num_ctx"] else []),
         ("token cap", f"{settings.token_cap:,} per episode"),
         ("prompt", str(record["prompt_fingerprint"])),
     ]
@@ -143,5 +144,5 @@ def format_plan(spec: RunSpec, settings: Settings, written: Mapping[str, bool]) 
     lines = ["Plan (dry run, nothing is sent or written)"]
     lines += [f"  {k:<15}{v}" for k, v in rows]
     lines += ["At most"] + [f"  {k:<15}{v}" for k, v in limits]
-    lines.append("Run with --execute to spend money.")
+    lines.append("Run with --execute to start it (a paid provider then costs money).")
     return "\n".join(lines)

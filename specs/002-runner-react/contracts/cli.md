@@ -30,19 +30,21 @@ Plan (dry run, nothing is sent or written)
   seeds          dev: 1000, 1001 (2 of 10)  -> development only, must not be reported
   repeats        1
   episodes       6
-  model          openai:gpt-6-luna
+  model          ollama:qwen3:8b
   temperature    provider default
   reasoning      provider default
+  context        16,384 tokens
   token cap      600,000 per episode
   prompt         a1b2c3d4e5f6
 At most
   model calls    228
   tokens         3,600,000
-  cost           $1.80 (at $0.10 / $0.50 per 1M tokens)
-Run with --execute to spend money.
+  cost           $0.00 (at $0.00 / $0.00 per 1M tokens)
+Run with --execute to start it (a paid provider then costs money).
 ```
 
-Without prices: `cost  no estimate (set APL_PRICE_INPUT and APL_PRICE_OUTPUT)`. With test seeds:
+The `context` line appears only for Ollama models. Without prices:
+`cost  no estimate (set APL_PRICE_INPUT and APL_PRICE_OUTPUT)`. With test seeds:
 `-> for reporting`.
 
 ### Execute

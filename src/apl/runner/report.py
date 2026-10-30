@@ -10,7 +10,14 @@ from pathlib import Path
 from apl.runner.results import EpisodeRow, RunRecord
 
 # Runs that differ in any of these are not comparable (Constitution I).
-COMPARED = ("model", "temperature", "reasoning_effort", "token_cap", "prompt_fingerprint")
+COMPARED = (
+    "model",
+    "temperature",
+    "reasoning_effort",
+    "token_cap",
+    "num_ctx",
+    "prompt_fingerprint",
+)
 
 
 @dataclass(frozen=True, slots=True)
