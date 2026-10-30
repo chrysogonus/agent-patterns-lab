@@ -50,6 +50,7 @@ class Meter(BaseCallbackHandler):
         self.output_tokens = 0
         self.usage_missing = False
         self.token_cap_hit = False
+        self.output_limit_hits = 0  # calls cut off by APL_MAX_OUTPUT_TOKENS
         self.transcript = Transcript()
         self._started: dict[UUID, tuple[float, list[int]]] = {}
 
@@ -72,6 +73,9 @@ class Meter(BaseCallbackHandler):
         generation = response.generations[0][0]
         assert isinstance(generation, ChatGeneration)
         usage = getattr(generation.message, "usage_metadata", None)
+        meta = generation.message.response_metadata  # Ollama: done_reason; OpenAI: finish_reason
+        if "length" in (meta.get("done_reason"), meta.get("finish_reason")):
+            self.output_limit_hits += 1
         self.transcript.calls.append(
             {
                 "input": inputs,

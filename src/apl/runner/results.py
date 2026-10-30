@@ -29,6 +29,7 @@ class EpisodeRow:
     invalid_actions: int | None
     budget_hit: bool | None
     token_cap_hit: bool | None
+    output_limit_hits: int | None  # None in rows written before it was counted
     llm_calls: int
     tool_calls: int
     input_tokens: int | None  # None when the provider did not report usage
@@ -60,6 +61,7 @@ class EpisodeRow:
             invalid_actions=outcome.invalid_actions,
             budget_hit=outcome.budget_hit,
             token_cap_hit=meter.token_cap_hit,
+            output_limit_hits=meter.output_limit_hits,
             tool_calls=len(outcome.log),
             latency_s=round(latency_s, 1),
             arch_error=arch_error,
@@ -92,6 +94,7 @@ class EpisodeRow:
             invalid_actions=None,
             budget_hit=None,
             token_cap_hit=None,
+            output_limit_hits=meter.output_limit_hits,
             tool_calls=len(episode.log),
             latency_s=round(latency_s, 1),
             arch_error=None,
@@ -109,6 +112,7 @@ class EpisodeRow:
         """A row read back from disk; `ValueError` naming the first bad field."""
         if not isinstance(data, dict):
             raise ValueError(f"a row must be an object, got {data!r}")
+        data = {"output_limit_hits": None, **data}
         names = [f.name for f in fields(cls)]
         odd = sorted(set(names) ^ set(data))
         if odd:
@@ -144,6 +148,7 @@ _ROW_TYPES.update(
     efficiency=(int, float),
     latency_s=(int, float),
     llm_calls=int,
+    output_limit_hits=int,
     tool_calls=int,
     input_tokens=int,
     output_tokens=int,
@@ -152,7 +157,7 @@ _ROW_TYPES.update(
 )
 _NULLABLE = {
     "success", "end_reason", "steps", "efficiency", "invalid_actions", "budget_hit",
-    "token_cap_hit", "input_tokens", "output_tokens", "arch_error", "error",
+    "token_cap_hit", "output_limit_hits", "input_tokens", "output_tokens", "arch_error", "error",
 }  # fmt: skip
 _ALLOWED: dict[str, set[str]] = {
     "status": {"completed", "error"},

@@ -41,6 +41,7 @@ def test_completed_row() -> None:
     assert (row.llm_calls, row.input_tokens, row.output_tokens) == (3, 100, 20)
     assert row.tool_calls == dungeon.solution.length and row.latency_s == 2.3
     assert row.budget_hit is False and row.token_cap_hit is False
+    assert row.output_limit_hits == 0
 
 
 def test_failed_episode_has_no_efficiency() -> None:
@@ -80,8 +81,8 @@ def test_row_key_order_matches_the_contract() -> None:
     assert list(_completed(0, success=False).to_dict()) == [
         "run_id", "arch", "level", "seed", "seed_set", "repeat", "status", "success",
         "end_reason", "steps", "optimal_steps", "budget", "efficiency", "invalid_actions",
-        "budget_hit", "token_cap_hit", "llm_calls", "tool_calls", "input_tokens",
-        "output_tokens", "latency_s", "arch_error", "error",
+        "budget_hit", "token_cap_hit", "output_limit_hits", "llm_calls", "tool_calls",
+        "input_tokens", "output_tokens", "latency_s", "arch_error", "error",
     ]  # fmt: skip
 
 
@@ -99,6 +100,12 @@ def test_parse_round_trips_and_validates() -> None:
     ]:
         with pytest.raises(ValueError, match=field):
             EpisodeRow.parse(broken)
+
+
+def test_rows_from_before_the_output_limit_count_parse() -> None:
+    data = json.loads(json.dumps(_completed(0, success=False).to_dict()))
+    del data["output_limit_hits"]
+    assert EpisodeRow.parse(data).output_limit_hits is None
 
 
 def test_run_record_round_trips() -> None:

@@ -72,6 +72,7 @@ The callback handler attached to the model for one episode (research R3). `raise
 | `input_tokens`, `output_tokens` | `int` | Sums |
 | `usage_missing` | `bool` | Set if any call returned no `usage_metadata` |
 | `token_cap_hit` | `bool` | Set when the sum passes the cap; the episode is stopped at that moment |
+| `output_limit_hits` | `int` | Calls whose answer was cut off by the output limit (`done_reason` or `finish_reason` is `"length"`) |
 | `transcript` | `Transcript` | Messages and calls |
 
 `on_chat_model_start`: if `episode.end_reason is not None`, raise `EpisodeEnded`; else count and

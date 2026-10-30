@@ -88,11 +88,12 @@ def _fixed(value: float | None, digits: int, unit: str = "") -> str:
 
 
 def _count(value: float | None) -> str:
-    return _fixed(value, 0 if value is None or value == int(value) else 1)
+    return _fixed(value, 0)  # medians of counts can end in .5; shown rounded
 
 
 def _stats_row(arch: str, level: str, rows: Sequence[EpisodeRow]) -> str:
     successes = [r.efficiency for r in rows if r.success]
+    known = [r for r in rows if r.output_limit_hits is not None]
     cells = [
         arch,
         level,
@@ -102,6 +103,7 @@ def _stats_row(arch: str, level: str, rows: Sequence[EpisodeRow]) -> str:
         _fixed(sum(r.invalid_actions or 0 for r in rows) / len(rows), 1),
         _pct(_rate(rows, lambda r: r.budget_hit)),
         _pct(_rate(rows, lambda r: r.token_cap_hit)),
+        _pct(_rate(known, lambda r: bool(r.output_limit_hits)) if known else None),
         _count(_median([r.llm_calls for r in rows])),
         _count(_median([r.input_tokens for r in rows])),
         _count(_median([r.output_tokens for r in rows])),
@@ -126,8 +128,8 @@ def _spread_row(arch: str, level: str, rows: Sequence[EpisodeRow]) -> str:
 
 _HEADER = (
     "| Arch | Level | Episodes | Success | Efficiency (median) | Invalid / ep | Budget hit "
-    "| Token cap hit | Calls (median) | Input tokens (median) | Output tokens (median) "
-    "| Latency (median) |"
+    "| Token cap hit | Output limit hit | Calls (median) | Input tokens (median) "
+    "| Output tokens (median) | Latency (median) |"
 )
 
 
@@ -143,6 +145,11 @@ def render(runs: Sequence[LoadedRun]) -> str:
     keys = sorted(groups)
     archs = sorted({a for run in runs for a in run.record.architectures})
     settings = first.settings
+    limits = "".join(
+        f"{label} {settings[key]:,} · "
+        for label, key in (("context", "num_ctx"), ("max output", "max_output_tokens"))
+        if settings.get(key) is not None
+    )
     lines = [f"# Report: {', '.join(archs)}", ""]
     if first.seed_set == "test":
         lines.append("> Result on test seeds.")
@@ -152,12 +159,12 @@ def render(runs: Sequence[LoadedRun]) -> str:
         "",
         f"Runs: {', '.join(r.record.run_id for r in runs)} · model {settings['model']} · "
         f"temperature {settings['temperature']} · reasoning {settings['reasoning_effort']} · "
-        f"token cap {settings['token_cap']:,} · prompt {settings['prompt_fingerprint']} · "
+        f"token cap {settings['token_cap']:,} · {limits}prompt {settings['prompt_fingerprint']} · "
         f"seeds {first.seed_set} {', '.join(map(str, first.seeds))} · "
         f"repeats {', '.join(_distinct([r.record.repeats for r in runs]))}",
         "",
         _HEADER,
-        "| --- " * 12 + "|",
+        "| --- " * 13 + "|",
         *(_stats_row(arch, level, groups[arch, level]) for arch, level in keys),
     ]
     if any(r.record.repeats > 1 for r in runs):

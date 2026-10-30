@@ -53,7 +53,8 @@ No file ever contains an API key.
 {"run_id": "20261030-151200-react", "arch": "react", "level": "L2", "seed": 1001,
  "seed_set": "dev", "repeat": 1, "status": "completed", "success": true, "end_reason": "exit",
  "steps": 30, "optimal_steps": 12, "budget": 36, "efficiency": 0.4, "invalid_actions": 5,
- "budget_hit": false, "token_cap_hit": false, "llm_calls": 30, "tool_calls": 30,
+ "budget_hit": false, "token_cap_hit": false, "output_limit_hits": 0, "llm_calls": 30,
+ "tool_calls": 30,
  "input_tokens": 201311, "output_tokens": 11120, "latency_s": 41.2,
  "arch_error": null, "error": null}
 ```
@@ -62,6 +63,7 @@ No file ever contains an API key.
 | --- | --- |
 | `status` | `completed`, or `error` for an infrastructure error (research R7) |
 | `efficiency` | `optimal_steps / steps` when `success`, else `null`; rounded to 3 decimals |
+| `output_limit_hits` | Model calls cut off by `APL_MAX_OUTPUT_TOKENS` (Ollama `done_reason` or OpenAI `finish_reason` `"length"`); `null` in rows written before it was counted |
 | `tool_calls` | Length of the episode log (every call, including uncounted `episode_over` calls) |
 | `input_tokens`, `output_tokens` | Sums over model calls; `null` if any call reported no usage |
 | `latency_s` | Wall time of the episode, rounded to 0.1 s |
@@ -105,12 +107,12 @@ that made at least one model call, including `error` episodes.
 > Development result (dev seeds). Must not be reported.
 
 Runs: 20261030-151200-react · model ollama:qwen3:8b · temperature provider default ·
-reasoning provider default · token cap 600,000 · prompt a1b2c3d4e5f6 · seeds dev 1000, 1001 ·
-repeats 1
+reasoning provider default · token cap 600,000 · context 16,384 · max output 4,096 ·
+prompt a1b2c3d4e5f6 · seeds dev 1000, 1001 · repeats 1
 
-| Arch | Level | Episodes | Success | Efficiency (median) | Invalid / ep | Budget hit | Token cap hit | Calls (median) | Input tokens (median) | Output tokens (median) | Latency (median) |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| react | L1 | 2 | 100% | 0.80 | 0.5 | 0% | 0% | 7 | 9,812 | 640 | 6.1s |
+| Arch | Level | Episodes | Success | Efficiency (median) | Invalid / ep | Budget hit | Token cap hit | Output limit hit | Calls (median) | Input tokens (median) | Output tokens (median) | Latency (median) |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| react | L1 | 2 | 100% | 0.80 | 0.5 | 0% | 0% | 0% | 7 | 9,812 | 640 | 6.1s |
 
 ## Spread across repeats
 
@@ -131,8 +133,10 @@ Notes: 1 episode has no token data. Run 20261030-151200-react is incomplete.
   has more than one repeat; the error section only when there are errors; notes only when needed.
 - The header is `> Result on test seeds.` for test-seed runs.
 - `Episodes` counts `completed` rows. Every rate and median is over `completed` rows; the
-  efficiency median is over successful ones; token medians skip rows with `null` tokens. A median
-  with no values is `—`.
+  efficiency median is over successful ones; token medians skip rows with `null` tokens. Medians
+  of calls and tokens are rounded to whole numbers. "Output limit hit" is the share of episodes with
+  at least one cut-off call, over rows that record it. A value with no data is `—`. The header
+  shows `context` (Ollama only) and `max output` when the runs record them.
 - Combining runs: refused (exit 2) if `seed_set`, `model`, `temperature`, `reasoning_effort`,
   `token_cap` or `prompt_fingerprint` differ, naming each differing field. If the seed lists or
   repeats differ, the report adds a note naming them.

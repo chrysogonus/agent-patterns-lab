@@ -1,7 +1,7 @@
 """Counting calls and tokens, the token cap and the end-of-episode guard (research R3)."""
 
 import pytest
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 from apl.dungeon.env import Episode, start_episode
 from apl.dungeon.model import Dungeon
@@ -72,3 +72,20 @@ def test_transcript_stores_each_message_once() -> None:
     assert second["input"] == [0, 1, 2, 3] and second["output"] == 4
     assert first["usage"]["input_tokens"] == 3 and first["latency_s"] >= 0
     assert data["messages"][0]["content"] == "rules"
+
+
+@pytest.mark.parametrize("metadata", [{"done_reason": "length"}, {"finish_reason": "length"}])
+def test_counts_calls_cut_off_by_the_output_limit(metadata: dict[str, str]) -> None:
+    episode = start_episode(Dungeon.from_layout(two_open_routes()))
+    meter = Meter(episode, token_cap=1000)
+    cut = AIMessage("", response_metadata=metadata)
+    model = ScriptedChatModel(strategy=lambda messages: cut, callbacks=[meter])
+    model.invoke(PROMPT)
+    model.invoke(PROMPT)
+    assert meter.output_limit_hits == 2
+
+
+def test_normal_answers_are_not_counted_as_cut_off() -> None:
+    meter, model, _ = _setup(usage_per_call(1))
+    model.invoke(PROMPT)
+    assert meter.output_limit_hits == 0
