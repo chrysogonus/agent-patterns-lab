@@ -7,11 +7,11 @@ from pathlib import Path
 import httpx
 import pytest
 
-from apl.dungeon import generate
+from apl.dungeon import DEV_SEEDS, generate
 from apl.dungeon.frames import parse_route_file
 from apl.dungeon.model import Direction
 from apl.runner.results import EpisodeRow, RunRecord
-from apl.runner.run import RunOutcome, _new_folder, default_model_factory, execute
+from apl.runner.run import RetryTransport, RunOutcome, _new_folder, default_model_factory, execute
 from apl.runner.settings import Settings
 from apl.runner.spec import RunSpec
 from tests.runner import loop_arch
@@ -67,17 +67,18 @@ def _wall(level: str = "L1", seed: int = 1000) -> str:
     return next(str(d) for d in Direction if layout.door(layout.start, d) is None)
 
 
+@pytest.mark.parametrize("seed", DEV_SEEDS)
 @pytest.mark.parametrize("level", ["L1", "L2", "L3"])
-def test_perfect_replay(tmp_path: Path, level: str) -> None:
-    dungeon = generate(level, 1000)
-    outcome = _run(tmp_path, replay_solution(dungeon), levels=(level,))
+def test_perfect_replay(tmp_path: Path, level: str, seed: int) -> None:  # SC-002
+    dungeon = generate(level, seed)
+    outcome = _run(tmp_path, replay_solution(dungeon), levels=(level,), only=(seed,))
     (row,) = _rows(outcome)
     assert row.status == "completed" and row.success and row.efficiency == 1.0
     assert row.steps == row.optimal_steps == dungeon.solution.length
     assert row.invalid_actions == 0
     assert row.llm_calls == row.steps  # the exit ends the episode inside the tool node
     calls = json.loads(
-        (outcome.path / "episodes" / f"loop-{level}-1000-r1.conversation.json").read_text()
+        (outcome.path / "episodes" / f"loop-{level}-{seed}-r1.conversation.json").read_text()
     )["calls"]
     assert row.input_tokens == sum(c["usage"]["input_tokens"] for c in calls)
     assert row.output_tokens == 5 * row.llm_calls
@@ -157,7 +158,15 @@ def test_run_record(tmp_path: Path) -> None:
     assert record.seed_set == "dev" and record.repeats == 1
     assert record.settings == Settings().record()
     assert set(record.code) == {"commit", "dirty"}
-    assert {"python", "langgraph", "langchain", "langchain-core"} <= set(record.versions)
+    assert {
+        "python",
+        "langgraph",
+        "langchain",
+        "langchain-core",
+        "langchain-openai",
+        "langchain-ollama",
+        "ollama",
+    } <= set(record.versions)
     assert "OPENAI_API_KEY" not in (tmp_path / record.run_id / "run.json").read_text()
 
 
@@ -211,3 +220,78 @@ def test_default_model_factory_for_ollama() -> None:
     openai_model = default_model_factory(Settings(model="openai:gpt-6-luna"), [])
     assert type(openai_model).__name__ == "ChatOpenAI"
     assert openai_model.max_tokens == 4096  # type: ignore[attr-defined]
+
+
+def _transport(*answers: int | Exception) -> tuple[RetryTransport, list[int]]:
+    """A RetryTransport over a fake server that gives these answers in order, then 200."""
+    calls: list[int] = []
+    queue = list(answers)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(len(calls))
+        answer = queue.pop(0) if queue else 200
+        if isinstance(answer, Exception):
+            raise answer
+        return httpx.Response(answer, content=_OLLAMA_REPLY if answer == 200 else b"busy")
+
+    return RetryTransport(2, httpx.MockTransport(handler), pause=0), calls
+
+
+_OLLAMA_REPLY = json.dumps(
+    {
+        "model": "qwen3:8b",
+        "created_at": "2026-10-30T15:00:00Z",
+        "message": {"role": "assistant", "content": "I give up."},
+        "done": True,
+        "done_reason": "stop",
+        "prompt_eval_count": 12,
+        "eval_count": 3,
+    }
+).encode()
+
+
+@pytest.mark.parametrize(
+    ("answers", "calls", "status"),
+    [
+        ((503,), 2, 200),
+        ((httpx.ConnectError("refused"), 429), 3, 200),
+        ((404,), 1, 404),  # permanent: not retried
+        ((500, 500, 500), 3, 500),  # retries used up: the error is passed on
+    ],
+)
+def test_retry_transport(answers: tuple[int | Exception, ...], calls: int, status: int) -> None:
+    transport, seen = _transport(*answers)
+    response = transport.handle_request(httpx.Request("POST", "http://ollama/api/chat"))
+    assert response.status_code == status and len(seen) == calls
+
+
+def test_retry_transport_gives_up_on_connection_errors() -> None:
+    transport, seen = _transport(*[httpx.ConnectError("refused")] * 3)
+    with pytest.raises(httpx.ConnectError):
+        transport.handle_request(httpx.Request("POST", "http://ollama/api/chat"))
+    assert len(seen) == 3
+
+
+def test_ollama_episode_survives_a_transient_error(tmp_path: Path) -> None:
+    from langchain_ollama import ChatOllama
+
+    transport, seen = _transport(503)
+
+    def factory(settings: Settings, callbacks: list) -> ChatOllama:  # type: ignore[type-arg]
+        return ChatOllama(
+            model="qwen3:8b", callbacks=callbacks, sync_client_kwargs={"transport": transport}
+        )
+
+    spec = RunSpec.build(["loop"], ["L1"], "dev", only=[1000], known=ARCHS)
+    outcome = execute(
+        spec, Settings(), model_factory=factory, architectures=ARCHS, results_dir=tmp_path
+    )
+    (row,) = _rows(outcome)
+    assert row.status == "completed" and row.end_reason == "stopped" and row.llm_calls == 1
+    assert row.input_tokens == 12 and len(seen) == 2
+
+
+def test_ollama_model_gets_the_retry_transport() -> None:
+    model = default_model_factory(Settings(max_retries=3), [])
+    transport = model.sync_client_kwargs["transport"]  # type: ignore[attr-defined]
+    assert isinstance(transport, RetryTransport) and transport.retries == 3

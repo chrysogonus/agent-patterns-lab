@@ -2,6 +2,7 @@
 
 import platform
 import subprocess
+import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime
@@ -9,6 +10,7 @@ from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any
 
+import httpx
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.language_models import BaseChatModel
 
@@ -19,7 +21,48 @@ from apl.runner.results import RunRecord, append_row, write_json
 from apl.runner.settings import Settings
 from apl.runner.spec import RunSpec
 
-_PACKAGES = ("langgraph", "langchain", "langchain-core", "langchain-openai")
+_PACKAGES = (
+    "langgraph",
+    "langchain",
+    "langchain-core",
+    "langchain-openai",
+    "langchain-ollama",
+    "ollama",
+)
+_TRANSIENT_STATUS = {429, 500, 502, 503, 504}
+
+
+class RetryTransport(httpx.BaseTransport):
+    """Retries rate limits, 5xx and connection errors with growing pauses (FR-017).
+
+    For Ollama, whose client does not retry. shortcut: a read timeout while a streamed answer is
+    arriving is not retried (it becomes an infrastructure error); fine for a local server.
+    """
+
+    def __init__(
+        self, retries: int, inner: httpx.BaseTransport | None = None, pause: float = 0.5
+    ) -> None:
+        self.retries = retries
+        self.inner = inner or httpx.HTTPTransport()
+        self.pause = pause
+
+    def handle_request(self, request: httpx.Request) -> httpx.Response:
+        for attempt in range(self.retries + 1):
+            last = attempt == self.retries
+            try:
+                response = self.inner.handle_request(request)
+            except httpx.TransportError:
+                if last:
+                    raise
+            else:
+                if last or response.status_code not in _TRANSIENT_STATUS:
+                    return response
+                response.close()
+            time.sleep(self.pause * 2**attempt)
+        raise AssertionError("unreachable")
+
+    def close(self) -> None:
+        self.inner.close()
 
 
 def default_model_factory(
@@ -31,7 +74,7 @@ def default_model_factory(
     if settings.temperature is not None:
         extra["temperature"] = settings.temperature
     if settings.model.startswith("ollama:"):
-        # The Ollama client has no retries; its timeout goes through client_kwargs.
+        # The Ollama client has no retries of its own and takes its timeout through client_kwargs.
         if settings.reasoning_effort is not None:
             effort = settings.reasoning_effort
             extra["reasoning"] = False if effort == "none" else effort
@@ -41,6 +84,7 @@ def default_model_factory(
             num_ctx=settings.num_ctx,
             num_predict=settings.max_output_tokens,
             client_kwargs={"timeout": settings.timeout_s},
+            sync_client_kwargs={"transport": RetryTransport(settings.max_retries)},
             **extra,
         )
         return model

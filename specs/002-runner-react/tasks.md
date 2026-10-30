@@ -371,3 +371,11 @@ Task: "Experimenter: T034 (src/apl/arch/react.py)"
 - A1 (`src/apl/arch/react.py`) is written by the experimenter only. If an A1 test fails, report it;
   do not edit the graph.
 - Commit after each phase or logical group, only when the user asks.
+
+---
+
+## Phase 8: Convergence
+
+- [X] T041 Retry transient provider errors on the Ollama path in `src/apl/runner/run.py` (the Ollama client has no retries of its own): retry `httpx.TransportError` and status 429/5xx up to `settings.max_retries` times with a growing pause, without retrying status 400/401/403/404/422, and add a test in `tests/runner/test_run.py` that a transient error followed by a success completes the episode, per FR-017 (partial)
+- [X] T042 Extend the scripted replay in `tests/runner/test_run.py` to all dev seeds of L1, L2 and L3 (success, efficiency 1.0, steps = optimal, calls and tokens as scripted), per SC-002 (partial)
+- [X] T043 Add `langchain-ollama` and `ollama` to `_PACKAGES` in `src/apl/runner/run.py` and to the versions check in `tests/runner/test_run.py::test_run_record`, per FR-020 (partial)

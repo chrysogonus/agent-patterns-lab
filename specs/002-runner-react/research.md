@@ -278,9 +278,12 @@ CLARIFICATION.
   - Checked with one local call: a correct tool call (`move north`), usage reported
     (662 input, 246 output tokens), 16,384 context loaded in 7.4 GB of the 16 GB GPU, about 9 s
     from load.
-- **Errors**: The Ollama client has no retries. A server that is down or too slow raises an
-  `httpx.TransportError`, which counts as an infrastructure error (not scored); an Ollama
-  `ResponseError` carries a `status_code` and is sorted like any provider error (R7, R8).
+- **Errors**: The Ollama client has no retries of its own, so the runner gives it an HTTP
+  transport (`RetryTransport` in `run.py`) that retries 429, 5xx and connection errors up to
+  `APL_MAX_RETRIES` times with growing pauses (FR-017). When those are used up, an
+  `httpx.TransportError` counts as an infrastructure error (not scored); an Ollama
+  `ResponseError` carries a `status_code` and is sorted like any provider error (R7, R8). A read
+  timeout while a streamed answer is arriving is not retried.
 - **SC-009**: plan.md's "small paid run" becomes a small `--execute` run on the configured model,
   free on the local one. The `--execute` gate stays (Principle VI).
 - **Alternatives considered**: Ollama's OpenAI-compatible endpoint with `openai:qwen3:8b` and a
