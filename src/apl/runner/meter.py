@@ -5,6 +5,7 @@ dropped by `bind_tools`.
 """
 
 import json
+import threading
 import time
 from dataclasses import dataclass, field
 from typing import Any
@@ -56,8 +57,11 @@ class Meter(BaseCallbackHandler):
         self.usage_missing = False
         self.token_cap_hit = False
         self.output_limit_hits = 0  # calls cut off by APL_MAX_OUTPUT_TOKENS
+        self.orchestrator_calls = 0  # calls with the metadata role "orchestrator" (specs/004 R5)
         self.transcript = Transcript()
-        self._started: dict[UUID, tuple[float, list[int]]] = {}
+        self._started: dict[UUID, tuple[float, list[int], str | None]] = {}
+        # An orchestrator's scouts call the model from parallel graph branches.
+        self._lock = threading.Lock()
 
     def on_chat_model_start(
         self,
@@ -67,36 +71,40 @@ class Meter(BaseCallbackHandler):
         run_id: UUID,
         **kwargs: Any,
     ) -> None:
-        if self.episode.end_reason is not None:
-            raise EpisodeEnded
-        self.llm_calls += 1
-        inputs = [self.transcript.add(m) for m in messages[0]]
-        self._started[run_id] = (time.perf_counter(), inputs)
+        role = (kwargs.get("metadata") or {}).get("role")
+        with self._lock:
+            if self.episode.end_reason is not None:
+                raise EpisodeEnded
+            self.llm_calls += 1
+            self.orchestrator_calls += role == "orchestrator"
+            inputs = [self.transcript.add(m) for m in messages[0]]
+            self._started[run_id] = (time.perf_counter(), inputs, role)
 
     def on_llm_end(self, response: LLMResult, *, run_id: UUID, **kwargs: Any) -> None:
-        started, inputs = self._started.pop(run_id)
         generation = response.generations[0][0]
         assert isinstance(generation, ChatGeneration)
         usage = getattr(generation.message, "usage_metadata", None)
         meta = generation.message.response_metadata  # Ollama: done_reason; OpenAI: finish_reason
-        if "length" in (meta.get("done_reason"), meta.get("finish_reason")):
-            self.output_limit_hits += 1
-        self.transcript.calls.append(
-            {
+        with self._lock:
+            started, inputs, role = self._started.pop(run_id)
+            if "length" in (meta.get("done_reason"), meta.get("finish_reason")):
+                self.output_limit_hits += 1
+            call = {
                 "input": inputs,
                 "output": self.transcript.add(generation.message),
                 "usage": dict(usage) if usage else None,
                 "latency_s": round(time.perf_counter() - started, 3),
             }
-        )
-        if usage is None:
-            self.usage_missing = True
-            return
-        self.input_tokens += usage["input_tokens"]
-        self.output_tokens += usage["output_tokens"]
-        if self.input_tokens + self.output_tokens > self.token_cap and not self.token_cap_hit:
-            self.token_cap_hit = True
-            self.episode.stop()
+            self.transcript.calls.append(call | ({"role": role} if role else {}))
+            if usage is None:
+                self.usage_missing = True
+                return
+            self.input_tokens += usage["input_tokens"]
+            self.output_tokens += usage["output_tokens"]
+            if self.input_tokens + self.output_tokens > self.token_cap and not self.token_cap_hit:
+                self.token_cap_hit = True
+                self.episode.stop()
 
     def on_llm_error(self, error: BaseException, *, run_id: UUID, **kwargs: Any) -> None:
-        self._started.pop(run_id, None)
+        with self._lock:
+            self._started.pop(run_id, None)

@@ -1,6 +1,8 @@
 """A scripted stand-in for the model, so tests never make a paid call (research R14)."""
 
 import itertools
+import json
+import re
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
@@ -11,6 +13,8 @@ from langchain_core.messages.ai import UsageMetadata
 from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_core.runnables import Runnable
 
+from apl.dungeon.env import start_episode
+from apl.dungeon.frames import call
 from apl.dungeon.model import Action, Dungeon
 from apl.runner.settings import Settings
 
@@ -90,6 +94,67 @@ def replay_solution(dungeon: Dungeon, per_turn: int = 1) -> Strategy:
         return tool_calls(*((a.tool, _args(a)) for a in actions[done : done + per_turn]))
 
     return strategy
+
+
+_HERE = re.compile(r"You are in: (\S+)\. Inventory: (.*)\.")
+
+
+def _state(text: str) -> tuple[str, str, int] | None:
+    """(room, inventory, doors opened) from a rendered map's text."""
+    here = _HERE.search(text)
+    if here is None:
+        return None
+    opened = re.search(r"Doors you opened: (.*)\.", text)
+    return here[1], here[2], len(opened[1].split("; ")) if opened else 0
+
+
+def walk_solution(dungeon: Dungeon) -> Strategy:
+    """For map-showing agents: the solution's next action from the state the last map shows.
+
+    It reads no counter, so parallel scouts get the same answer in any order. Off the solution's
+    path it answers with text, which ends a scout's task.
+    """
+    episode = start_episode(dungeon)
+    states: dict[tuple[str, str, int], Action] = {}
+    for action in dungeon.solution.actions:
+        room = episode.describe()
+        states[room.label, ", ".join(room.inventory) or "nothing", len(episode.opened)] = action
+        call(episode, action)
+
+    def strategy(messages: list[BaseMessage]) -> AIMessage:
+        state = _state(str(messages[-1].content))
+        action = states.get(state) if state else None
+        if action is None:
+            return AIMessage("Nothing to do here.")
+        return tool_calls((action.tool, _args(action)))
+
+    return strategy
+
+
+def by_system(routes: Mapping[str, Strategy], default: Strategy) -> Strategy:
+    """The strategy of the first marker found in the system message (orchestrator or scout)."""
+
+    def strategy(messages: list[BaseMessage]) -> AIMessage:
+        system = str(messages[0].content)
+        found = next((s for marker, s in routes.items() if marker in system), default)
+        return found(messages)
+
+    return strategy
+
+
+def by_task(routes: Mapping[str, Strategy], default: Strategy) -> Strategy:
+    """The strategy whose key is in the scout's task line."""
+
+    def strategy(messages: list[BaseMessage]) -> AIMessage:
+        text = "\n".join(str(m.content) for m in messages)
+        task = text.split("Your task: ", 1)[1].split("\n", 1)[0] if "Your task: " in text else ""
+        return next((s for key, s in routes.items() if key in task), default)(messages)
+
+    return strategy
+
+
+def json_answer(answer: object) -> Strategy:
+    return lambda messages: AIMessage(json.dumps(answer))
 
 
 def text_answer() -> Strategy:

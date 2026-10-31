@@ -37,6 +37,8 @@ class EpisodeRow:
     latency_s: float
     arch_error: str | None
     error: str | None
+    scouts: int | None  # scouts that made a tool call (specs/004); None for errors and older rows
+    orchestrator_calls: int | None  # model calls with the role "orchestrator"; None in older rows
 
     @classmethod
     def completed(
@@ -69,6 +71,8 @@ class EpisodeRow:
             llm_calls=meter.llm_calls,
             input_tokens=_tokens(meter, meter.input_tokens),
             output_tokens=_tokens(meter, meter.output_tokens),
+            scouts=outcome.scouts,
+            orchestrator_calls=meter.orchestrator_calls,
         )
 
     @classmethod
@@ -102,6 +106,8 @@ class EpisodeRow:
             llm_calls=meter.llm_calls,
             input_tokens=_tokens(meter, meter.input_tokens),
             output_tokens=_tokens(meter, meter.output_tokens),
+            scouts=None,
+            orchestrator_calls=meter.orchestrator_calls,
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -112,7 +118,7 @@ class EpisodeRow:
         """A row read back from disk; `ValueError` naming the first bad field."""
         if not isinstance(data, dict):
             raise ValueError(f"a row must be an object, got {data!r}")
-        data = {"output_limit_hits": None, **data}
+        data = {"output_limit_hits": None, "scouts": None, "orchestrator_calls": None, **data}
         names = [f.name for f in fields(cls)]
         odd = sorted(set(names) ^ set(data))
         if odd:
@@ -154,10 +160,13 @@ _ROW_TYPES.update(
     output_tokens=int,
     arch_error=str,
     error=str,
+    scouts=int,
+    orchestrator_calls=int,
 )
 _NULLABLE = {
     "success", "end_reason", "steps", "efficiency", "invalid_actions", "budget_hit",
     "token_cap_hit", "output_limit_hits", "input_tokens", "output_tokens", "arch_error", "error",
+    "scouts", "orchestrator_calls",
 }  # fmt: skip
 _ALLOWED: dict[str, set[str]] = {
     "status": {"completed", "error"},

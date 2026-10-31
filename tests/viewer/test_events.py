@@ -120,3 +120,40 @@ def test_a_broken_viewer_never_ends_an_episode(tmp_path: Path) -> None:
         callbacks=[ViewerCallbacks(session)],
     )
     assert result.row.success and result.row.arch_error is None
+
+
+def _start_as(
+    callbacks: ViewerCallbacks, messages: list[BaseMessage], role: str | None
+) -> uuid.UUID:
+    run_id = uuid.uuid4()
+    metadata = {"role": role} if role else {}
+    callbacks.on_chat_model_start({}, [messages], run_id=run_id, metadata=metadata)
+    return run_id
+
+
+def _end(callbacks: ViewerCallbacks, run_id: uuid.UUID, text: str) -> None:
+    result = LLMResult(generations=[[ChatGeneration(message=AIMessage(text))]])
+    callbacks.on_llm_end(result, run_id=run_id)
+
+
+def test_overlapping_calls_keep_their_numbers_and_roles(tmp_path: Path) -> None:  # specs/004 R6
+    session = _session(tmp_path)
+    callbacks = ViewerCallbacks(session)
+    first = _start_as(callbacks, [SystemMessage("s"), HumanMessage("a")], "scout 0")
+    second = _start_as(callbacks, [SystemMessage("s"), HumanMessage("b")], "scout 1")
+    _end(callbacks, first, "from scout 0")
+    _end(callbacks, second, "from scout 1")
+    turns = {e["data"]["text"]: e["data"] for e in session.events if e["type"] == "turn"}
+    assert (turns["from scout 0"]["call"], turns["from scout 0"]["role"]) == (1, "scout 0")
+    assert (turns["from scout 1"]["call"], turns["from scout 1"]["role"]) == (2, "scout 1")
+    assert session.latest_call["scout 1"] == 2
+    thinking = [e["data"] for e in session.events if e["type"] == "thinking"]
+    assert [t["role"] for t in thinking] == ["scout 0", "scout 1"]
+    assert len(thinking[1]["new_input"]) == 2  # compared with scout 1's own previous input
+
+
+def test_single_agent_events_have_no_role(tmp_path: Path) -> None:
+    session = _session(tmp_path)
+    callbacks = ViewerCallbacks(session)
+    _end(callbacks, _start(callbacks, [HumanMessage("start")]), "ok")
+    assert [e["data"]["role"] for e in session.events] == [None, None]

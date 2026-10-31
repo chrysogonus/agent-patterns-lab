@@ -1,0 +1,482 @@
+{
+ "hybrid-L1-1000-r1": {
+  "frames": "23a4f1bedf4b8747",
+  "outcome": "6d0b76ee1b208498"
+ },
+ "hybrid-L1-1001-r1": {
+  "frames": "32143b5f61cb2876",
+  "outcome": "99d746174d6e6034"
+ },
+ "hybrid-L1-1002-r1": {
+  "frames": "6c14e156d93dc01b",
+  "outcome": "e8f2c5880eef76c1"
+ },
+ "hybrid-L1-1003-r1": {
+  "frames": "ad645db3a5fe3b36",
+  "outcome": "e0632beee70710b5"
+ },
+ "hybrid-L1-1004-r1": {
+  "frames": "ee5b937be13d80b6",
+  "outcome": "42864419e01f8809"
+ },
+ "hybrid-L1-1005-r1": {
+  "frames": "99e1228046243acd",
+  "outcome": "be60209d395876ae"
+ },
+ "hybrid-L1-1006-r1": {
+  "frames": "8238e8069803da7d",
+  "outcome": "93ad7c4d858495c0"
+ },
+ "hybrid-L1-1007-r1": {
+  "frames": "0902113e3b9bc29f",
+  "outcome": "4fd208655922dff4"
+ },
+ "hybrid-L1-1008-r1": {
+  "frames": "7d3db515e5c6126a",
+  "outcome": "d666245fe387528a"
+ },
+ "hybrid-L1-1009-r1": {
+  "frames": "82805c2af6c4142e",
+  "outcome": "4a0f232d07e68ac2"
+ },
+ "hybrid-L2-1000-r1": {
+  "frames": "fc907c36117ec88e",
+  "outcome": "bfa073e7be71440b"
+ },
+ "hybrid-L2-1001-r1": {
+  "frames": "8b5065f80160917c",
+  "outcome": "05b69710cf693e79"
+ },
+ "hybrid-L2-1002-r1": {
+  "frames": "c2dba7254cd66f64",
+  "outcome": "9fae0d2bed3d7dda"
+ },
+ "hybrid-L2-1003-r1": {
+  "frames": "5704f07126828d45",
+  "outcome": "6c0e6275b4620922"
+ },
+ "hybrid-L2-1004-r1": {
+  "frames": "b51893b751780d83",
+  "outcome": "df7d0289e57b4c7a"
+ },
+ "hybrid-L2-1005-r1": {
+  "frames": "c201eece1a425e49",
+  "outcome": "5716509a75890604"
+ },
+ "hybrid-L2-1006-r1": {
+  "frames": "415540cd4476e3c3",
+  "outcome": "965fb7d0213ed4a1"
+ },
+ "hybrid-L2-1007-r1": {
+  "frames": "a58e6e7ac594b04a",
+  "outcome": "ef842d7f6a915c91"
+ },
+ "hybrid-L2-1008-r1": {
+  "frames": "f3555843b1d8d606",
+  "outcome": "552c9621abf12d9c"
+ },
+ "hybrid-L2-1009-r1": {
+  "frames": "44b5fc7d631726a1",
+  "outcome": "9915a1e2ba9f06a7"
+ },
+ "hybrid-L3-1000-r1": {
+  "frames": "738ca95fc1715636",
+  "outcome": "560bfca7bf287c10"
+ },
+ "hybrid-L3-1001-r1": {
+  "frames": "295b2e74deb59e51",
+  "outcome": "0d64b880cc93239a"
+ },
+ "hybrid-L3-1002-r1": {
+  "frames": "9660ef021ffb2796",
+  "outcome": "d87f8ad81e757871"
+ },
+ "hybrid-L3-1003-r1": {
+  "frames": "b1a978d9c2c0d017",
+  "outcome": "358c2ed37277d541"
+ },
+ "hybrid-L3-1004-r1": {
+  "frames": "ba8021c61e83c121",
+  "outcome": "1c9c45c4837ba96b"
+ },
+ "hybrid-L3-1005-r1": {
+  "frames": "5f93202b942489b2",
+  "outcome": "09c94dcef8fe9141"
+ },
+ "hybrid-L3-1006-r1": {
+  "frames": "093d8b27639dd586",
+  "outcome": "ed49ca2ec22ee20e"
+ },
+ "hybrid-L3-1007-r1": {
+  "frames": "364395625622e0c1",
+  "outcome": "100b186f44358550"
+ },
+ "hybrid-L3-1008-r1": {
+  "frames": "c7ba7a5ee4e2238a",
+  "outcome": "24a38f10119fba03"
+ },
+ "hybrid-L3-1009-r1": {
+  "frames": "5978f04e4c4a4f3c",
+  "outcome": "c7734b3611715252"
+ },
+ "mapstate-L1-1000-r1": {
+  "frames": "22978b9083050040",
+  "outcome": "62fc3c9464b7031c"
+ },
+ "mapstate-L1-1001-r1": {
+  "frames": "4dd945a4aed6049b",
+  "outcome": "b136bf130b0b09ff"
+ },
+ "mapstate-L1-1002-r1": {
+  "frames": "b6dcce45f0245e3b",
+  "outcome": "5e4663696dac5dc5"
+ },
+ "mapstate-L1-1003-r1": {
+  "frames": "5636a67d056aa08e",
+  "outcome": "3ceb1a0f4bda251d"
+ },
+ "mapstate-L1-1004-r1": {
+  "frames": "8ef83349a8f94731",
+  "outcome": "e20f64093814842a"
+ },
+ "mapstate-L1-1005-r1": {
+  "frames": "306c585256ec31cb",
+  "outcome": "9ba7a5ce745eedf3"
+ },
+ "mapstate-L1-1006-r1": {
+  "frames": "8b862c298ce2b0ed",
+  "outcome": "7ce5d8ee3bdb1c5f"
+ },
+ "mapstate-L1-1007-r1": {
+  "frames": "339c6e89abcc1bd5",
+  "outcome": "16eafe4a3d3f52d5"
+ },
+ "mapstate-L1-1008-r1": {
+  "frames": "0adbfe55f4e8527e",
+  "outcome": "2ed1723a51457128"
+ },
+ "mapstate-L1-1009-r1": {
+  "frames": "69601bdbcd3aa0a6",
+  "outcome": "7a5504c212a61c20"
+ },
+ "mapstate-L2-1000-r1": {
+  "frames": "57271b653f38aabd",
+  "outcome": "021fddb7d87298b3"
+ },
+ "mapstate-L2-1001-r1": {
+  "frames": "25af16f37daf9cab",
+  "outcome": "34118ec109af9263"
+ },
+ "mapstate-L2-1002-r1": {
+  "frames": "0ffce1a01391bc0a",
+  "outcome": "29787f647200cd07"
+ },
+ "mapstate-L2-1003-r1": {
+  "frames": "ec807f74595b8bdf",
+  "outcome": "6b36a4e70ea36fe3"
+ },
+ "mapstate-L2-1004-r1": {
+  "frames": "b381dd1d20125fe7",
+  "outcome": "b4bbd4e0a2106efb"
+ },
+ "mapstate-L2-1005-r1": {
+  "frames": "cd17525ad857f6c4",
+  "outcome": "968477022b66f93e"
+ },
+ "mapstate-L2-1006-r1": {
+  "frames": "fe31190900362980",
+  "outcome": "04481648cf31cfc5"
+ },
+ "mapstate-L2-1007-r1": {
+  "frames": "5fbf4b8a37364d39",
+  "outcome": "5983e1cf8ad25b18"
+ },
+ "mapstate-L2-1008-r1": {
+  "frames": "758e16e853c770b4",
+  "outcome": "166dcc22448b961d"
+ },
+ "mapstate-L2-1009-r1": {
+  "frames": "aeebe99bd3770377",
+  "outcome": "7b1f2d125cdd48e0"
+ },
+ "mapstate-L3-1000-r1": {
+  "frames": "59fb943c272c587b",
+  "outcome": "340fdc87e04861d4"
+ },
+ "mapstate-L3-1001-r1": {
+  "frames": "3239bc2929650c94",
+  "outcome": "4047bad6b441554f"
+ },
+ "mapstate-L3-1002-r1": {
+  "frames": "5481e9c2f686d053",
+  "outcome": "40ad82ff8adccdbd"
+ },
+ "mapstate-L3-1003-r1": {
+  "frames": "dc720f7c1cc5c060",
+  "outcome": "15a458b440d3ae2c"
+ },
+ "mapstate-L3-1004-r1": {
+  "frames": "ba8021c61e83c121",
+  "outcome": "1c9c45c4837ba96b"
+ },
+ "mapstate-L3-1005-r1": {
+  "frames": "713132ef1fc4081c",
+  "outcome": "b0fa1f553812b07e"
+ },
+ "mapstate-L3-1006-r1": {
+  "frames": "4688328e951b6683",
+  "outcome": "7da00ec8749b53f7"
+ },
+ "mapstate-L3-1007-r1": {
+  "frames": "4b4187a66b4b4043",
+  "outcome": "c137bfd51adb3b11"
+ },
+ "mapstate-L3-1008-r1": {
+  "frames": "d707af99b05d9216",
+  "outcome": "cac5de31c5b336f7"
+ },
+ "mapstate-L3-1009-r1": {
+  "frames": "4800827c09d7eb8c",
+  "outcome": "482ff07da1cdc155"
+ },
+ "mapstate_routes-L1-1000-r1": {
+  "frames": "22978b9083050040",
+  "outcome": "62fc3c9464b7031c"
+ },
+ "mapstate_routes-L1-1001-r1": {
+  "frames": "4dd945a4aed6049b",
+  "outcome": "b136bf130b0b09ff"
+ },
+ "mapstate_routes-L1-1002-r1": {
+  "frames": "b6dcce45f0245e3b",
+  "outcome": "5e4663696dac5dc5"
+ },
+ "mapstate_routes-L1-1003-r1": {
+  "frames": "5636a67d056aa08e",
+  "outcome": "3ceb1a0f4bda251d"
+ },
+ "mapstate_routes-L1-1004-r1": {
+  "frames": "8ef83349a8f94731",
+  "outcome": "e20f64093814842a"
+ },
+ "mapstate_routes-L1-1005-r1": {
+  "frames": "306c585256ec31cb",
+  "outcome": "9ba7a5ce745eedf3"
+ },
+ "mapstate_routes-L1-1006-r1": {
+  "frames": "8b862c298ce2b0ed",
+  "outcome": "7ce5d8ee3bdb1c5f"
+ },
+ "mapstate_routes-L1-1007-r1": {
+  "frames": "339c6e89abcc1bd5",
+  "outcome": "16eafe4a3d3f52d5"
+ },
+ "mapstate_routes-L1-1008-r1": {
+  "frames": "0adbfe55f4e8527e",
+  "outcome": "2ed1723a51457128"
+ },
+ "mapstate_routes-L1-1009-r1": {
+  "frames": "69601bdbcd3aa0a6",
+  "outcome": "7a5504c212a61c20"
+ },
+ "mapstate_routes-L2-1000-r1": {
+  "frames": "57271b653f38aabd",
+  "outcome": "021fddb7d87298b3"
+ },
+ "mapstate_routes-L2-1001-r1": {
+  "frames": "25af16f37daf9cab",
+  "outcome": "34118ec109af9263"
+ },
+ "mapstate_routes-L2-1002-r1": {
+  "frames": "0ffce1a01391bc0a",
+  "outcome": "29787f647200cd07"
+ },
+ "mapstate_routes-L2-1003-r1": {
+  "frames": "ec807f74595b8bdf",
+  "outcome": "6b36a4e70ea36fe3"
+ },
+ "mapstate_routes-L2-1004-r1": {
+  "frames": "b381dd1d20125fe7",
+  "outcome": "b4bbd4e0a2106efb"
+ },
+ "mapstate_routes-L2-1005-r1": {
+  "frames": "cd17525ad857f6c4",
+  "outcome": "968477022b66f93e"
+ },
+ "mapstate_routes-L2-1006-r1": {
+  "frames": "fe31190900362980",
+  "outcome": "04481648cf31cfc5"
+ },
+ "mapstate_routes-L2-1007-r1": {
+  "frames": "5fbf4b8a37364d39",
+  "outcome": "5983e1cf8ad25b18"
+ },
+ "mapstate_routes-L2-1008-r1": {
+  "frames": "758e16e853c770b4",
+  "outcome": "166dcc22448b961d"
+ },
+ "mapstate_routes-L2-1009-r1": {
+  "frames": "aeebe99bd3770377",
+  "outcome": "7b1f2d125cdd48e0"
+ },
+ "mapstate_routes-L3-1000-r1": {
+  "frames": "59fb943c272c587b",
+  "outcome": "340fdc87e04861d4"
+ },
+ "mapstate_routes-L3-1001-r1": {
+  "frames": "3239bc2929650c94",
+  "outcome": "4047bad6b441554f"
+ },
+ "mapstate_routes-L3-1002-r1": {
+  "frames": "5481e9c2f686d053",
+  "outcome": "40ad82ff8adccdbd"
+ },
+ "mapstate_routes-L3-1003-r1": {
+  "frames": "dc720f7c1cc5c060",
+  "outcome": "15a458b440d3ae2c"
+ },
+ "mapstate_routes-L3-1004-r1": {
+  "frames": "ba8021c61e83c121",
+  "outcome": "1c9c45c4837ba96b"
+ },
+ "mapstate_routes-L3-1005-r1": {
+  "frames": "713132ef1fc4081c",
+  "outcome": "b0fa1f553812b07e"
+ },
+ "mapstate_routes-L3-1006-r1": {
+  "frames": "4688328e951b6683",
+  "outcome": "7da00ec8749b53f7"
+ },
+ "mapstate_routes-L3-1007-r1": {
+  "frames": "4b4187a66b4b4043",
+  "outcome": "c137bfd51adb3b11"
+ },
+ "mapstate_routes-L3-1008-r1": {
+  "frames": "d707af99b05d9216",
+  "outcome": "cac5de31c5b336f7"
+ },
+ "mapstate_routes-L3-1009-r1": {
+  "frames": "4800827c09d7eb8c",
+  "outcome": "482ff07da1cdc155"
+ },
+ "react-L1-1000-r1": {
+  "frames": "22978b9083050040",
+  "outcome": "62fc3c9464b7031c"
+ },
+ "react-L1-1001-r1": {
+  "frames": "4dd945a4aed6049b",
+  "outcome": "b136bf130b0b09ff"
+ },
+ "react-L1-1002-r1": {
+  "frames": "b6dcce45f0245e3b",
+  "outcome": "5e4663696dac5dc5"
+ },
+ "react-L1-1003-r1": {
+  "frames": "5636a67d056aa08e",
+  "outcome": "3ceb1a0f4bda251d"
+ },
+ "react-L1-1004-r1": {
+  "frames": "8ef83349a8f94731",
+  "outcome": "e20f64093814842a"
+ },
+ "react-L1-1005-r1": {
+  "frames": "306c585256ec31cb",
+  "outcome": "9ba7a5ce745eedf3"
+ },
+ "react-L1-1006-r1": {
+  "frames": "8b862c298ce2b0ed",
+  "outcome": "7ce5d8ee3bdb1c5f"
+ },
+ "react-L1-1007-r1": {
+  "frames": "339c6e89abcc1bd5",
+  "outcome": "16eafe4a3d3f52d5"
+ },
+ "react-L1-1008-r1": {
+  "frames": "0adbfe55f4e8527e",
+  "outcome": "2ed1723a51457128"
+ },
+ "react-L1-1009-r1": {
+  "frames": "69601bdbcd3aa0a6",
+  "outcome": "7a5504c212a61c20"
+ },
+ "react-L2-1000-r1": {
+  "frames": "57271b653f38aabd",
+  "outcome": "021fddb7d87298b3"
+ },
+ "react-L2-1001-r1": {
+  "frames": "25af16f37daf9cab",
+  "outcome": "34118ec109af9263"
+ },
+ "react-L2-1002-r1": {
+  "frames": "0ffce1a01391bc0a",
+  "outcome": "29787f647200cd07"
+ },
+ "react-L2-1003-r1": {
+  "frames": "ec807f74595b8bdf",
+  "outcome": "6b36a4e70ea36fe3"
+ },
+ "react-L2-1004-r1": {
+  "frames": "b381dd1d20125fe7",
+  "outcome": "b4bbd4e0a2106efb"
+ },
+ "react-L2-1005-r1": {
+  "frames": "cd17525ad857f6c4",
+  "outcome": "968477022b66f93e"
+ },
+ "react-L2-1006-r1": {
+  "frames": "fe31190900362980",
+  "outcome": "04481648cf31cfc5"
+ },
+ "react-L2-1007-r1": {
+  "frames": "5fbf4b8a37364d39",
+  "outcome": "5983e1cf8ad25b18"
+ },
+ "react-L2-1008-r1": {
+  "frames": "758e16e853c770b4",
+  "outcome": "166dcc22448b961d"
+ },
+ "react-L2-1009-r1": {
+  "frames": "aeebe99bd3770377",
+  "outcome": "7b1f2d125cdd48e0"
+ },
+ "react-L3-1000-r1": {
+  "frames": "59fb943c272c587b",
+  "outcome": "340fdc87e04861d4"
+ },
+ "react-L3-1001-r1": {
+  "frames": "3239bc2929650c94",
+  "outcome": "4047bad6b441554f"
+ },
+ "react-L3-1002-r1": {
+  "frames": "5481e9c2f686d053",
+  "outcome": "40ad82ff8adccdbd"
+ },
+ "react-L3-1003-r1": {
+  "frames": "dc720f7c1cc5c060",
+  "outcome": "15a458b440d3ae2c"
+ },
+ "react-L3-1004-r1": {
+  "frames": "ba8021c61e83c121",
+  "outcome": "1c9c45c4837ba96b"
+ },
+ "react-L3-1005-r1": {
+  "frames": "713132ef1fc4081c",
+  "outcome": "b0fa1f553812b07e"
+ },
+ "react-L3-1006-r1": {
+  "frames": "4688328e951b6683",
+  "outcome": "7da00ec8749b53f7"
+ },
+ "react-L3-1007-r1": {
+  "frames": "4b4187a66b4b4043",
+  "outcome": "c137bfd51adb3b11"
+ },
+ "react-L3-1008-r1": {
+  "frames": "d707af99b05d9216",
+  "outcome": "cac5de31c5b336f7"
+ },
+ "react-L3-1009-r1": {
+  "frames": "4800827c09d7eb8c",
+  "outcome": "482ff07da1cdc155"
+ }
+}

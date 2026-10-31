@@ -196,7 +196,9 @@ class Viewer:
                     {
                         "index": entry.index,
                         "step": entry.step,
-                        "call": session.call,
+                        "scout": entry.scout,
+                        # The turn that made the call: its scout's latest one, if roles are used.
+                        "call": session.latest_call.get(f"scout {entry.scout}", session.call),
                         "action": entry.action.to_dict(),
                         "result": entry.result.to_dict(),
                         "frame": frame.to_dict(),

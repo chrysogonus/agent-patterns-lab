@@ -19,6 +19,8 @@ from apl.dungeon.results import (
     ToolResult,
 )
 
+MAX_SCOUTS = 4  # per episode, scout 0 included (specs/004 research R1)
+
 
 @dataclass(frozen=True, slots=True)
 class LogEntry:
@@ -26,11 +28,14 @@ class LogEntry:
     step: int | None  # None for uncounted episode_over calls
     action: Action
     result: ToolResult
+    scout: int = 0
 
     def to_dict(self) -> dict[str, object]:
+        # "scout" only when it says something, so single-agent logs stay as they were.
         return {
             "index": self.index,
             "step": self.step,
+            **({"scout": self.scout} if self.scout else {}),
             "action": self.action.to_dict(),
             "result": self.result.to_dict(),
         }
@@ -46,6 +51,11 @@ class Outcome:
     budget: int
     invalid_actions: int
     log: tuple[LogEntry, ...]
+
+    @property
+    def scouts(self) -> int:
+        """Scouts that made at least one tool call."""
+        return len({e.scout for e in self.log})
 
     @property
     def success(self) -> bool:
@@ -66,6 +76,7 @@ class Outcome:
             "budget": self.budget,
             "invalid_actions": self.invalid_actions,
             "budget_hit": self.budget_hit,
+            **({"scouts": self.scouts} if self.scouts > 1 else {}),
             "log": [e.to_dict() for e in self.log],
         }
 
@@ -79,11 +90,19 @@ def _direction(raw: object) -> Direction | None:
     return Direction(raw) if isinstance(raw, str) and raw in set(Direction) else None
 
 
+@dataclass(slots=True)
+class Scout:
+    """One body in the dungeon. Single-agent architectures have only scout 0."""
+
+    position: Pos
+    inventory: list[str]  # key colors, in pick-up order
+
+
 class Episode:
     def __init__(self, dungeon: Dungeon) -> None:
         self.dungeon = dungeon
-        self.position: Pos = dungeon.layout.start
-        self.inventory: list[str] = []  # key colors, in pick-up order
+        self.scouts = [Scout(dungeon.layout.start, [])]
+        self._acting = 0  # the scout of the call being handled
         self.opened: set[Edge] = set()
         self.steps = 0
         self.invalid_actions = 0
@@ -91,45 +110,68 @@ class Episode:
         self.log: list[LogEntry] = []
         self.on_step: Callable[[LogEntry], None] | None = None  # an observer, e.g. the viewer
 
+    # The acting scout's body; scout 0's outside a call, for everything that knows one agent.
+    @property
+    def position(self) -> Pos:
+        return self.scouts[self._acting].position
+
+    @position.setter
+    def position(self, value: Pos) -> None:
+        self.scouts[self._acting].position = value
+
+    @property
+    def inventory(self) -> list[str]:
+        return self.scouts[self._acting].inventory
+
     @property
     def keys_in_rooms(self) -> dict[str, Pos]:
-        return {
-            c: p for c, p in sorted(self.dungeon.layout.keys.items()) if c not in self.inventory
-        }
+        held = {c for s in self.scouts for c in s.inventory}
+        return {c: p for c, p in sorted(self.dungeon.layout.keys.items()) if c not in held}
 
-    def describe(self) -> RoomView:
-        """The current room, as the agent sees it. Free: does not count as a step."""
+    def add_scout(self) -> int | None:
+        """A new scout in the start room; None once there are MAX_SCOUTS. Costs no step."""
+        if len(self.scouts) >= MAX_SCOUTS:
+            return None
+        self.scouts.append(Scout(self.dungeon.layout.start, []))
+        return len(self.scouts) - 1
+
+    def describe(self, scout: int = 0) -> RoomView:
+        """A scout's room, as it sees it. Free: does not count as a step."""
+        body = self._scout(scout)
         layout = self.dungeon.layout
         exits = []
         for direction in Direction:
-            edge = layout.door(self.position, direction)
+            edge = layout.door(body.position, direction)
             if edge is not None:
                 lock = layout.locks.get(edge) if edge not in self.opened else None
                 exits.append(ExitView(direction, lock))
+        here = body.position
         return RoomView(
-            label=layout.labels[self.position],
+            label=layout.labels[here],
             exits=tuple(exits),
-            items=tuple(key_name(c) for c, p in self.keys_in_rooms.items() if p == self.position),
-            inventory=tuple(key_name(c) for c in self.inventory),
-            is_exit=self.position == layout.exit,
+            items=tuple(key_name(c) for c, p in self.keys_in_rooms.items() if p == here),
+            inventory=tuple(key_name(c) for c in body.inventory),
+            is_exit=here == layout.exit,
         )
 
-    def look(self) -> ToolResult:
-        return self._call(Action("look"), lambda: ToolResult.success(self.describe()))
+    def look(self, scout: int = 0) -> ToolResult:
+        return self._call(scout, Action("look"), lambda: ToolResult.success(self.describe(scout)))
 
-    def move(self, direction: str) -> ToolResult:
-        return self._call(Action("move", (direction,)), lambda: self._move(direction))
+    def move(self, direction: str, scout: int = 0) -> ToolResult:
+        return self._call(scout, Action("move", (direction,)), lambda: self._move(direction))
 
-    def take(self, item: str) -> ToolResult:
-        return self._call(Action("take", (item,)), lambda: self._take(item))
+    def take(self, item: str, scout: int = 0) -> ToolResult:
+        return self._call(scout, Action("take", (item,)), lambda: self._take(item))
 
-    def use(self, item: str, direction: str) -> ToolResult:
-        return self._call(Action("use", (item, direction)), lambda: self._use(item, direction))
+    def use(self, item: str, direction: str, scout: int = 0) -> ToolResult:
+        action = Action("use", (item, direction))
+        return self._call(scout, action, lambda: self._use(item, direction))
 
-    def unknown(self, name: str) -> ToolResult:
+    def unknown(self, name: str, scout: int = 0) -> ToolResult:
         """A call to a tool that does not exist. It still costs a step (Constitution III)."""
         message = f"There is no tool named {name!r}. The tools are look, move, take and use."
         return self._call(
+            scout,
             Action("unknown", (name,)),
             lambda: ToolResult.failure(ErrorCode.UNKNOWN_TOOL, message),
         )
@@ -154,21 +196,32 @@ class Episode:
             log=tuple(self.log),
         )
 
-    def _call(self, action: Action, handler: Callable[[], ToolResult]) -> ToolResult:
+    def _scout(self, number: int) -> Scout:
+        if not 0 <= number < len(self.scouts):
+            raise ValueError(f"there is no scout {number} (scouts: {len(self.scouts)})")
+        return self.scouts[number]
+
+    def _call(self, scout: int, action: Action, handler: Callable[[], ToolResult]) -> ToolResult:
+        self._scout(scout)
         if self.end_reason is not None:
             result = ToolResult.failure(ErrorCode.EPISODE_OVER, "The episode is over.")
-            self._append(LogEntry(len(self.log), None, action, result))
+            self._append(LogEntry(len(self.log), None, action, result, scout))
             return result
         self.steps += 1
-        result = handler()
+        self._acting = scout
+        try:
+            result = handler()
+            # Exit before budget: reaching the exit on the last step is a success.
+            at_exit = self.position == self.dungeon.layout.exit
+        finally:
+            self._acting = 0
         if not result.ok:
             self.invalid_actions += 1
-        # Exit before budget: reaching the exit on the last step is a success.
-        if self.position == self.dungeon.layout.exit:
+        if at_exit:
             self.end_reason = EndReason.EXIT
         elif self.steps >= self.dungeon.budget:
             self.end_reason = EndReason.BUDGET
-        self._append(LogEntry(len(self.log), self.steps, action, result))
+        self._append(LogEntry(len(self.log), self.steps, action, result, scout))
         return result
 
     def _append(self, entry: LogEntry) -> None:
@@ -199,7 +252,7 @@ class Episode:
                 ErrorCode.LOCKED, f"The door to the {direction} is locked ({color})."
             )
         self.position = edge.other(self.position)
-        return ToolResult.success(self.describe())
+        return ToolResult.success(self.describe(self._acting))
 
     def _take(self, item: str) -> ToolResult:
         for color, pos in self.keys_in_rooms.items():

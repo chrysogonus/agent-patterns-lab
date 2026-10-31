@@ -82,7 +82,8 @@ def test_row_key_order_matches_the_contract() -> None:
         "run_id", "arch", "level", "seed", "seed_set", "repeat", "status", "success",
         "end_reason", "steps", "optimal_steps", "budget", "efficiency", "invalid_actions",
         "budget_hit", "token_cap_hit", "output_limit_hits", "llm_calls", "tool_calls",
-        "input_tokens", "output_tokens", "latency_s", "arch_error", "error",
+        "input_tokens", "output_tokens", "latency_s", "arch_error", "error", "scouts",
+        "orchestrator_calls",
     ]  # fmt: skip
 
 
@@ -128,3 +129,18 @@ def test_run_record_round_trips() -> None:
     assert RunRecord.parse(data) == record
     with pytest.raises(ValueError, match="seed_set"):
         RunRecord.parse({k: v for k, v in data.items() if k != "seed_set"})
+
+
+def test_rows_record_scouts_and_orchestrator_calls() -> None:  # specs/004 contracts/results.md
+    row = _completed(0, success=False)  # one failed move, then stopped
+    assert (row.scouts, row.orchestrator_calls) == (1, 0)
+    episode = start_episode(generate("L1", 1000))
+    error = EpisodeRow.failed(KEY, "run-1", "dev", episode, _meter(), 0.5, "x")
+    assert error.scouts is None and error.orchestrator_calls == 0
+
+
+def test_rows_from_before_m4_parse() -> None:
+    data = json.loads(json.dumps(_completed(0, success=False).to_dict()))
+    del data["scouts"], data["orchestrator_calls"]
+    row = EpisodeRow.parse(data)
+    assert row.scouts is None and row.orchestrator_calls is None

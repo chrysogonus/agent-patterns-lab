@@ -3,6 +3,7 @@
 import pytest
 
 from apl.dungeon import DEV_SEEDS, LEVELS, generate, start_episode
+from apl.dungeon.env import Episode
 from apl.dungeon.frames import build_frames, parse_route_file
 from apl.dungeon.model import Action, Dungeon
 from apl.dungeon.results import EndReason
@@ -104,3 +105,48 @@ def test_log_with_an_unknown_tool_replays() -> None:
         Action("unknown", ("open",)),
     ]
     assert frames[-1].error_code == "unknown_tool" and frames[-1].end_reason == EndReason.STOPPED
+
+
+def _scripted_scouts(dungeon: Dungeon, scouts: int, turns: int) -> Episode:
+    """Scouts take turns walking the solution, each from its own start; a fixed script."""
+    episode = start_episode(dungeon)
+    for _ in range(scouts - 1):
+        episode.add_scout()
+    actions = dungeon.solution.actions
+    for i in range(turns):
+        scout, action = i % scouts, actions[(i // scouts) % len(actions)]
+        getattr(episode, action.tool)(*action.args, scout=scout)
+        if episode.end_reason is not None:
+            break
+    if episode.end_reason is None:
+        episode.stop()
+    return episode
+
+
+@pytest.mark.parametrize(
+    ("level", "seed", "scouts"),
+    [("L1", 1000, 2), ("L1", 1003, 3), ("L2", 1001, 2), ("L2", 1004, 4), ("L3", 1002, 3)],
+)
+def test_several_scouts_replay_exactly(level: str, seed: int, scouts: int) -> None:  # SC-002
+    dungeon = generate(level, seed)
+    episode = _scripted_scouts(dungeon, scouts, turns=40)
+    route = parse_route_file(episode.outcome().to_dict())
+    frames = route.frames(dungeon)  # raises if any replayed result differs from the log
+    live = start_episode(dungeon)
+    for _ in range(scouts - 1):
+        live.add_scout()
+    for frame, entry in zip(frames[1:], episode.log, strict=True):
+        getattr(live, entry.action.tool)(*entry.action.args, scout=entry.scout)
+        views = [(s.position, tuple(s.inventory)) for s in live.scouts]
+        assert [(v.position, v.inventory) for v in frame.scouts] == views
+        assert frame.opened == frozenset(live.opened)
+        assert frame.to_dict()["scouts"] == [
+            {"position": list(p), "inventory": list(i)} for p, i in views
+        ]
+
+
+def test_single_scout_frames_have_no_scouts_field() -> None:
+    dungeon = Dungeon.from_layout(locked_shortcut_wins())
+    frames = build_frames(dungeon, dungeon.solution.actions)
+    assert all("scouts" not in f.to_dict() for f in frames)
+    assert parse_route_file({"actions": [{"tool": "look"}]}).scouts == [0]

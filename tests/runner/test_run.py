@@ -6,6 +6,7 @@ from pathlib import Path
 
 import httpx
 import pytest
+from langchain_core.messages import AIMessage, BaseMessage
 
 from apl.dungeon import DEV_SEEDS, generate
 from apl.dungeon.frames import parse_route_file
@@ -131,11 +132,31 @@ def test_permanent_provider_error_stops_the_run(tmp_path: Path) -> None:
 
 def test_interrupt_keeps_finished_rows(tmp_path: Path) -> None:
     strategy = then(text_answer(), 1, raise_error(KeyboardInterrupt()))
-    with pytest.raises(KeyboardInterrupt):
-        _run(tmp_path, strategy, only=(1000, 1001))
+    outcome = _run(tmp_path, strategy, only=(1000, 1001))
+    assert outcome.exit_code == 130  # specs/004: the CLI then names the run to continue
     (run,) = tmp_path.iterdir()
     assert len((run / "episodes.jsonl").read_text().splitlines()) == 1
     assert json.loads((run / "run.json").read_text())["completed"] is False
+
+
+def test_three_infrastructure_errors_in_a_row_stop_the_run(tmp_path: Path) -> None:  # R13
+    outcome = _run(tmp_path, raise_error(FakeProviderError(503)), only=(1000, 1001, 1002, 1003))
+    assert outcome.exit_code == 4 and "3 episodes in a row" in str(outcome.error)
+    assert [r.status for r in _rows(outcome)] == ["error"] * 3
+    assert not _record(outcome).completed
+
+
+def test_errors_with_a_success_between_do_not_stop_the_run(tmp_path: Path) -> None:
+    calls = iter(range(100))
+
+    def strategy(messages: list[BaseMessage]) -> AIMessage:
+        if next(calls) == 2:  # the third episode's only call succeeds
+            return AIMessage("I give up.")
+        raise FakeProviderError(503)
+
+    outcome = _run(tmp_path, strategy, only=(1000, 1001, 1002, 1003, 1004))
+    assert outcome.exit_code == 0
+    assert [r.status for r in _rows(outcome)] == ["error", "error", "completed", "error", "error"]
 
 
 def test_saved_logs_replay(tmp_path: Path) -> None:

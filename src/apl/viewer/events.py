@@ -29,7 +29,8 @@ class EpisodeSession:
         self.folder = folder
         self.events: list[Event] = []
         self.done = False
-        self.call = 0  # the current model call, so step events know their turn
+        self.call = 0  # the latest model call, so step events know their turn
+        self.latest_call: dict[str, int] = {}  # the latest call of each role (specs/004 R6)
         self.episode: Episode | None = None  # set by on_episode; Stop needs it
         self.stop_requested = False
         self.thread: threading.Thread | None = None
@@ -86,8 +87,10 @@ class ViewerCallbacks(BaseCallbackHandler):
 
     def __init__(self, session: EpisodeSession) -> None:
         self.session = session
-        self._previous: list[str] = []
-        self._started: dict[UUID, float] = {}
+        self._previous: dict[str | None, list[str]] = {}  # by role
+        # By run id: calls of several scouts can overlap (specs/004 research R6).
+        self._started: dict[UUID, tuple[float, int, str | None]] = {}
+        self._lock = threading.Lock()
 
     def on_chat_model_start(
         self,
@@ -99,17 +102,21 @@ class ViewerCallbacks(BaseCallbackHandler):
     ) -> None:
         # New input is what follows the prefix shared with the previous call. Deduplicating
         # against everything ever shown would hide A2's map whenever it did not change.
+        role = (kwargs.get("metadata") or {}).get("role")
         keys = [message_key(m) for m in messages[0]]
-        shared = 0
-        while (
-            shared < min(len(keys), len(self._previous)) and keys[shared] == self._previous[shared]
-        ):
-            shared += 1
-        self._previous = keys
-        self.session.call += 1
-        self._started[run_id] = time.perf_counter()
-        new = [{"type": m.type, "content": _content(m)} for m in messages[0][shared:]]
-        self.session.emit("thinking", {"call": self.session.call, "new_input": new})
+        with self._lock:
+            previous = self._previous.get(role, [])
+            shared = 0
+            while shared < min(len(keys), len(previous)) and keys[shared] == previous[shared]:
+                shared += 1
+            self._previous[role] = keys
+            self.session.call += 1
+            call = self.session.call
+            if role is not None:
+                self.session.latest_call[role] = call
+            self._started[run_id] = (time.perf_counter(), call, role)
+            new = [{"type": m.type, "content": _content(m)} for m in messages[0][shared:]]
+            self.session.emit("thinking", {"call": call, "role": role, "new_input": new})
 
     def on_llm_end(self, response: LLMResult, *, run_id: UUID, **kwargs: Any) -> None:
         generation = response.generations[0][0]
@@ -117,10 +124,13 @@ class ViewerCallbacks(BaseCallbackHandler):
         message = generation.message
         usage = getattr(message, "usage_metadata", None)
         meta = message.response_metadata
+        with self._lock:
+            started, call, role = self._started.pop(run_id, (time.perf_counter(), 0, None))
         self.session.emit(
             "turn",
             {
-                "call": self.session.call,
+                "call": call or self.session.call,
+                "role": role,
                 "text": str(message.text),
                 "reasoning": message.additional_kwargs.get("reasoning_content"),
                 "tool_calls": [
@@ -136,9 +146,7 @@ class ViewerCallbacks(BaseCallbackHandler):
                     if usage
                     else None
                 ),
-                "latency_s": round(
-                    time.perf_counter() - self._started.pop(run_id, time.perf_counter()), 3
-                ),
+                "latency_s": round(time.perf_counter() - started, 3),
                 "output_limit_hit": "length"
                 in (meta.get("done_reason"), meta.get("finish_reason")),
             },

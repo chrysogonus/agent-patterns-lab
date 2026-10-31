@@ -3,9 +3,9 @@
 A playground for comparing LangGraph agent architectures on the same generated dungeon,
 scored by code.
 
-> **Status: M3 in progress.** M2 is done: the dungeon, the runner, the results files, the report
-> and A1 ReAct work. M3 adds a browser viewer to watch agents play live, and A2 map state. The
-> design and milestones are in [`plan.md`](plan.md).
+> **Status: M4 in progress.** M3 is done: a browser viewer to watch agents play live, and A2 map
+> state. M4 adds three orchestrator architectures with several scouts, continuable runs, and a
+> first comparison of seven architectures. The design and milestones are in [`plan.md`](plan.md).
 
 ## What this is
 
@@ -49,6 +49,9 @@ Each one is built by hand with LangGraph's `StateGraph`.
 | A4 | Reflexion | After a failed attempt the agent writes down what went wrong and tries again |
 | A5 | Supervisor | A supervisor delegates to a navigator and an inventory subagent |
 | A6 | Hybrid | Code searches the known map; the model only chooses where to go next |
+| A7 | Fan-out once | An orchestrator sends up to 4 scouts into the dungeon once; each explores on its own map |
+| A8 | Supervisor in rounds | An orchestrator gives scouts short tasks and replans on the map they all saw |
+| A9 | Shared blackboard | No planner: scouts take turns on one shared map and claim unexplored exits |
 
 ## How a comparison works
 
@@ -117,6 +120,7 @@ file with an action list or a recorded outcome; see
 uv run apl run --arch react --level all --seeds dev --limit 2            # plan only, free
 uv run apl run --arch react --level all --seeds dev --limit 2 --execute  # plays it
 uv run apl report results/<run-id>                                       # report again
+uv run apl continue results/<run-id> [--execute]                         # rest of a cut-off run
 uv run apl dungeon show --level L2 --seed 1001 \
   --route results/<run-id>/episodes/react-L2-1001-r1.outcome.json --html episode.html
 ```
@@ -137,11 +141,14 @@ The viewer is a local page (reachable only from this machine):
 
 - Pick a level and any seed: the same seed always builds the same dungeon. Test seeds
   (2000–2019) are refused, so they stay unseen for reported results.
-- Pick an architecture (`react`, `mapstate`, `mapstate_routes`, `hybrid`) and a model
-  (`APL_MODEL`, `vllm:qwen3.5-9b` or `openai:gpt-6-luna`), and press Run. Every
-  step appears on the map as it happens, and every model turn in the side panel: its new input
-  (for A2 and A6, its map), reasoning, tool calls and their results. Stats count up as it goes.
-- "Agent's view" dims the rooms the agent has not been in yet. "Shortest solution" draws the
+- Pick an architecture (`react`, `mapstate`, `mapstate_routes`, `hybrid`, `fanout`, `rounds`,
+  `blackboard`) and a model (`APL_MODEL`, `vllm:qwen3.5-9b` or `openai:gpt-6-luna`), and press
+  Run. Every step appears on the map as it happens, and every model turn in the side panel: its
+  new input (for A2, A6 and the scouts, its map), reasoning, tool calls and their results. Stats
+  count up as it goes.
+- With several scouts (A7–A9), each has its own marker and trail color, and each model turn says
+  whether it was the orchestrator or which scout.
+- "Agent's view" dims the rooms no scout has been in yet. "Shortest solution" draws the
   solver's route. The slider goes back to any step; Stop ends the episode after the current
   model turn.
 - Every episode is saved under `results/viewer/<id>/` (events, outcome, conversation, settings)

@@ -16,6 +16,7 @@ from apl.dungeon.render_text import render_text
 
 if TYPE_CHECKING:
     from apl.runner.episode import EpisodeResult
+    from apl.runner.run import RunOutcome
     from apl.runner.settings import Settings
     from apl.runner.spec import RunSpec
 
@@ -66,7 +67,9 @@ def _run(args: argparse.Namespace) -> int:
         return 2
     written = {name: registry.is_written(name) for name in spec.architectures}
     if not args.execute:
-        print(format_plan(spec, settings, written))
+        from apl.runner.run import code_version
+
+        print(format_plan(spec, settings, written, code_version()))
         return 0
     return _execute(spec, settings)
 
@@ -100,24 +103,90 @@ def _execute(spec: "RunSpec", settings: "Settings") -> int:
     except ValueError as error:
         print(f"apl: {error}", file=sys.stderr)
         return 2
-    try:
-        outcome = run.execute(
-            spec,
-            settings,
-            model_factory=run.default_model_factory,
-            architectures=plays,
-            on_episode=_progress,
-        )
-    except KeyboardInterrupt:
-        print("apl: interrupted; finished episodes are kept, the run is marked incomplete")
-        return 130
+    outcome = run.execute(
+        spec,
+        settings,
+        model_factory=run.default_model_factory,
+        architectures=plays,
+        on_episode=_progress,
+    )
+    return _finish(outcome)
+
+
+def _finish(outcome: "RunOutcome") -> int:
+    """The end of `apl run --execute` and `apl continue --execute` (specs/004 contracts/cli.md)."""
     print(outcome.path)
-    if outcome.exit_code:
+    if outcome.exit_code == 130:
+        print("apl: interrupted; finished episodes are kept, the run is marked incomplete")
+    elif outcome.exit_code == 3:
         print(
             f"apl: the provider rejected a request, run stopped: {outcome.error}", file=sys.stderr
         )
+    elif outcome.exit_code == 4:
+        print(f"apl: {outcome.error}. Fix it, then continue the run.", file=sys.stderr)
+    if outcome.exit_code:
+        print(f"continue with: uv run apl continue {outcome.path} --execute")
         return outcome.exit_code
     return _report([outcome.path])
+
+
+def _continue(args: argparse.Namespace) -> int:
+    from apl.runner import registry, run
+    from apl.runner.settings import load_settings, required_key_var
+    from apl.runner.spec import format_limits, upper_bounds
+    from apl.runner.vllm import with_server_context
+
+    try:
+        settings = with_server_context(load_settings())  # the run recorded the server's context
+        written = {name: registry.is_written(name) for name in registry.ARCHITECTURES}
+        plan = run.plan_continue(
+            args.run_dir,
+            settings,
+            code=run.code_version(),
+            versions=run.package_versions(),
+            written=written,
+        )
+    except ValueError as error:
+        print(f"apl: {error}", file=sys.stderr)
+        return 2
+    if plan.refusals:
+        lines = "\n".join(f"  {r}" for r in plan.refusals)
+        print(f"apl: cannot continue {plan.record.run_id}:\n{lines}", file=sys.stderr)
+        return 2
+    if plan.complete:
+        print(f"run {plan.record.run_id} is already complete; nothing to play.")
+        return 0
+    if not args.execute:
+        record = plan.record
+        total = len(plan.done) + len(plan.left)
+        nxt = plan.left[0]
+        rows = [
+            ("done", f"{len(plan.done)} of {total} episodes"),
+            ("left", str(len(plan.left))),
+            ("next", f"{nxt.arch} {nxt.level} {nxt.seed} r{nxt.repeat}"),
+            ("model", settings.model),
+            ("code", str(record.code.get("commit") or "unknown")[:7]),
+        ]
+        print(f"Continue run {record.run_id} (dry run, nothing is sent or written)")
+        print("\n".join(f"  {k:<15}{v}" for k, v in rows))
+        if plan.cut_off:
+            print("  a cut-off last row will be removed")
+        print("\n".join(format_limits(upper_bounds(plan.left, settings), settings)))
+        print("Run with --execute to continue it (a paid provider then costs money).")
+        return 0
+    key_var = required_key_var(settings.model)
+    if key_var and not os.environ.get(key_var):
+        print(f"apl: {key_var} is not set (needed for {settings.model})", file=sys.stderr)
+        return 2
+    plays = {name: registry.load(name) for name in plan.record.architectures}
+    outcome = run.continue_run(
+        plan,
+        settings,
+        model_factory=run.default_model_factory,
+        architectures=plays,
+        on_episode=_progress,
+    )
+    return _finish(outcome)
 
 
 def _report(paths: list[Path]) -> int:
@@ -200,6 +269,9 @@ def main(argv: list[str] | None = None) -> int:
     serve.add_argument(
         "--execute", action="store_true", help="allow agents with a paid provider: costs money"
     )
+    resume = commands.add_parser("continue", help="plan or play the rest of an interrupted run")
+    resume.add_argument("run_dir", type=Path, metavar="RUN_DIR")
+    resume.add_argument("--execute", action="store_true", help="actually play: this costs money")
     report = commands.add_parser("report", help="build a report from run folders")
     report.add_argument("runs", nargs="+", type=Path, metavar="RUN_DIR")
     args = parser.parse_args(argv)
@@ -209,6 +281,8 @@ def main(argv: list[str] | None = None) -> int:
         return _run(args)
     if args.command == "report":
         return _report(args.runs)
+    if args.command == "continue":
+        return _continue(args)
     if args.command == "serve":
         return _serve(args)
     (dungeon if args.command == "dungeon" else parser).print_help()

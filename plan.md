@@ -84,6 +84,13 @@ the repository is to learn LangGraph.
 | A4 | Reflexion | Does learning from a failed attempt pay for itself? All attempts count toward the budget | Outer retry loop, persistent notes |
 | A5 | Supervisor | Do subagents help or only add cost? Navigator and inventory subagents | Subgraphs, handoffs |
 | A6 | Hybrid | How much of the work needs a model at all? Code searches the known map, the model picks targets | Plain Python nodes mixed with model nodes |
+| A7 | Fan-out once (`fanout`) | Does splitting the exploration help? An orchestrator splits the dungeon once; up to 4 scouts explore on their own maps | `Send`, parallel branches, reducers |
+| A8 | Supervisor in rounds (`rounds`) | Does replanning on the merged map help the scouts? Short tasks per round, replanned on what all scouts saw | `Send` in a cycle, shared state |
+| A9 | Shared blackboard (`blackboard`) | Can scouts coordinate without a planner? They take turns on one live map and claim frontiers | Round-robin routing over shared state |
+
+A7–A9 put up to 4 scouts in one episode. Each scout has its own position and inventory; doors,
+items left in rooms and the step budget are shared, and every scout's tool calls count toward the
+one budget. The scout is A2's map-state agent with a task, so A2 is their single-agent reference.
 
 ## 5. Runner and metrics
 
@@ -129,8 +136,8 @@ Each milestone after M0 is one Spec Kit feature (`/speckit-specify` through
 | M1 | Generator, environment, tools, solver. No model | Tests show every generated dungeon is solvable and the solver finds the shortest solution |
 | M2 | Runner, results format, report, A1 ReAct | One dry run and one small paid run produce a report |
 | M3 | Browser viewer and A2 map state | In the browser, any level and seed can be shown and regenerated, and A1 or A2 can be watched playing it live; episodes are saved and replayable |
-| M4 | First comparison, A1 vs A2 | Continuable runs, a comparison report and a written conclusion; the episode count is decided then (the parked design in `docs/parked/m4-comparison/` assumed 180) |
-| M5+ | One architecture per feature: A3, A4, A5, A6 | Each one can be watched in the viewer and is added to the comparison on the same seeds |
+| M4 | First comparison of seven architectures (A1, A2, A2r, A6, and the orchestrators A7–A9 with several scouts) | Continuable runs, a comparison report and a written conclusion, from one dev seed per level on `openai:gpt-6-luna` (21 episodes, a first look) |
+| M5+ | One architecture per feature: A3, A4, A5 | Each one can be watched in the viewer and is added to the comparison on the same seeds |
 
 Paperclip comes in from M5, when several architectures can be built as parallel tickets.
 

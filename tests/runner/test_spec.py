@@ -22,17 +22,29 @@ def test_matrix_order_and_size() -> None:
         EpisodeKey("react", "L2", 1000, 3),
         EpisodeKey("react", "L2", 1001, 1),
     ]
+    # Level, seed, repeat, then architecture: every architecture plays a dungeon in turn (R10).
     spec = RunSpec.build(["a", "b"], ["L1", "L2"], "dev", limit=1, known={"a", "b"})
     assert [(k.arch, k.level) for k in spec.episodes()] == [
         ("a", "L1"),
-        ("a", "L2"),
         ("b", "L1"),
+        ("a", "L2"),
         ("b", "L2"),
     ]
 
 
+def test_the_m4_run_has_21_episodes() -> None:  # specs/004 FR-011
+    names = ["react", "mapstate", "mapstate_routes", "hybrid", "fanout", "rounds", "blackboard"]
+    spec = RunSpec.build(names, ["all"], "dev", limit=1)
+    keys = list(spec.episodes())
+    assert len(keys) == 21 and {k.seed for k in keys} == {1000}
+    assert [k.arch for k in keys[:7]] == names and {k.level for k in keys[:7]} == {"L1"}
+
+
 def test_known_architectures_are_checked() -> None:
-    with pytest.raises(ValueError, match="registered: hybrid, mapstate, mapstate_routes, react"):
+    with pytest.raises(
+        ValueError,
+        match="registered: blackboard, fanout, hybrid, mapstate, mapstate_routes, react, rounds",
+    ):
         _spec(architectures=["nope"])
     spec = RunSpec.build(["loop"], ["L1"], "dev", known={"loop"})
     assert spec.architectures == ("loop",)

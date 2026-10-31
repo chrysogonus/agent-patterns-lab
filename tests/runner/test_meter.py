@@ -1,5 +1,7 @@
 """Counting calls and tokens, the token cap and the end-of-episode guard (research R3)."""
 
+import threading
+
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
@@ -89,3 +91,33 @@ def test_normal_answers_are_not_counted_as_cut_off() -> None:
     meter, model, _ = _setup(usage_per_call(1))
     model.invoke(PROMPT)
     assert meter.output_limit_hits == 0
+
+
+def test_counts_orchestrator_calls_and_records_roles() -> None:  # specs/004 research R5
+    meter, model, _ = _setup(usage_per_call(1))
+    model.invoke(PROMPT, config={"metadata": {"role": "orchestrator"}})
+    model.bind_tools([]).invoke(PROMPT, config={"metadata": {"role": "scout 2"}})
+    model.invoke(PROMPT)
+    assert (meter.llm_calls, meter.orchestrator_calls) == (3, 1)
+    roles = [call.get("role") for call in meter.transcript.calls]
+    assert roles == ["orchestrator", "scout 2", None]
+    assert "role" not in meter.transcript.calls[2]  # calls without a role are as before
+
+
+def test_parallel_calls_are_counted_exactly() -> None:
+    meter, model, _ = _setup(usage_per_call(3, 2), cap=10**9)
+    prompts = [[SystemMessage("rules"), HumanMessage(f"start {i % 7}")] for i in range(25)]
+
+    def work() -> None:
+        for prompt in prompts:
+            model.invoke(prompt)
+
+    threads = [threading.Thread(target=work) for _ in range(4)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert (meter.llm_calls, meter.input_tokens, meter.output_tokens) == (100, 300, 200)
+    assert len(meter.transcript.calls) == 100
+    keys = [str(m) for m in meter.transcript.messages]
+    assert len(keys) == len(set(keys))

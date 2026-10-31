@@ -72,3 +72,27 @@ def expected_map(dungeon: Dungeon, frames: Sequence[Frame], upto: int) -> Dungeo
         inventory=tuple(key_name(c) for c in final.inventory),
         opened=opened,
     )
+
+
+def expected_shared(
+    dungeon: Dungeon, frames: Sequence[Frame], upto: int, scouts: Sequence[int]
+) -> tuple[set[str], dict[str, dict[str, str]], dict[int, str], dict[int, tuple[str, ...]]]:
+    """For several scouts (specs/004): rooms seen, walked doors both ways, rooms and inventories.
+
+    `scouts` are the scout numbers to report (those the architecture has created).
+    """
+    labels = dungeon.layout.labels
+    shown = frames[: upto + 1]
+    seen = {labels[dungeon.layout.start]}
+    leads: dict[str, dict[str, str]] = {}
+    for before, after in zip(shown, shown[1:], strict=False):
+        for a, b in zip(before.scouts, after.scouts, strict=True):
+            seen.add(labels[b.position])
+            if a.position != b.position:
+                here, there = labels[a.position], labels[b.position]
+                leads.setdefault(here, {})[_direction(a.position, b.position)] = there
+                leads.setdefault(there, {})[_direction(b.position, a.position)] = here
+    last = shown[-1].scouts
+    rooms = {n: labels[last[n].position] for n in scouts}
+    held = {n: tuple(key_name(c) for c in last[n].inventory) for n in scouts}
+    return seen, leads, rooms, held

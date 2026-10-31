@@ -1,6 +1,7 @@
 """The architecture interface (contracts/kit.md, research R4–R6)."""
 
 import json
+import threading
 from dataclasses import fields
 from types import SimpleNamespace
 
@@ -8,6 +9,7 @@ import pytest
 from langchain_core.messages import AIMessage, ToolMessage
 
 import apl.kit
+from apl.dungeon import generate
 from apl.dungeon.env import Episode, start_episode
 from apl.dungeon.model import Dungeon
 from apl.dungeon.results import ErrorCode
@@ -149,3 +151,35 @@ def test_kit_contents() -> None:
     assert TOOL_SCHEMAS[0]["function"]["description"] != "tampered"
     for field in fields(kit):
         assert not isinstance(getattr(kit, field.name), Episode | AgentTools)
+
+
+def test_add_scout() -> None:  # specs/004 contracts/scouts.md
+    kit, episode = _kit()
+    scouts = [kit.add_scout() for _ in range(4)]
+    assert [s.number if s else None for s in scouts] == [1, 2, 3, None]
+    assert episode.steps == 0 and episode.log == []
+    scout = scouts[0]
+    assert scout is not None
+    assert json.loads(scout.start) == AgentTools(episode).start.to_dict()
+    scout.tool_node({"messages": [tool_calls(("move", {"direction": "east"}))]})
+    assert episode.describe(scout=1).label == "a3" and episode.position == (0, 0)
+    assert episode.log[-1].scout == 1
+
+
+def test_parallel_tool_calls_are_applied_one_at_a_time() -> None:
+    episode = start_episode(generate("L3", 1000))  # budget 108, above the 100 calls
+    kit = build_kit(episode, ScriptedChatModel(strategy=text_answer()))
+    scout = kit.add_scout()
+    assert scout is not None and episode.dungeon.budget > 100
+
+    def work(node: apl.kit.ToolNode) -> None:
+        for _ in range(50):
+            node({"messages": [tool_calls(("look", {}))]})
+
+    threads = [threading.Thread(target=work, args=(n,)) for n in (kit.tool_node, scout.tool_node)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert episode.steps == 100 and [e.step for e in episode.log] == list(range(1, 101))
+    assert sorted(e.scout for e in episode.log) == [0] * 50 + [1] * 50

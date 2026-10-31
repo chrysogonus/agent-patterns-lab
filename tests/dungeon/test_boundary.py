@@ -194,3 +194,9 @@ def test_boundary_scan_catches_forbidden_imports(tmp_path: Path) -> None:
         "sneak_attr.py: _episode",
         "sneak_getattr.py: _episode",
     ]
+
+
+def test_the_orchestrators_are_scanned_and_use_kit_model() -> None:  # specs/004 acceptance 2.6
+    scanned = {p.name for p in ARCH_DIR.rglob("*.py")}
+    assert {"scouts.py", "fanout.py", "rounds.py", "blackboard.py"} <= scanned
+    assert "kit.model" in (ARCH_DIR / "scouts.py").read_text()  # scouts and orchestrators call it

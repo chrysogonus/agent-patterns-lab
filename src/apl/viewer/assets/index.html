@@ -10,6 +10,7 @@
   --floor: #ffffff; --wall: #1f2328; --trail: #7c3aed; --agent: #7c3aed;
   --fail: rgba(220, 38, 38, 0.25); --exit: #16a34a; --fog: rgba(120, 120, 120, 0.55);
   --solution: #0891b2; --red: #dc2626; --blue: #2563eb; --green: #16a34a; --yellow: #ca8a04;
+  --scout1: #ea580c; --scout2: #0d9488; --scout3: #db2777;
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -17,6 +18,7 @@
     --floor: #22262b; --wall: #e6e6e6; --trail: #a78bfa; --agent: #a78bfa;
     --fail: rgba(248, 113, 113, 0.3); --exit: #4ade80; --fog: rgba(10, 10, 10, 0.6);
     --solution: #22d3ee; --red: #f87171; --blue: #60a5fa; --green: #4ade80; --yellow: #facc15;
+    --scout1: #fb923c; --scout2: #2dd4bf; --scout3: #f472b6;
   }
 }
 * { box-sizing: border-box; }
@@ -45,7 +47,10 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
 .room { fill: transparent; pointer-events: none; }
 .room.fog { fill: var(--fog); }
 #trail { fill: none; stroke: var(--trail); stroke-width: 3; stroke-opacity: 0.5; }
-#agent { fill: var(--agent); transition: cx var(--move, 0.25s), cy var(--move, 0.25s); }
+#agent, .scout-agent { fill: var(--agent); transition: cx var(--move, 0.25s), cy var(--move, 0.25s); }
+.scout-trail { fill: none; stroke-width: 3; stroke-opacity: 0.5; }
+.s1 { fill: var(--scout1); stroke: var(--scout1); } .s2 { fill: var(--scout2); stroke: var(--scout2); }
+.s3 { fill: var(--scout3); stroke: var(--scout3); } .scout-trail.s1, .scout-trail.s2, .scout-trail.s3 { fill: none; }
 #fail { fill: var(--fail); visibility: hidden; }
 #fail.show { visibility: visible; }
 #solution-line { fill: none; stroke: var(--solution); stroke-width: 3; stroke-dasharray: 2 6;
@@ -72,7 +77,7 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
 .card li .result.error { color: var(--red); }
 .card .waiting { color: var(--muted); font-style: italic; }
 .end { border-color: var(--trail); }
-@media (prefers-reduced-motion: reduce) { #agent { transition: none; } }
+@media (prefers-reduced-motion: reduce) { #agent, .scout-agent { transition: none; } }
 </style>
 </head>
 <body>
@@ -172,28 +177,65 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
     const frames = S.frames.length ? S.frames : [S.dungeon.solution[0]];
     S.current = Math.max(0, Math.min(frames.length - 1, n));
     const f = frames[S.current];
-    const [cx, cy] = center(f.position);
-    // Glide only to a neighbouring room: a longer glide would cut straight across walls.
-    const d = S.drawn ? Math.abs(S.drawn[0] - f.position[0]) + Math.abs(S.drawn[1] - f.position[1]) : 0;
-    S.drawn = f.position;
-    $("agent").style.setProperty("--move", d > 1 ? "0s" : `${Math.min(ms, 250)}ms`);
-    $("agent").setAttribute("cx", cx);
-    $("agent").setAttribute("cy", cy);
-    $("trail").setAttribute("points", frames.slice(0, S.current + 1).map((g) => center(g.position).join(",")).join(" "));
+    const shown = frames.slice(0, S.current + 1);
+    const count = f.scouts ? f.scouts.length : 1;
+    document.querySelectorAll(".scout-agent, .scout-trail").forEach((x) => { if (Number(x.dataset.scout) >= count) x.remove(); });
+    S.drawn = S.drawn || [];
+    for (let i = 0; i < count; i++) {
+      const p = positionOf(f, i), m = marker(i);
+      const [cx, cy] = center(p);
+      // Glide only to a neighbouring room: a longer glide would cut straight across walls.
+      const was = S.drawn[i], d = was ? Math.abs(was[0] - p[0]) + Math.abs(was[1] - p[1]) : 0;
+      S.drawn[i] = p;
+      m.dot.style.setProperty("--move", d > 1 ? "0s" : `${Math.min(ms, 250)}ms`);
+      m.dot.setAttribute("cx", cx);
+      m.dot.setAttribute("cy", cy);
+      m.trail.setAttribute("points", shown.map((g) => positionOf(g, i)).filter(Boolean).map((q) => center(q).join(",")).join(" "));
+    }
     const doorId = (e) => `door-${e[0][0]}-${e[0][1]}-${e[1][0]}-${e[1][1]}`;
     const opened = new Set(f.opened.map(doorId));
     document.querySelectorAll(".lock").forEach((x) => x.classList.toggle("open", opened.has(x.id)));
     document.querySelectorAll(".key").forEach((x) => x.classList.toggle("taken", !(x.dataset.color in f.keys)));
     const fail = $("fail");
+    const failed = positionOf(f, f.actor || 0);
     fail.classList.toggle("show", f.action !== null && !f.ok);
-    fail.setAttribute("x", S.dungeon.margin + f.position[0] * S.dungeon.cell);
-    fail.setAttribute("y", S.dungeon.margin + f.position[1] * S.dungeon.cell);
-    const visited = new Set(frames.slice(0, S.current + 1).map((g) => `room-${g.position[0]}-${g.position[1]}`));
+    fail.setAttribute("x", S.dungeon.margin + failed[0] * S.dungeon.cell);
+    fail.setAttribute("y", S.dungeon.margin + failed[1] * S.dungeon.cell);
+    const visited = new Set();
+    for (const g of shown) for (let i = 0; i < (g.scouts ? g.scouts.length : 1); i++) {
+      const q = positionOf(g, i);
+      visited.add(`room-${q[0]}-${q[1]}`);
+    }
     const fog = $("fog").checked;
     document.querySelectorAll(".room").forEach((x) => x.classList.toggle("fog", fog && !visited.has(x.id)));
     $("slider").max = String(frames.length - 1);
     $("slider").value = String(S.current);
     stats();
+  }
+
+  // Scout i's room in a frame; frames of single-agent episodes have no "scouts".
+  function positionOf(g, i) {
+    if (g.scouts) return g.scouts[i] ? g.scouts[i].position : null;
+    return i === 0 ? g.position : null;
+  }
+  // Scout 0 is the page's own marker and trail; the others are made as they appear.
+  function marker(i) {
+    if (i === 0) return { dot: $("agent"), trail: $("trail") };
+    let dot = $(`agent-${i}`);
+    if (!dot) {
+      const trail = document.createElementNS(SVGNS, "polyline");
+      trail.id = `trail-${i}`;
+      trail.setAttribute("class", `scout-trail s${i}`);
+      trail.dataset.scout = String(i);
+      $("trail").after(trail);
+      dot = document.createElementNS(SVGNS, "circle");
+      dot.id = `agent-${i}`;
+      dot.setAttribute("class", `scout-agent s${i}`);
+      dot.setAttribute("r", $("agent").getAttribute("r"));
+      dot.dataset.scout = String(i);
+      $("agent").after(dot);
+    }
+    return { dot, trail: $(`trail-${i}`) };
   }
 
   /* ---------- statistics ---------- */
@@ -213,7 +255,9 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
       const seconds = S.end && S.end.row ? S.end.row.latency_s : S.startedAt && !S.end ? (Date.now() - S.startedAt) / 1000 : 0;
       rows.push(["Time", `${seconds.toFixed(1)} s`]);
       if (f && f.action) rows.push(["Step", `${f.action.tool} ${f.action.args.join(" ")} → ${f.ok ? "ok" : f.error}`]);
-      if (f) rows.push(["Inventory", f.inventory.length ? f.inventory.map((c) => `${c} key`).join(", ") : "empty"]);
+      const keys = (inventory) => inventory.length ? inventory.map((c) => `${c} key`).join(", ") : "empty";
+      if (f && f.scouts) rows.push(["Inventories", f.scouts.map((s, i) => `scout ${i}: ${keys(s.inventory)}`).join(" · ")]);
+      else if (f) rows.push(["Inventory", keys(f.inventory)]);
       if (S.end) {
         const r = S.end.row;
         const how = !r ? `error: ${S.end.error}` : r.status === "error" ? `error: ${r.error}` : r.end_reason + (r.arch_error ? ` (${r.arch_error})` : "");
@@ -229,10 +273,10 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
   }
 
   /* ---------- the model turns ---------- */
-  function card(call) {
+  function card(call, role) {
     if (!S.turns.has(call)) {
       const node = el("div", null, "card");
-      node.append(el("h3", `Model call ${call}`));
+      node.append(el("h3", `Model call ${call}${role ? ` · ${role}` : ""}`));
       $("panel").append(node);
       S.turns.set(call, { node, items: [], done: false, usage: null });
     }
@@ -244,7 +288,7 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
     return box;
   }
   function onThinking(data) {
-    const t = card(data.call);
+    const t = card(data.call, data.role);
     if (data.new_input.length) {
       const box = el("details");
       box.append(el("summary", `New input (${data.new_input.length} message${data.new_input.length === 1 ? "" : "s"})`));
@@ -256,7 +300,7 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
     S.waitingSince = Date.now();
   }
   function onTurn(data) {
-    const t = card(data.call);
+    const t = card(data.call, data.role);
     if (t.wait) t.wait.remove();
     S.waitingSince = null;
     t.done = true;
@@ -293,6 +337,7 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
   }
   function onStep(data) {
     data.frame.counted = data.step; // null for calls after the end, which cost no step
+    data.frame.actor = data.scout || 0;
     S.frames.push(data.frame);
     const index = S.frames.length - 1;
     const t = S.turns.get(data.call);

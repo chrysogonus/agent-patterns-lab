@@ -1,5 +1,6 @@
 """Plays a run and writes its folder (contracts/results.md, research R8, R12)."""
 
+import json
 import platform
 import subprocess
 import time
@@ -18,9 +19,9 @@ from langchain_core.utils import convert_to_secret_str
 from apl.runner import registry
 from apl.runner.episode import EpisodeResult, ModelFactory, PermanentProviderError, play_episode
 from apl.runner.registry import Play
-from apl.runner.results import RunRecord, append_row, write_json
+from apl.runner.results import EpisodeRow, RunRecord, append_row, write_json
 from apl.runner.settings import Settings
-from apl.runner.spec import RunSpec
+from apl.runner.spec import EpisodeKey, RunSpec
 
 _PACKAGES = (
     "langgraph",
@@ -122,8 +123,11 @@ def default_model_factory(
 class RunOutcome:
     path: Path
     record: RunRecord
-    exit_code: int  # 0, or 3 after a permanent provider rejection
+    exit_code: int  # 0; 3 after a permanent provider rejection; 4 after 3 errors in a row; 130
     error: str | None
+
+
+ERRORS_IN_A_ROW = 3  # infrastructure errors that stop a run (specs/004 research R13)
 
 
 def _now() -> str:
@@ -198,23 +202,156 @@ def execute(
         versions=package_versions(),
     )
     write_json(path / "run.json", record.to_dict())
-    episodes = path / "episodes"
-    episodes.mkdir()
+    (path / "episodes").mkdir()
     keys = list(spec.episodes())
-    for i, key in enumerate(keys, 1):
+    return _play(path, record, keys, 0, len(keys), settings, plays, factory, on_episode)
+
+
+def _play(
+    path: Path,
+    record: RunRecord,
+    keys: Sequence[EpisodeKey],
+    done: int,
+    total: int,
+    settings: Settings,
+    plays: Mapping[str, Play],
+    factory: ModelFactory,
+    on_episode: Callable[[int, int, EpisodeResult], None] | None,
+) -> RunOutcome:
+    """Plays `keys` into the run folder; numbers them after the `done` ones."""
+    episodes = path / "episodes"
+    errors = 0
+    for i, key in enumerate(keys, done + 1):
         try:
             result = play_episode(
-                key, record.run_id, spec.seed_set, settings, plays[key.arch], factory
+                key, record.run_id, record.seed_set, settings, plays[key.arch], factory
             )
         except PermanentProviderError as error:
             return RunOutcome(path, record, 3, str(error))
+        except KeyboardInterrupt:
+            return RunOutcome(path, record, 130, "interrupted")
         if result.outcome is not None:
             write_json(episodes / f"{key.name}.outcome.json", result.outcome.to_dict())
         if result.row.llm_calls:
             write_json(episodes / f"{key.name}.conversation.json", result.transcript.to_dict())
         append_row(path / "episodes.jsonl", result.row)
         if on_episode is not None:
-            on_episode(i, len(keys), result)
+            on_episode(i, total, result)
+        errors = errors + 1 if result.row.status == "error" else 0
+        if errors >= ERRORS_IN_A_ROW:
+            message = f"the provider failed {ERRORS_IN_A_ROW} episodes in a row; run stopped"
+            return RunOutcome(path, record, 4, message)
     record = replace(record, completed=True, ended=_now())
     write_json(path / "run.json", record.to_dict())
     return RunOutcome(path, record, 0, None)
+
+
+@dataclass(frozen=True, slots=True)
+class ContinuePlan:
+    """What continuing a run would do; nothing is changed until `continue_run` (research R11)."""
+
+    path: Path
+    record: RunRecord
+    done: frozenset[EpisodeKey]
+    left: tuple[EpisodeKey, ...]
+    cut_off: bool  # the last row was cut off by a hard stop
+    refusals: tuple[str, ...]
+
+    @property
+    def complete(self) -> bool:
+        return self.record.completed or not self.left
+
+
+def plan_continue(
+    path: Path,
+    settings: Settings,
+    *,
+    code: Mapping[str, Any],
+    versions: Mapping[str, str],
+    written: Mapping[str, bool],
+) -> ContinuePlan:
+    """Reads a run folder without changing it; `ValueError` if it is not a readable run."""
+    run_json = path / "run.json"
+    if not run_json.is_file():
+        raise ValueError(f"{path} is not a run folder (no run.json)")
+    try:
+        record = RunRecord.parse(json.loads(run_json.read_text(encoding="utf-8")))
+    except ValueError as error:  # includes JSONDecodeError
+        raise ValueError(f"{run_json}: {error}") from None
+    rows_path = path / "episodes.jsonl"
+    text = rows_path.read_text(encoding="utf-8") if rows_path.exists() else ""
+    lines = text.splitlines()
+    cut_off = bool(text) and not text.endswith("\n")  # a row is written with its newline
+    done = set()
+    for number, line in enumerate(lines[:-1] if cut_off else lines, 1):
+        try:
+            row = EpisodeRow.parse(json.loads(line))
+        except ValueError as error:
+            raise ValueError(f"{rows_path}:{number}: {error}") from None
+        done.add(EpisodeKey(row.arch, row.level, row.seed, row.repeat))
+    spec = RunSpec(
+        record.architectures, record.levels, record.seed_set, record.seeds, record.repeats
+    )
+    left = tuple(k for k in spec.episodes() if k not in done)
+    refusals = []
+    now = settings.record()
+    for name in sorted(record.settings.keys() | now.keys()):
+        if record.settings.get(name) != now.get(name):
+            refusals.append(
+                f"setting {name} differs (run: {record.settings.get(name)}, now: {now.get(name)})"
+            )
+    for name in sorted(record.versions.keys() | versions.keys()):
+        if record.versions.get(name) != versions.get(name):
+            refusals.append(
+                f"version of {name} differs "
+                f"(run: {record.versions.get(name)}, now: {versions.get(name)})"
+            )
+    if record.code.get("commit") != code.get("commit"):
+        refusals.append(
+            f"commit differs (run: {record.code.get('commit')}, now: {code.get('commit')})"
+        )
+    if code.get("dirty") is not False:
+        refusals.append("the working tree has uncommitted changes; commit or stash them")
+    if record.code.get("dirty") is not False:
+        refusals.append("the run was started with uncommitted changes; it cannot be continued")
+    for name in record.architectures:
+        if name not in written:
+            refusals.append(f"unknown architecture {name!r}")
+        elif not written[name]:
+            refusals.append(f"architecture {name} is not written yet")
+    return ContinuePlan(path, record, frozenset(done), left, cut_off, tuple(refusals))
+
+
+def continue_run(
+    plan: ContinuePlan,
+    settings: Settings,
+    *,
+    model_factory: ModelFactory | None = None,
+    architectures: Mapping[str, Play] | None = None,
+    on_episode: Callable[[int, int, EpisodeResult], None] | None = None,
+) -> RunOutcome:
+    """Plays the missing episodes of a plan without refusals into the same folder."""
+    if plan.refusals:
+        raise ValueError("cannot continue: " + "; ".join(plan.refusals))
+    plays = {
+        name: architectures[name] if architectures else registry.load(name)
+        for name in plan.record.architectures
+    }
+    if plan.cut_off:
+        rows = plan.path / "episodes.jsonl"
+        text = rows.read_text(encoding="utf-8")
+        rows.write_text(text[: text.rfind("\n") + 1], encoding="utf-8")
+    (plan.path / "episodes").mkdir(exist_ok=True)
+    total = len(plan.done) + len(plan.left)
+    factory = model_factory or default_model_factory
+    return _play(
+        plan.path,
+        plan.record,
+        plan.left,
+        len(plan.done),
+        total,
+        settings,
+        plays,
+        factory,
+        on_episode,
+    )

@@ -6,7 +6,8 @@ Besides this module, architectures may import only `apl.dungeon.tools` and `apl.
 import copy
 import hashlib
 import json
-from collections.abc import Mapping
+import threading
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any, Protocol
 
@@ -99,13 +100,23 @@ class ToolNode(Protocol):
 
 
 @dataclass(frozen=True, slots=True)
+class Scout:
+    """One more body in the dungeon (specs/004 contracts/scouts.md)."""
+
+    number: int
+    tool_node: ToolNode  # like Kit.tool_node, acting as this scout
+    start: str  # this scout's view of the start room, as a look result
+
+
+@dataclass(frozen=True, slots=True)
 class Kit:
     model: BaseChatModel
     tools: list[dict[str, Any]]
-    tool_node: ToolNode
+    tool_node: ToolNode  # scout 0's
     base_prompt: str
-    start: str
+    start: str  # scout 0's
     recursion_limit: int
+    add_scout: Callable[[], Scout | None]  # None once the episode has 4 scouts; costs no step
 
 
 def _arg(args: object, name: str) -> str:
@@ -117,48 +128,63 @@ def _arg(args: object, name: str) -> str:
 
 def build_kit(episode: Episode, model: BaseChatModel) -> Kit:
     tools = AgentTools(episode)
+    # Scouts may call from parallel graph branches; each call is applied whole (specs/004 R3).
+    lock = threading.Lock()
 
-    def call(name: str, args: object) -> ToolResult:
-        match name:
-            case "look":
-                return tools.look()
-            case "move":
-                return tools.move(_arg(args, "direction"))
-            case "take":
-                return tools.take(_arg(args, "item"))
-            case "use":
-                return tools.use(_arg(args, "item"), _arg(args, "direction"))
-            case _:
-                return episode.unknown(name)
+    def tool_node_for(scout: int) -> ToolNode:
+        def call(name: str, args: object) -> ToolResult:
+            match name:
+                case "look":
+                    return tools.look(scout)
+                case "move":
+                    return tools.move(_arg(args, "direction"), scout)
+                case "take":
+                    return tools.take(_arg(args, "item"), scout)
+                case "use":
+                    return tools.use(_arg(args, "item"), _arg(args, "direction"), scout)
+                case _:
+                    return episode.unknown(name, scout=scout)
 
-    def tool_node(state: Any) -> dict[str, list[ToolMessage]]:
-        """Runs the last AI message's tool calls one by one, in order (research R4)."""
-        messages = state["messages"] if isinstance(state, Mapping) else state.messages
-        last = messages[-1]
-        # Unparsable calls are answered too: the provider rejects a turn with unanswered calls.
-        calls = [*getattr(last, "tool_calls", []), *getattr(last, "invalid_tool_calls", [])]
-        replies = []
-        for tool_call in calls:
+        def tool_node(state: Any) -> dict[str, list[ToolMessage]]:
+            """Runs the last AI message's tool calls one by one, in order (research R4)."""
+            messages = state["messages"] if isinstance(state, Mapping) else state.messages
+            last = messages[-1]
+            # Unparsable calls are answered too: the provider rejects a turn with unanswered calls.
+            calls = [*getattr(last, "tool_calls", []), *getattr(last, "invalid_tool_calls", [])]
+            replies = []
+            for tool_call in calls:
+                with lock:
+                    if episode.end_reason is not None:
+                        raise EpisodeEnded
+                    result = call(tool_call["name"] or "", tool_call["args"])
+                replies.append(
+                    ToolMessage(
+                        json.dumps(result.to_dict()),
+                        tool_call_id=tool_call["id"],
+                        name=tool_call["name"],
+                        status="success" if result.ok else "error",
+                    )
+                )
             if episode.end_reason is not None:
                 raise EpisodeEnded
-            result = call(tool_call["name"] or "", tool_call["args"])
-            replies.append(
-                ToolMessage(
-                    json.dumps(result.to_dict()),
-                    tool_call_id=tool_call["id"],
-                    name=tool_call["name"],
-                    status="success" if result.ok else "error",
-                )
-            )
-        if episode.end_reason is not None:
-            raise EpisodeEnded
-        return {"messages": replies}
+            return {"messages": replies}
+
+        return tool_node
+
+    def add_scout() -> Scout | None:
+        with lock:
+            number = episode.add_scout()
+            if number is None:
+                return None
+            start = ToolResult.success(episode.describe(number))
+        return Scout(number, tool_node_for(number), json.dumps(start.to_dict()))
 
     return Kit(
         model=model,
         tools=copy.deepcopy(TOOL_SCHEMAS),
-        tool_node=tool_node,
+        tool_node=tool_node_for(0),
         base_prompt=BASE_PROMPT,
         start=json.dumps(tools.start.to_dict()),
         recursion_limit=RECURSION_LIMIT,
+        add_scout=add_scout,
     )

@@ -12,6 +12,9 @@ ARCHITECTURES: dict[str, str] = {
     "mapstate": "apl.arch.mapstate",
     "mapstate_routes": "apl.arch.mapstate_routes",
     "hybrid": "apl.arch.hybrid",
+    "fanout": "apl.arch.fanout",
+    "rounds": "apl.arch.rounds",
+    "blackboard": "apl.arch.blackboard",
 }
 
 Play = Callable[[Kit], None]

@@ -1,5 +1,6 @@
 """`apl run` and `apl report` (contracts/cli.md)."""
 
+import json
 from pathlib import Path
 
 import pytest
@@ -31,7 +32,7 @@ def test_dry_run_prints_the_plan_and_writes_nothing(
         "temperature    provider default",
         "reasoning      provider default",
         "token cap      2,000,000 per episode",
-        "model calls    450",
+        "model calls (est.)  450",
         "tokens         12,000,000",
         "cost           no estimate (set APL_PRICE_INPUT and APL_PRICE_OUTPUT)",
         "seeds          dev: 1000, 1001 (2 of 10)  -> development only, must not be reported",
@@ -69,7 +70,7 @@ def test_test_seeds_are_for_reporting(workdir: Path, capsys: pytest.CaptureFixtu
     [
         (
             ["--arch", "nope", "--level", "L1"],
-            "registered: hybrid, mapstate, mapstate_routes, react",
+            "registered: blackboard, fanout, hybrid, mapstate, mapstate_routes, react, rounds",
         ),
         (["--arch", "react", "--level", "L9"], "unknown level 'L9' (levels: L1, L2, L3, all)"),
         (["--arch", "react", "--level", "L1", "--only", "5"], "not in the dev seeds"),
@@ -193,3 +194,116 @@ def test_dungeon_show_does_not_load_langchain() -> None:
 
     code = "import apl.cli, sys; sys.exit('langchain' in sys.modules or 'langgraph' in sys.modules)"
     assert subprocess.run([sys.executable, "-c", code]).returncode == 0
+
+
+@pytest.mark.parametrize(
+    ("code", "line"),
+    [
+        ({"commit": "af49452aaaa", "dirty": False}, "code           af49452\n"),
+        (
+            {"commit": "af49452aaaa", "dirty": True},
+            "code           af49452 (uncommitted changes: this run cannot be continued)",
+        ),
+        ({"commit": None, "dirty": None}, "code           unknown"),
+    ],
+)
+def test_dry_run_shows_the_code_version(
+    workdir: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    code: dict[str, object],
+    line: str,
+) -> None:  # specs/004 contracts/cli.md
+    from apl.runner import run
+
+    monkeypatch.setattr(run, "code_version", lambda: code)
+    assert main(DRY) == 0
+    assert line in capsys.readouterr().out
+
+
+@pytest.fixture
+def clean_code(monkeypatch: pytest.MonkeyPatch) -> None:
+    from apl.runner import run
+
+    monkeypatch.setattr(run, "code_version", lambda: {"commit": "abc1234", "dirty": False})
+
+
+def _interrupted(monkeypatch: pytest.MonkeyPatch) -> None:
+    from apl.runner import run
+    from tests.runner.scripted import raise_error, scripted_factory, text_answer, then
+
+    strategy = then(text_answer(), 1, raise_error(KeyboardInterrupt()))
+    monkeypatch.setattr(run, "default_model_factory", scripted_factory(strategy))
+
+
+def test_interrupted_run_names_the_continue_command(
+    workdir: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    scripted_loop: None,
+    clean_code: None,
+) -> None:
+    _interrupted(monkeypatch)
+    assert main(EXECUTE) == 130
+    (run_dir,) = (workdir / "results").iterdir()
+    assert f"continue with: uv run apl continue results/{run_dir.name} --execute" in (
+        capsys.readouterr().out
+    )
+
+
+def test_continue_dry_run_then_execute(
+    workdir: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    scripted_loop: None,
+    clean_code: None,
+) -> None:
+    from apl.runner import run
+    from tests.runner.scripted import scripted_factory, text_answer
+
+    _interrupted(monkeypatch)
+    main(EXECUTE)
+    (run_dir,) = (workdir / "results").iterdir()
+    capsys.readouterr()
+    assert main(["continue", str(run_dir)]) == 0
+    out = capsys.readouterr().out
+    for line in [
+        f"Continue run {run_dir.name} (dry run, nothing is sent or written)",
+        "  done           1 of 2 episodes",
+        "  left           1",
+        "  next           loop L1 1001 r1",
+        "  code           abc1234",
+        "Run with --execute to continue it (a paid provider then costs money).",
+    ]:
+        assert line in out
+    monkeypatch.setattr(run, "default_model_factory", scripted_factory(text_answer()))
+    assert main(["continue", str(run_dir), "--execute"]) == 0
+    out = capsys.readouterr().out
+    assert "[2/2] loop L1 1001 r1  stopped" in out and "| loop | L1 | 2 | 0% |" in out
+    assert json.loads((run_dir / "run.json").read_text())["completed"] is True
+    assert main(["continue", str(run_dir)]) == 0
+    assert "is already complete; nothing to play." in capsys.readouterr().out
+
+
+def test_continue_refusals_exit_2(
+    workdir: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    scripted_loop: None,
+    clean_code: None,
+) -> None:
+    from apl.runner import run
+
+    _interrupted(monkeypatch)
+    main(EXECUTE)
+    (run_dir,) = (workdir / "results").iterdir()
+    monkeypatch.setattr(run, "code_version", lambda: {"commit": "fff0000", "dirty": True})
+    monkeypatch.setenv("APL_TOKEN_CAP", "1000")
+    capsys.readouterr()
+    assert main(["continue", str(run_dir), "--execute"]) == 2
+    err = capsys.readouterr().err
+    assert f"apl: cannot continue {run_dir.name}:" in err
+    for part in ("setting token_cap differs", "commit differs", "uncommitted changes"):
+        assert part in err
+    assert main(["continue", str(workdir)]) == 2
+    assert "no run.json" in capsys.readouterr().err

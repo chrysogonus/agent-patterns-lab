@@ -370,3 +370,27 @@ def test_the_viewer_plays_exactly_like_the_runner(tmp_path: Path) -> None:  # FR
     assert {k: v for k, v in watched.items() if k not in ignore} == {
         k: v for k, v in direct.items() if k not in ignore
     }
+
+
+def test_several_scouts_in_the_viewer(tmp_path: Path) -> None:  # specs/004 US3
+    from apl.runner import registry
+    from tests.arch.test_fanout import _strategy
+
+    viewer = _viewer(
+        tmp_path,
+        OLLAMA,
+        model_factory=scripted_factory(_strategy("L2", 1001)),
+        architectures={"fanout": registry.load("fanout")},
+    )
+    episode_id = _start(viewer, "fanout", "L2", 1001)
+    events = _events(viewer, episode_id)
+    turns = {e["data"]["call"]: e["data"]["role"] for e in events if e["type"] == "turn"}
+    steps = [e["data"] for e in events if e["type"] == "step"]
+    assert turns[1] == "orchestrator" and {"scout 0", "scout 1", "scout 2"} <= set(turns.values())
+    assert steps and all(s["scout"] == 0 for s in steps)  # only the walker moves
+    assert all(turns[s["call"]] == "scout 0" for s in steps)
+    assert all(len(s["frame"]["scouts"]) == 3 for s in steps)
+    # The saved episode replays with every scout where it was.
+    saved = json.loads((tmp_path / "viewer" / episode_id / "outcome.json").read_text())
+    frames = parse_route_file(saved).frames(generate("L2", 1001))
+    assert [f.position for f in frames[1:]] == [tuple(s["frame"]["position"]) for s in steps]

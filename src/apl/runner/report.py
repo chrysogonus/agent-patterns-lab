@@ -167,6 +167,9 @@ def render(runs: Sequence[LoadedRun]) -> str:
         "| --- " * 13 + "|",
         *(_stats_row(arch, level, groups[arch, level]) for arch, level in keys),
     ]
+    from apl.runner.compare import render_comparison  # it uses this module's helpers
+
+    lines += render_comparison(runs, completed)
     if any(r.record.repeats > 1 for r in runs):
         lines += [
             "",

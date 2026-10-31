@@ -14,6 +14,7 @@ uv run ruff format --check . # formatting
 uv run mypy                  # type check (strict)
 uv run apl dungeon show --level L3 --seed 1000 --route solution  # inspect a dungeon
 uv run apl run --arch react --level all --seeds dev --limit 2  # plan a run (free dry run)
+uv run apl continue results/<run-id>  # plan the rest of an interrupted run (free)
 uv run apl serve             # the browser viewer on http://127.0.0.1:8765/
 ```
 
