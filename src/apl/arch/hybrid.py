@@ -26,6 +26,9 @@ step, as shown next to each option. Answer with the number of one option and not
 
 Call = tuple[str, dict[str, str]]
 
+# Answers in a row that name no option before the agent gives up; re-asks cost no step.
+MAX_MISSES = 3
+
 
 class Option(NamedTuple):
     text: str  # what the model reads
@@ -36,6 +39,7 @@ class HybridState(TypedDict):
     map: DungeonMap
     options: list[Option]
     note: str  # what happened since the model's last answer
+    misses: int  # answers in a row that named no option
 
 
 def options(m: DungeonMap) -> list[Option]:
@@ -76,12 +80,15 @@ def play(kit: Kit) -> None:
         listed = "\n".join(f"{i}. {o.text}" for i, o in enumerate(state["options"], 1))
         prompt = f"{state['note']}\n\n{state['map'].render()}\n\nOptions:\n{listed}".lstrip()
         reply = kit.model.invoke([system, HumanMessage(prompt)])
-        number = re.search(r"\d+", str(reply.text))
-        if number and 1 <= int(number.group()) <= len(state["options"]):
-            return {"options": [state["options"][int(number.group()) - 1]], "note": ""}
+        # The whole answer must be the number ("3", "3.", "Option 3"): a number picked out of
+        # prose ("avoid 1", "-1", a label like "e9") would take a step the model did not choose.
+        found = re.fullmatch(r"(?:option\s*)?(\d+)\.?", str(reply.text).strip(), re.IGNORECASE)
+        if found and 1 <= (number := int(found.group(1))) <= len(state["options"]):
+            return {"options": [state["options"][number - 1]], "note": "", "misses": 0}
         # The choice is asked again; only tool calls cost steps.
         answer = str(reply.text)[:200]
-        return {"note": f"Your answer {answer!r} named no option. Answer with one number."}
+        note = f"Your answer {answer!r} named no option. Answer with one number."
+        return {"note": note, "misses": state["misses"] + 1}
 
     def act(state: HybridState) -> dict[str, object]:
         (chosen,) = state["options"]
@@ -99,7 +106,9 @@ def play(kit: Kit) -> None:
         return "choose" if state["options"] else END  # nothing left the map shows a way to
 
     def after_choose(state: HybridState) -> str:
-        return "choose" if state["note"] else "act"
+        if state["misses"] == 0:
+            return "act"
+        return END if state["misses"] >= MAX_MISSES else "choose"
 
     graph = StateGraph(HybridState)
     graph.add_node("plan", plan)
@@ -110,6 +119,6 @@ def play(kit: Kit) -> None:
     graph.add_conditional_edges("choose", after_choose)
     graph.add_edge("act", "plan")
     graph.compile().invoke(
-        {"map": DungeonMap.from_start(kit.start), "options": [], "note": ""},
+        {"map": DungeonMap.from_start(kit.start), "options": [], "note": "", "misses": 0},
         config={"recursion_limit": kit.recursion_limit},
     )

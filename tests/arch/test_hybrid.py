@@ -7,7 +7,7 @@ import pytest
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 
 from apl.arch.dungeon_map import DungeonMap
-from apl.arch.hybrid import HYBRID_INSTRUCTIONS, options
+from apl.arch.hybrid import HYBRID_INSTRUCTIONS, MAX_MISSES, options
 from apl.dungeon import DEV_SEEDS, LEVELS
 from apl.kit import BASE_PROMPT
 from apl.runner import registry
@@ -83,6 +83,32 @@ def test_an_answer_without_an_option_is_asked_again_at_no_step() -> None:
     assert row.success and row.steps == plain.steps and row.llm_calls == plain.llm_calls + 2
     assert "named no option" in str(seen[1][-1].content)
     assert "'99' named no option" in str(seen[2][-1].content)
+
+
+@pytest.mark.parametrize(
+    ("answer", "counts"),
+    [
+        (" 1 ", True),
+        ("1.", True),
+        ("Option 1", True),
+        ("-1", False),
+        ("1.1", False),
+        ("1 or 2", False),
+        ("I should avoid option 1", False),
+        ("1. explore e9 west", False),
+    ],
+)
+def test_an_answer_counts_only_if_it_is_one_number(answer: str, counts: bool) -> None:
+    row = _play("L1", 1000, _answers(answer, "1")).row
+    plain = _play("L1", 1000, _answers("1")).row
+    assert row.success and row.steps == plain.steps  # a rejected answer takes no step
+    assert row.llm_calls == plain.llm_calls + (0 if counts else 1)
+
+
+def test_the_agent_gives_up_after_max_misses_in_a_row() -> None:
+    row = _play("L1", 1000, _answers("I am not sure")).row
+    assert row.end_reason == "stopped" and row.steps == 0
+    assert row.llm_calls == MAX_MISSES
 
 
 def test_model_input() -> None:

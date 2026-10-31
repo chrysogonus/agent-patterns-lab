@@ -45,7 +45,7 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
 .room { fill: transparent; pointer-events: none; }
 .room.fog { fill: var(--fog); }
 #trail { fill: none; stroke: var(--trail); stroke-width: 3; stroke-opacity: 0.5; }
-#agent { fill: var(--agent); transition: cx 0.25s, cy 0.25s; }
+#agent { fill: var(--agent); transition: cx var(--move, 0.25s), cy var(--move, 0.25s); }
 #fail { fill: var(--fail); visibility: hidden; }
 #fail.show { visibility: visible; }
 #solution-line { fill: none; stroke: var(--solution); stroke-width: 3; stroke-dasharray: 2 6;
@@ -167,12 +167,16 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
   }
 
   /* ---------- drawing one step (as the M1 player does) ---------- */
-  function render(n) {
+  function render(n, ms = 250) {
     if (!S.dungeon) return;
     const frames = S.frames.length ? S.frames : [S.dungeon.solution[0]];
     S.current = Math.max(0, Math.min(frames.length - 1, n));
     const f = frames[S.current];
     const [cx, cy] = center(f.position);
+    // Glide only to a neighbouring room: a longer glide would cut straight across walls.
+    const d = S.drawn ? Math.abs(S.drawn[0] - f.position[0]) + Math.abs(S.drawn[1] - f.position[1]) : 0;
+    S.drawn = f.position;
+    $("agent").style.setProperty("--move", d > 1 ? "0s" : `${Math.min(ms, 250)}ms`);
     $("agent").setAttribute("cx", cx);
     $("agent").setAttribute("cy", cy);
     $("trail").setAttribute("points", frames.slice(0, S.current + 1).map((g) => center(g.position).join(",")).join(" "));
@@ -276,19 +280,45 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
     const usage = data.usage ? `${data.usage.input_tokens.toLocaleString()} in / ${data.usage.output_tokens.toLocaleString()} out · ` : "";
     t.node.append(el("div", `${usage}${data.latency_s.toFixed(1)} s${data.output_limit_hit ? " · cut off by the output limit" : ""}`, "waiting"));
   }
+  function codeStep(t, action) {
+    if (!t.code) {
+      t.code = el("ol");
+      t.node.append(el("div", "Steps made by code after this call:", "waiting"), t.code);
+    }
+    const item = el("li", `${action.tool}(${action.args.join(", ")})`);
+    const result = el("span", " …", "result");
+    item.append(result);
+    t.code.append(item);
+    return { item, result };
+  }
   function onStep(data) {
     data.frame.counted = data.step; // null for calls after the end, which cost no step
     S.frames.push(data.frame);
     const index = S.frames.length - 1;
     const t = S.turns.get(data.call);
-    const slot = t && t.items[(t.used = (t.used || 0) + 1) - 1];
+    let slot = t && t.items[(t.used = (t.used || 0) + 1) - 1];
+    if (t && !slot) slot = codeStep(t, data.action); // no model tool call made it (A6)
     if (slot) {
       const r = data.result;
       slot.result.textContent = r.ok ? " → ok" : ` → ${r.error.code}: ${r.error.message}`;
       slot.result.classList.toggle("error", !r.ok);
       slot.item.addEventListener("click", () => { $("follow").checked = false; render(index); });
     }
-    if ($("follow").checked) render(index); else render(S.current);
+    if ($("follow").checked) follow(); else render(S.current);
+  }
+  // Steps can arrive in a burst (A6's code walks a whole route between two model calls), so the
+  // map walks through them one room at a time, faster the more are waiting: 50 waiting steps take
+  // about 1.5 s (SC-003). FRAME_MS keeps it to one room per drawn frame, so no glide cuts a corner.
+  const STEP_MS = 250, FRAME_MS = 20, CATCH_UP = 50;
+  let walker = null;
+  function follow() {
+    if (walker || !S.dungeon || !$("follow").checked) return;
+    const behind = S.frames.length - 1 - S.current;
+    if (behind <= 0) return;
+    if (behind > CATCH_UP) { render(S.frames.length - 1); return; } // reopened mid-episode
+    const ms = Math.max(FRAME_MS, STEP_MS / behind);
+    render(S.current + 1, ms);
+    walker = setTimeout(() => { walker = null; follow(); }, ms);
   }
   function onEnd(data) {
     S.end = data;
@@ -304,7 +334,7 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
     $("stop").disabled = true;
     message("", true);
     refreshSaved();
-    render($("follow").checked ? S.frames.length - 1 : S.current);
+    if ($("follow").checked) follow(); else render(S.current);
   }
 
   /* ---------- attaching to an episode (live or saved) ---------- */
@@ -406,9 +436,10 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
     $("follow").checked = false;
     if (S.current >= S.frames.length - 1) render(0);
     $("play").textContent = "Pause";
+    const ms = 500 / Number($("speed").value);
     player = setInterval(() => {
-      if (S.current >= S.frames.length - 1) pause(); else render(S.current + 1);
-    }, 500 / Number($("speed").value));
+      if (S.current >= S.frames.length - 1) pause(); else render(S.current + 1, ms);
+    }, ms);
   });
   $("speed").addEventListener("change", () => { if (player) { pause(); $("play").click(); } });
   setInterval(() => { if (S.episode && !S.end) stats(); }, 500);
