@@ -12,13 +12,13 @@ def test_defaults() -> None:
         model="vllm:qwen3.5-9b",
         temperature=None,
         reasoning_effort=None,
-        token_cap=600_000,
+        token_cap=2_000_000,
         max_retries=4,
-        timeout_s=120,
+        timeout_s=300,
         price_input=None,
         price_output=None,
         num_ctx=16_384,
-        max_output_tokens=1024,
+        max_output_tokens=8192,
         base_url="http://localhost:8001/v1",
     )
 
@@ -56,7 +56,7 @@ def test_every_variable_is_read() -> None:
 
 @pytest.mark.parametrize(
     ("model", "expected"),
-    [("vllm:qwen3.5-9b", 1024), ("ollama:qwen3:8b", 4096), ("openai:gpt-6-luna", 4096)],
+    [("vllm:qwen3.5-9b", 8192), ("ollama:qwen3:8b", 4096), ("openai:gpt-6-luna", 4096)],
 )
 def test_output_limit_default_depends_on_the_provider(model: str, expected: int) -> None:
     assert load_settings({"APL_MODEL": model}).max_output_tokens == expected
@@ -123,8 +123,8 @@ def test_record_marks_provider_defaults() -> None:
     record = load_settings({}).record()
     assert record["temperature"] == "provider default"
     assert record["reasoning_effort"] == "provider default"
-    assert record["model"] == "vllm:qwen3.5-9b" and record["token_cap"] == 600_000
-    assert record["num_ctx"] == 16_384 and record["max_output_tokens"] == 1024
+    assert record["model"] == "vllm:qwen3.5-9b" and record["token_cap"] == 2_000_000
+    assert record["num_ctx"] == 16_384 and record["max_output_tokens"] == 8192
     assert record["base_url"] == "http://localhost:8001/v1"
     ollama = Settings(model="ollama:qwen3:8b").record()
     assert ollama["num_ctx"] == 16_384 and ollama["base_url"] is None

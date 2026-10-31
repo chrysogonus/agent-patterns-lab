@@ -5,6 +5,7 @@ can reuse it.
 """
 
 import json
+from collections import deque
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
@@ -71,7 +72,25 @@ class DungeonMap:
         room = self.rooms[label]
         return [d for d in DIRECTIONS if d in room.exits and d not in room.leads_to]
 
-    def render(self) -> str:
+    def paths(self) -> dict[str, list[str]]:
+        """The shortest moves from here to each room, over doors already walked."""
+        paths = {self.current: list[str]()}
+        queue = deque([self.current])
+        while queue:
+            label = queue.popleft()
+            for d, other in self.rooms[label].leads_to.items():
+                if other not in paths:
+                    paths[other] = [*paths[label], d]
+                    queue.append(other)
+        return paths
+
+    def routes(self) -> list[tuple[str, str, list[str]]]:
+        """(room, unexplored exit, moves from here through it), nearest first, over walked doors."""
+        paths = self.paths()
+        found = [(r, d, [*paths[r], d]) for r in self.rooms for d in self.unexplored(r)]
+        return sorted(found, key=lambda route: len(route[2]))
+
+    def render(self, routes: bool = False) -> str:
         inventory = ", ".join(self.inventory) or "nothing"
         lines = [
             "Your map (built from your tool results so far):",
@@ -98,5 +117,13 @@ class DungeonMap:
             lines.append(
                 "Doors you opened: " + "; ".join(f"{r} {d} ({c})" for r, d, c in self.opened) + "."
             )
-        lines.append("Unexplored exits: " + ("; ".join(frontier) if frontier else "none") + ".")
+        if routes and frontier:
+            lines.append("Routes to unexplored exits (through doors you have walked):")
+            for target, d, moves in self.routes():
+                lock = self.rooms[target].exits[d]
+                locked = f", locked ({lock})" if lock else ""
+                count = f"{len(moves)} move" + ("s" if len(moves) > 1 else "")
+                lines.append(f"- {target} {d}{locked} ({count}): " + ", ".join(moves))
+        else:
+            lines.append("Unexplored exits: " + ("; ".join(frontier) if frontier else "none") + ".")
         return "\n".join(lines)

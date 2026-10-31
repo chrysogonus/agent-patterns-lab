@@ -87,6 +87,7 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
   </div>
   <div class="row">
     <label for="arch">Agent</label> <select id="arch"></select>
+    <label for="model">Model</label> <select id="model"></select>
     <button id="run" type="button">Run</button>
     <button id="stop" type="button" disabled>Stop</button>
     <label for="saved">Saved episodes</label> <select id="saved"><option value="">—</option></select>
@@ -342,7 +343,7 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
     select.replaceChildren(el("option", "—"));
     select.firstChild.value = "";
     for (const e of data) {
-      const label = `${e.running ? "▶ running: " : ""}${e.arch} ${e.level} ${e.seed} · ${e.end_reason || ""} · ${e.id.slice(0, 15)}`;
+      const label = `${e.running ? "▶ running: " : ""}${e.arch} ${e.level} ${e.seed} · ${e.model || "?"} · ${e.end_reason || ""} · ${e.id.slice(0, 15)}`;
       const option = el("option", label);
       option.value = e.id;
       select.append(option);
@@ -377,7 +378,7 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
   $("solution").addEventListener("change", toggles);
   $("run").addEventListener("click", async () => {
     if (!S.dungeon) return;
-    const body = JSON.stringify({ arch: $("arch").value, level: S.dungeon.level, seed: S.dungeon.seed });
+    const body = JSON.stringify({ arch: $("arch").value, model: $("model").value, level: S.dungeon.level, seed: S.dungeon.seed });
     const { ok, data } = await api("/api/episodes", { method: "POST", headers: { "Content-Type": "application/json" }, body });
     if (!ok) { message(data.error); return; }
     message("", true);
@@ -426,8 +427,15 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
       b.addEventListener("click", () => { $("seed").value = String(seed); generate(); });
       $("dev-seeds").append(b);
     }
-    if (!data.can_run) { $("run").disabled = true; $("run").title = data.cannot_run_reason; message(data.cannot_run_reason, true); }
-    if (!data.architectures.length) $("run").disabled = true;
+    for (const m of data.models) { const o = el("option", m.name); o.value = m.name; $("model").append(o); }
+    const canRun = () => {
+      const reason = data.models.find((m) => m.name === $("model").value).cannot_run_reason;
+      $("run").disabled = !!reason || !data.architectures.length;
+      $("run").title = reason || "";
+      message(reason, true);
+    };
+    $("model").addEventListener("change", canRun);
+    canRun();
     await generate();
     const episodes = await refreshSaved();
     const running = episodes.find((e) => e.running);

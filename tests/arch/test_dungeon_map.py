@@ -192,3 +192,31 @@ def test_a_fully_explored_map_fits_a_quarter_of_the_context(seed: int) -> None: 
     )
     # ASCII text: every token covers at least one character, so this bounds the tokens.
     assert len(full.render()) <= 8192 // 4 and len(unwalked.render()) <= 8192 // 4
+
+
+def test_render_with_routes() -> None:
+    m = _two_rooms()
+    m.apply("move", {"direction": "north"}, NORTH)
+    assert m.render(routes=True).splitlines()[-3:] == [
+        "Routes to unexplored exits (through doors you have walked):",
+        "- e9 west (1 move): west",
+        "- c3 east, locked (red) (2 moves): south, east",
+    ]
+    assert m.render(routes=True).splitlines()[:-3] == m.render().splitlines()[:-1]
+
+
+@pytest.mark.parametrize(
+    ("name", "dungeon"), _dungeons()[-6:], ids=lambda x: x if isinstance(x, str) else ""
+)
+def test_every_route_walks_known_doors_to_its_exit(name: str, dungeon: Dungeon) -> None:
+    for m in _play(dungeon, _route(dungeon)):
+        routes = m.routes()
+        assert {(r, d) for r, d, _ in routes} == {(r, d) for r in m.rooms for d in m.unexplored(r)}
+        assert [len(moves) for _, _, moves in routes] == sorted(
+            len(moves) for _, _, moves in routes
+        )
+        for room, direction, moves in routes:
+            at = m.current
+            for move in moves[:-1]:
+                at = m.rooms[at].leads_to[move]
+            assert at == room and moves[-1] == direction

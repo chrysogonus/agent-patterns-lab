@@ -44,7 +44,7 @@ Rationale: runs cost money, and dry runs must be safe by default.
 
 - Dungeons are generated from a seed and are solvable by construction. A BFS solver over
   (room, keys held, doors opened) verifies each one and records `optimal_steps`.
-- The step budget is about 3× `optimal_steps`. A per-run token cap stops an episode that loops.
+- The step budget is 6× `optimal_steps` (3× until v1.1.0: too tight for a small local model). A per-run token cap stops an episode that loops.
 - Levels L1–L3 are defined in plan.md §2. Changing a level definition or the seed split
   invalidates earlier results for comparison.
 - Stack: Python 3.12, uv, LangGraph 1.2.x, LangChain `init_chat_model`, pytest, ruff, mypy.
@@ -68,4 +68,4 @@ principle or section or materially expanding one, PATCH for clarifications. Each
 and review MUST check compliance. An unavoidable violation MUST be recorded in that plan's
 Complexity Tracking table with a justification.
 
-**Version**: 1.0.0 | **Ratified**: 2026-10-28 | **Last Amended**: 2026-10-28
+**Version**: 1.1.0 | **Ratified**: 2026-10-28 | **Last Amended**: 2026-10-31

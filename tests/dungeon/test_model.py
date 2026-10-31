@@ -73,7 +73,7 @@ def test_budget_and_from_layout() -> None:
     dungeon = Dungeon.from_layout(two_open_routes())
     assert dungeon.level is None and dungeon.seed is None
     assert dungeon.solution.length == 2
-    assert dungeon.budget == 6
+    assert dungeon.budget == 12
     with pytest.raises(ValueError, match="unsolvable"):
         Dungeon.from_layout(key_behind_own_door())
 

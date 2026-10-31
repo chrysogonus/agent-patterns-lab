@@ -142,7 +142,7 @@ def _report(paths: list[Path]) -> int:
 def _serve(args: argparse.Namespace) -> int:
     from apl.runner.settings import load_settings
     from apl.runner.vllm import with_server_context
-    from apl.viewer.app import Viewer
+    from apl.viewer.app import MODELS, Viewer
     from apl.viewer.server import make_server
 
     try:
@@ -154,7 +154,9 @@ def _serve(args: argparse.Namespace) -> int:
         settings = with_server_context(settings)
     except ValueError as error:  # browsing and replay still work; starting an agent will fail
         print(f"apl: warning: {error}", file=sys.stderr)
-    viewer = Viewer(settings, execute=args.execute)
+    # The same .env settings for each model; only the model (and its output default) differs.
+    models = {name: load_settings({**os.environ, "APL_MODEL": name}) for name in MODELS}
+    viewer = Viewer(settings, execute=args.execute, models=models)
     try:
         server = make_server(viewer, args.port)
     except OSError as error:

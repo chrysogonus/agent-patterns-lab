@@ -131,18 +131,18 @@ def test_opened_door_is_open_from_the_other_side() -> None:
 
 
 def test_exit_on_the_last_step_is_a_success() -> None:
-    episode = _episode(two_open_routes())  # optimal 2, budget 6
-    for _ in range(4):
+    episode = _episode(two_open_routes())  # optimal 2, budget 12
+    for _ in range(10):
         episode.move("north")
     episode.move("east")
     episode.move("east")
     outcome = episode.outcome()
-    assert outcome.steps == 6 and outcome.success and not outcome.budget_hit
+    assert outcome.steps == 12 and outcome.success and not outcome.budget_hit
 
 
 def test_budget_runs_out() -> None:
     episode = _episode(two_open_routes())
-    for _ in range(6):
+    for _ in range(12):
         episode.look()
     outcome = episode.outcome()
     assert outcome.end_reason == EndReason.BUDGET and outcome.budget_hit and not outcome.success
@@ -182,7 +182,7 @@ def test_outcome_shape_and_log() -> None:
         "log",
     ]
     assert data["level"] is None and data["seed"] is None
-    assert (data["steps"], data["optimal_steps"], data["budget"]) == (3, 2, 6)
+    assert (data["steps"], data["optimal_steps"], data["budget"]) == (3, 2, 12)
     assert (data["invalid_actions"], data["end_reason"], data["success"]) == (1, "exit", True)
     log = data["log"]
     assert isinstance(log, list)

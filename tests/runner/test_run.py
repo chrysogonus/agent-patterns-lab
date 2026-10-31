@@ -98,7 +98,7 @@ def test_budget_ends_without_another_call(tmp_path: Path) -> None:
 
 
 def test_token_cap_ends_without_another_call(tmp_path: Path) -> None:
-    (row,) = _rows(_run(tmp_path, bump_wall(_wall()), usage=usage_per_call(400_000)))
+    (row,) = _rows(_run(tmp_path, bump_wall(_wall()), usage=usage_per_call(1_400_000)))
     assert row.token_cap_hit and row.end_reason == "stopped" and row.llm_calls == 2
     assert row.steps == 1  # the second call's tool calls were not carried out
 
@@ -215,7 +215,7 @@ def test_default_model_factory_for_ollama() -> None:
     model = default_model_factory(settings, [])
     assert type(model).__name__ == "ChatOllama"
     assert model.model == "qwen3:8b" and model.num_ctx == 16_384  # type: ignore[attr-defined]
-    assert model.client_kwargs == {"timeout": 120}  # type: ignore[attr-defined]
+    assert model.client_kwargs == {"timeout": 300}  # type: ignore[attr-defined]
     assert model.reasoning is False  # type: ignore[attr-defined]
     assert model.num_predict == 4096  # type: ignore[attr-defined]
     openai_model = default_model_factory(

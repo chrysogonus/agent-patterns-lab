@@ -32,7 +32,7 @@ def test_matrix_order_and_size() -> None:
 
 
 def test_known_architectures_are_checked() -> None:
-    with pytest.raises(ValueError, match="registered: mapstate, react"):
+    with pytest.raises(ValueError, match="registered: hybrid, mapstate, mapstate_routes, react"):
         _spec(architectures=["nope"])
     spec = RunSpec.build(["loop"], ["L1"], "dev", known={"loop"})
     assert spec.architectures == ("loop",)
@@ -69,8 +69,8 @@ def test_upper_bounds() -> None:
     spec = _spec(levels=["all"], limit=2)
     budgets = sum(generate(level, seed).budget for level in spec.levels for seed in spec.seeds)
     bounds = spec.upper_bounds(Settings())
-    assert bounds.calls == budgets + 6 == 228
-    assert bounds.tokens == 6 * 600_000
+    assert bounds.calls == budgets + 6 == 450
+    assert bounds.tokens == 6 * 2_000_000
     assert bounds.cost is None
     priced = spec.upper_bounds(Settings(price_input=0.10, price_output=0.50))
-    assert priced.cost == pytest.approx(1.80)
+    assert priced.cost == pytest.approx(6.00)

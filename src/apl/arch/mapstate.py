@@ -23,6 +23,11 @@ opened. "unexplored" means you have not gone through that exit yet; "locked (col
 was locked when you last saw it. Your previous reply and its tool results come just before the \
 map."""
 
+# For the routes variant (mapstate_routes); it explains the list, it does not say which to take.
+ROUTE_INSTRUCTIONS = """\
+Under the map, each unexplored exit is listed with the moves that reach it from your room through \
+doors you have already walked, nearest first."""
+
 
 class MapState(TypedDict):
     # No reducers: each write replaces the value, so the history never builds up (R11).
@@ -31,13 +36,18 @@ class MapState(TypedDict):
 
 
 def play(kit: Kit) -> None:
+    run(kit, routes=False)
+
+
+def run(kit: Kit, *, routes: bool) -> None:
     model = kit.model.bind_tools(kit.tools)
-    system = SystemMessage(kit.base_prompt + "\n\n" + MAP_INSTRUCTIONS)
+    instructions = MAP_INSTRUCTIONS + (" " + ROUTE_INSTRUCTIONS if routes else "")
+    system = SystemMessage(kit.base_prompt + "\n\n" + instructions)
     start = HumanMessage(kit.start)
 
     def agent(state: MapState) -> dict[str, list[BaseMessage]]:
         turn = state["messages"] or [start]
-        reply = model.invoke([system, *turn, HumanMessage(state["map"].render())])
+        reply = model.invoke([system, *turn, HumanMessage(state["map"].render(routes))])
         return {"messages": [reply]}
 
     def act(state: MapState) -> MapState:

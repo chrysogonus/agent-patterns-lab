@@ -44,6 +44,7 @@ Each one is built by hand with LangGraph's `StateGraph`.
 | --- | --- | --- |
 | A1 | ReAct | The model calls tools in a loop and remembers only through its message history |
 | A2 | Map state | The explored map is kept in graph state and shown to the model every turn |
+| A2r | Map state with routes | A2's map plus the shortest known route to each unexplored exit |
 | A3 | Plan-and-execute | A planner sets subgoals, an executor carries them out, the plan is revised on surprises |
 | A4 | Reflexion | After a failed attempt the agent writes down what went wrong and tries again |
 | A5 | Supervisor | A supervisor delegates to a navigator and an inventory subagent |
@@ -69,17 +70,21 @@ APL_MODEL=vllm:qwen3.5-9b          # local vLLM, free; also ollama:qwen3:8b or o
 ```
 
 The default is Qwen3.5 9B served by a local [vLLM](https://docs.vllm.ai) server at
-`http://localhost:8001/v1` (`APL_BASE_URL`), started with `--reasoning-parser qwen3` and
-`--enable-auto-tool-choice --tool-call-parser qwen3_coder`. A model call takes about 2 seconds.
+`http://localhost:8001/v1` (`APL_BASE_URL`), started with `--reasoning-parser qwen3`,
+`--enable-auto-tool-choice --tool-call-parser qwen3_coder`, `--max-model-len 32768` and
+Qwen's recommended thinking-mode sampling (`--override-generation-config '{"temperature": 1.0,
+"top_p": 0.95, "top_k": 20, "min_p": 0.0, "presence_penalty": 1.5, "repetition_penalty": 1.0}'`;
+the quantized checkpoint ships none, so vLLM would otherwise sample unfiltered). A model call
+takes about 2 seconds.
 The model's reasoning is shown in the viewer and kept in the transcripts, but never sent back to
-it. The context window is the server's (`--max-model-len`, 8,192 here), and the runner records
+it. The context window is the server's (`--max-model-len`, 32,768 here), and the runner records
 it. A prompt that outgrows it ends the episode as the architecture's failure.
 
 `ollama:` models still work (`APL_NUM_CTX` sets their context, default 16,384, because Ollama's
 own 4,096 would silently cut off long episodes). Optional settings, the same for every
 architecture in a run: `APL_TEMPERATURE`, `APL_REASONING_EFFORT` (both default to the provider's
-default), `APL_MAX_OUTPUT_TOKENS` (per model call; 1,024 for vLLM, otherwise 4,096),
-`APL_TOKEN_CAP` (tokens per episode, default 600,000), and `APL_PRICE_INPUT` /
+default), `APL_MAX_OUTPUT_TOKENS` (per model call; 8,192 for vLLM, otherwise 4,096),
+`APL_TOKEN_CAP` (tokens per episode, default 2,000,000), and `APL_PRICE_INPUT` /
 `APL_PRICE_OUTPUT` (USD per 1M tokens, for the dry run's worst-case cost).
 
 ## Development
@@ -132,9 +137,10 @@ The viewer is a local page (reachable only from this machine):
 
 - Pick a level and any seed: the same seed always builds the same dungeon. Test seeds
   (2000–2019) are refused, so they stay unseen for reported results.
-- Pick an architecture (`react`, `mapstate`) and press Run. Every step appears on the map as it
-  happens, and every model turn in the side panel: its new input (for A2, its map), reasoning,
-  tool calls and their results. Stats count up as it goes.
+- Pick an architecture (`react`, `mapstate`, `mapstate_routes`, `hybrid`) and a model
+  (`APL_MODEL`, `vllm:qwen3.5-9b` or `openai:gpt-6-luna`), and press Run. Every
+  step appears on the map as it happens, and every model turn in the side panel: its new input
+  (for A2 and A6, its map), reasoning, tool calls and their results. Stats count up as it goes.
 - "Agent's view" dims the rooms the agent has not been in yet. "Shortest solution" draws the
   solver's route. The slider goes back to any step; Stop ends the episode after the current
   model turn.

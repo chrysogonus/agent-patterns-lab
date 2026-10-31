@@ -57,6 +57,7 @@ def test_options(tmp_path: Path) -> None:
     assert data["architectures"] == ["mapstate", "react"]
     assert data["model"] == "vllm:qwen3.5-9b" and data["settings"]["num_ctx"] == 8192
     assert data["can_run"] is True and data["cannot_run_reason"] is None
+    assert data["models"] == [{"name": "vllm:qwen3.5-9b", "cannot_run_reason": None}]
 
 
 def test_options_list_only_written_architectures(tmp_path: Path) -> None:
@@ -127,8 +128,10 @@ def _events(viewer: Viewer, episode_id: str) -> list[dict[str, Any]]:
     return session.events
 
 
-def _start(viewer: Viewer, arch: str = "react", level: str = "L1", seed: int = 1000) -> str:
-    status, _, body = viewer.start_episode({"arch": arch, "level": level, "seed": seed})
+def _start(
+    viewer: Viewer, arch: str = "react", level: str = "L1", seed: int = 1000, **extra: object
+) -> str:
+    status, _, body = viewer.start_episode({"arch": arch, "level": level, "seed": seed, **extra})
     assert status == 201, body
     episode_id: str = json.loads(body)["id"]
     return episode_id
@@ -230,6 +233,30 @@ def test_paid_provider_without_execute_cannot_start(tmp_path: Path) -> None:
     viewer = _viewer(tmp_path, Settings(model="openai:gpt-6-luna"))
     status, _, body = viewer.start_episode({"arch": "react", "level": "L1", "seed": 1000})
     assert status == 403 and "apl serve --execute" in json.loads(body)["error"]  # SC-005
+
+
+def test_the_page_can_switch_models(tmp_path: Path) -> None:
+    luna = Settings(model="openai:gpt-6-luna")
+    models = {
+        "ollama:qwen3:8b": Settings(model="ollama:qwen3:8b", num_ctx=1),
+        "openai:gpt-6-luna": luna,
+    }
+    viewer = _viewer(tmp_path, OLLAMA, models=models)
+    offered = _body(viewer.options())["models"]
+    assert [m["name"] for m in offered] == ["ollama:qwen3:8b", "openai:gpt-6-luna"]  # default first
+    assert (
+        offered[0]["cannot_run_reason"] is None and "--execute" in offered[1]["cannot_run_reason"]
+    )
+    body = {"arch": "react", "level": "L1", "seed": 1000}
+    assert viewer.start_episode({**body, "model": "openai:gpt-6-luna"})[0] == 403
+    assert viewer.start_episode({**body, "model": "anthropic:x"})[0] == 400
+    assert viewer.start_episode({**body, "model": 3})[0] == 400
+    viewer.execute = True
+    start = _events(viewer, _start(viewer, model="openai:gpt-6-luna"))[0]["data"]
+    assert start["model"] == "openai:gpt-6-luna" and start["settings"] == luna.record()
+    assert _body(viewer.list_episodes())[0]["model"] == "openai:gpt-6-luna"
+    default = _events(viewer, _start(viewer))[0]["data"]  # no model given: the default
+    assert default["settings"] == OLLAMA.record()  # not the offered copy with num_ctx=1
 
 
 def test_provider_failure_is_shown_and_the_viewer_stays_usable(tmp_path: Path) -> None:

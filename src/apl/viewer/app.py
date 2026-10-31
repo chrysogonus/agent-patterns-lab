@@ -29,6 +29,7 @@ from apl.viewer.events import EpisodeSession, ViewerCallbacks
 
 Response = tuple[int, str, bytes]
 LOCAL_PROVIDERS = ("ollama:", "vllm:")  # no cost, so no --execute needed (research R8)
+MODELS = ("vllm:qwen3.5-9b", "openai:gpt-6-luna")  # the page's model switch, besides APL_MODEL
 # Checked before any file access, so an id can never point outside results/viewer/.
 EPISODE_ID = re.compile(r"\d{8}-\d{6}-[a-z0-9_]+-L[1-3]-\d+(-\d+)?")
 
@@ -43,20 +44,25 @@ def error(status: int, message: str) -> Response:
 
 @dataclass
 class Viewer:
-    settings: Settings
+    settings: Settings  # the default model's (APL_MODEL)
     execute: bool = False
+    models: Mapping[str, Settings] = field(default_factory=dict)  # the others the page offers
     results_dir: Path = Path("results/viewer")
     model_factory: ModelFactory | None = None  # None: the runner's default factory
     architectures: Mapping[str, Play] | None = None  # None: the registry
     running: EpisodeSession | None = None
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
-    @property
-    def cannot_run_reason(self) -> str | None:
-        if self.execute or self.settings.model.startswith(LOCAL_PROVIDERS):
+    def choices(self) -> dict[str, Settings]:
+        """The models the page can switch between, the default first."""
+        default = self.settings.model
+        return {default: self.settings} | {n: s for n, s in self.models.items() if n != default}
+
+    def cannot_run_reason(self, model: str) -> str | None:
+        if self.execute or model.startswith(LOCAL_PROVIDERS):
             return None
         return (
-            f"{self.settings.model} is a paid provider; start the viewer with "
+            f"{model} is a paid provider; start the viewer with "
             "`apl serve --execute` to run agents with it"
         )
 
@@ -66,7 +72,7 @@ class Viewer:
         return sorted(name for name in registry.ARCHITECTURES if registry.is_written(name))
 
     def options(self) -> Response:
-        reason = self.cannot_run_reason
+        reason = self.cannot_run_reason(self.settings.model)
         return json_response(
             200,
             {
@@ -78,6 +84,10 @@ class Viewer:
                 "settings": self.settings.record(),
                 "can_run": reason is None,
                 "cannot_run_reason": reason,
+                "models": [
+                    {"name": name, "cannot_run_reason": self.cannot_run_reason(name)}
+                    for name in self.choices()
+                ],
             },
         )
 
@@ -111,17 +121,21 @@ class Viewer:
         if not isinstance(body, dict):
             return error(400, "the request body must be a JSON object")
         arch, level, seed = body.get("arch"), body.get("level"), body.get("seed")
+        model = body.get("model", self.settings.model)
         if not isinstance(arch, str) or arch not in self.architecture_names():
             return error(400, f"unknown or unwritten architecture {arch!r}")
+        chosen = self.choices().get(model) if isinstance(model, str) else None
+        if chosen is None:
+            return error(400, f"unknown model {model!r} (models: {', '.join(self.choices())})")
         if not isinstance(seed, int) or isinstance(seed, bool):
             return error(400, f"seed must be a whole number ≥ 0, got {seed!r}")
         found = parse_dungeon(str(level), str(seed))
         if not isinstance(found, Dungeon):
             return found
-        if (reason := self.cannot_run_reason) is not None:
+        if (reason := self.cannot_run_reason(chosen.model)) is not None:
             return error(403, reason)
         try:
-            settings = with_server_context(self.settings)
+            settings = with_server_context(chosen)
         except ValueError as problem:
             return error(503, str(problem))
         with self._lock:
@@ -266,6 +280,7 @@ class Viewer:
                     "arch": start.get("arch"),
                     "level": start.get("level"),
                     "seed": start.get("seed"),
+                    "model": start.get("model"),
                     "end_reason": None,
                     "steps": None,
                     "optimal_steps": start.get("optimal_steps"),
@@ -288,6 +303,7 @@ class Viewer:
                     "arch": saved.get("arch"),
                     "level": saved.get("level"),
                     "seed": saved.get("seed"),
+                    "model": (saved.get("settings") or {}).get("model"),
                     "end_reason": "error"
                     if row.get("status", "error") == "error"
                     else row.get("end_reason"),

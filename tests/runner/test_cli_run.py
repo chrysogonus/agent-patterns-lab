@@ -27,12 +27,12 @@ def test_dry_run_prints_the_plan_and_writes_nothing(
         "episodes       6",
         "model          vllm:qwen3.5-9b",
         "context        from the server (read at --execute)",
-        "max output     1,024 tokens per call",
+        "max output     8,192 tokens per call",
         "temperature    provider default",
         "reasoning      provider default",
-        "token cap      600,000 per episode",
-        "model calls    228",
-        "tokens         3,600,000",
+        "token cap      2,000,000 per episode",
+        "model calls    450",
+        "tokens         12,000,000",
         "cost           no estimate (set APL_PRICE_INPUT and APL_PRICE_OUTPUT)",
         "seeds          dev: 1000, 1001 (2 of 10)  -> development only, must not be reported",
         "Run with --execute to start it (a paid provider then costs money).",
@@ -56,7 +56,7 @@ def test_dry_run_with_prices(
     monkeypatch.setenv("APL_PRICE_INPUT", "0.10")
     monkeypatch.setenv("APL_PRICE_OUTPUT", "0.50")
     assert main(DRY) == 0
-    assert "cost           $1.80 (at $0.10 / $0.50 per 1M tokens)" in capsys.readouterr().out
+    assert "cost           $6.00 (at $0.10 / $0.50 per 1M tokens)" in capsys.readouterr().out
 
 
 def test_test_seeds_are_for_reporting(workdir: Path, capsys: pytest.CaptureFixture[str]) -> None:
@@ -67,7 +67,10 @@ def test_test_seeds_are_for_reporting(workdir: Path, capsys: pytest.CaptureFixtu
 @pytest.mark.parametrize(
     ("args", "message"),
     [
-        (["--arch", "nope", "--level", "L1"], "registered: mapstate, react"),
+        (
+            ["--arch", "nope", "--level", "L1"],
+            "registered: hybrid, mapstate, mapstate_routes, react",
+        ),
         (["--arch", "react", "--level", "L9"], "unknown level 'L9' (levels: L1, L2, L3, all)"),
         (["--arch", "react", "--level", "L1", "--only", "5"], "not in the dev seeds"),
         (["--arch", "react", "--level", "L1", "--only", "x"], "--only"),
@@ -179,7 +182,9 @@ def test_report_refuses_bad_input(
     first, second = sorted((workdir / "results").iterdir())
     capsys.readouterr()
     assert main(["report", str(first), str(second)]) == 2
-    assert "apl: cannot combine runs: token_cap differs (600000 vs 1000)" in capsys.readouterr().err
+    assert (
+        "apl: cannot combine runs: token_cap differs (2000000 vs 1000)" in capsys.readouterr().err
+    )
 
 
 def test_dungeon_show_does_not_load_langchain() -> None:

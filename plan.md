@@ -42,7 +42,7 @@ that architectures can recover from them.
 ### Episode
 
 An episode ends when the agent reaches the exit, runs out of steps, or gives up. The step
-budget is about 3× the shortest solution.
+budget is 6× the shortest solution.
 
 ### Levels
 
@@ -79,6 +79,7 @@ the repository is to learn LangGraph.
 | --- | --- | --- | --- |
 | A1 | ReAct | The baseline: memory is the message history only | Tool node, conditional edge, loop limit |
 | A2 | Map state | Does explicit memory beat history? The explored map lives in graph state and is rendered each turn | State schema, reducers |
+| A2r | Map state with routes (`mapstate_routes`) | Does a planning aid help a small model? A2's map plus the shortest known route to each unexplored exit | Same graph as A2 |
 | A3 | Plan-and-execute | Does planning help on L3? Planner sets subgoals, executor runs them, replanner reacts | Multiple nodes, cycles |
 | A4 | Reflexion | Does learning from a failed attempt pay for itself? All attempts count toward the budget | Outer retry loop, persistent notes |
 | A5 | Supervisor | Do subagents help or only add cost? Navigator and inventory subagents | Subgraphs, handoffs |

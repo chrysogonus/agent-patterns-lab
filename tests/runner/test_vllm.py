@@ -68,7 +68,7 @@ def test_reasoning_is_not_sent_back() -> None:
 def test_factory_builds_a_vllm_model() -> None:
     model = default_model_factory(Settings(temperature=0.2), [])
     assert isinstance(model, VLLMChat)
-    assert model.model_name == "qwen3.5-9b" and model.max_tokens == 1024
+    assert model.model_name == "qwen3.5-9b" and model.max_tokens == 8192
     assert str(model.openai_api_base) == "http://localhost:8001/v1"
     assert model.temperature == 0.2
 

@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage
 
-from apl.arch.mapstate import MAP_INSTRUCTIONS
+from apl.arch.mapstate import MAP_INSTRUCTIONS, ROUTE_INSTRUCTIONS
 from apl.dungeon import DEV_SEEDS, LEVELS, generate
 from apl.dungeon.frames import build_frames
 from apl.dungeon.model import Direction
@@ -28,10 +28,10 @@ from tests.runner.scripted import (
 )
 
 
-def _play(level: str, seed: int, strategy: Strategy) -> EpisodeResult:
-    key = EpisodeKey("mapstate", level, seed, 1)
+def _play(level: str, seed: int, strategy: Strategy, arch: str = "mapstate") -> EpisodeResult:
+    key = EpisodeKey(arch, level, seed, 1)
     return play_episode(
-        key, "test", "dev", Settings(), registry.load("mapstate"), scripted_factory(strategy)
+        key, "test", "dev", Settings(), registry.load(arch), scripted_factory(strategy)
     )
 
 
@@ -48,11 +48,12 @@ def _recording(
     return strategy
 
 
+@pytest.mark.parametrize("arch", ["mapstate", "mapstate_routes"])
 @pytest.mark.parametrize("level", sorted(LEVELS))
 @pytest.mark.parametrize("per_turn", [1, 2])
-def test_replays_the_shortest_solution(level: str, per_turn: int) -> None:  # SC-006
+def test_replays_the_shortest_solution(arch: str, level: str, per_turn: int) -> None:  # SC-006
     for seed in DEV_SEEDS:
-        row = _play(level, seed, replay_solution(generate(level, seed), per_turn)).row
+        row = _play(level, seed, replay_solution(generate(level, seed), per_turn), arch).row
         assert row.success and row.efficiency == 1.0 and row.arch_error is None, seed
 
 
@@ -124,8 +125,20 @@ def test_a_batch_that_reaches_the_exit_ends_cleanly() -> None:  # FR-024
     assert row.success and row.llm_calls == 1
 
 
+def test_routes_variant_input() -> None:
+    dungeon = generate("L2", 1001)
+    seen: list[list[BaseMessage]] = []
+    _play("L2", 1001, _recording(replay_solution(dungeon), seen), "mapstate_routes")
+    assert seen[0][0].content == BASE_PROMPT + "\n\n" + MAP_INSTRUCTIONS + " " + ROUTE_INSTRUCTIONS
+    frames = build_frames(dungeon, dungeon.solution.actions)
+    for call, messages in enumerate(seen):
+        expected = expected_map(dungeon, frames, min(call, len(frames) - 1))
+        assert messages[-1].content == expected.render(routes=True), call
+    assert any("Routes to unexplored exits" in str(m[-1].content) for m in seen)
+
+
 def test_instructions_explain_the_map_without_numbers() -> None:  # R15
-    assert not re.search(r"\d", MAP_INSTRUCTIONS)
+    assert not re.search(r"\d", MAP_INSTRUCTIONS + ROUTE_INSTRUCTIONS)
     assert "map" in MAP_INSTRUCTIONS and "unexplored" in MAP_INSTRUCTIONS
 
 

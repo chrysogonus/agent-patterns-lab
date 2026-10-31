@@ -203,7 +203,7 @@ class Dungeon:
 
     @property
     def budget(self) -> int:
-        return 3 * self.solution.length
+        return 6 * self.solution.length
 
     @classmethod
     def from_layout(cls, layout: Layout) -> Dungeon:

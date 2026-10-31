@@ -18,14 +18,21 @@ Returns the page (`text/html`), which is `apl/viewer/assets/index.html` unchange
   "model": "vllm:qwen3.5-9b",
   "settings": {"model": "vllm:qwen3.5-9b", "temperature": "provider default", "num_ctx": 8192, "...": "..."},
   "can_run": true,
-  "cannot_run_reason": null
+  "cannot_run_reason": null,
+  "models": [
+    {"name": "vllm:qwen3.5-9b", "cannot_run_reason": null},
+    {"name": "openai:gpt-6-luna", "cannot_run_reason": "openai:gpt-6-luna is a paid provider; ..."}
+  ]
 }
 ```
 
 - `test_seeds` is the inclusive range `[first, last]`.
 - `architectures` lists the registered architectures whose module exists, sorted.
 - `can_run` is `false` for a provider that is not local without `--execute` (research R8). In
-  that case `cannot_run_reason` says so.
+  that case `cannot_run_reason` says so. Both fields are about the default model (`APL_MODEL`).
+- `models` is the page's model switch (added 2026-10-31): the default model first, then the
+  others in `apl.viewer.app.MODELS`, each with the same `.env` settings and its own
+  `cannot_run_reason`.
 
 ## `GET /api/dungeon?level=<L>&seed=<n>`
 
@@ -39,13 +46,14 @@ The same level and seed give byte-identical responses (FR-002).
 
 ## `POST /api/episodes`
 
-The request body is `{"arch": "react", "level": "L1", "seed": 1000}`.
+The request body is `{"arch": "react", "level": "L1", "seed": 1000, "model": "vllm:qwen3.5-9b"}`.
+`model` is optional (default: `APL_MODEL`) and must be one of `models`.
 
 | Status | When |
 | --- | --- |
 | 201 | `{"id": "<episode id>"}`. The episode runs in the background |
-| 400 | Unknown level or architecture, an unwritten architecture, or a bad seed |
-| 403 | A test seed, or `can_run` is `false` |
+| 400 | Unknown level, architecture or model, an unwritten architecture, or a bad seed |
+| 403 | A test seed, or the chosen model's `cannot_run_reason` is set |
 | 409 | Another episode is running: `{"error": "...", "running": "<id>"}` |
 
 The id is the saved folder name (`<YYYYMMDD-HHMMSS>-<arch>-<level>-<seed>`).

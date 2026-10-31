@@ -30,7 +30,7 @@ unchanged.
 | --- | --- | --- |
 | `APL_MODEL` | `vllm:qwen3.5-9b` (was `ollama:qwen3:8b`) | `provider:model`; providers `vllm`, `ollama`, `openai`, `anthropic` |
 | `APL_BASE_URL` | `http://localhost:8001/v1` | The server for `vllm:` models. Recorded in the settings record as `base_url` (`null` for other providers) |
-| `APL_MAX_OUTPUT_TOKENS` | 1,024 for `vllm:`, 4,096 otherwise | Output tokens per model call |
+| `APL_MAX_OUTPUT_TOKENS` | 8,192 for `vllm:` (1,024 until 2026-10-31), 4,096 otherwise | Output tokens per model call |
 | `APL_NUM_CTX` | 16,384 | Still Ollama only. For `vllm:` the server's value is recorded |
 
 `base_url` is not in the report's `COMPARED` list. The model name and `num_ctx` already

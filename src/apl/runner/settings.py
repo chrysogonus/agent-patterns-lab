@@ -14,9 +14,10 @@ class Settings:
     model: str = "vllm:qwen3.5-9b"
     temperature: float | None = None  # None: not sent, the provider's default applies
     reasoning_effort: str | None = None
-    token_cap: int = 600_000
+    # Room for A1's growing history over a 6× budget at L3 (about 1.4M tokens).
+    token_cap: int = 2_000_000
     max_retries: int = 4
-    timeout_s: float = 120
+    timeout_s: float = 300  # a full 8,192-token reply takes about 2 minutes on the local GPU
     price_input: float | None = None  # USD per 1M tokens; for the dry run's cost only
     price_output: float | None = None
     # Ollama's context window. Its own default (4,096) would silently cut off long episodes. For
@@ -24,8 +25,9 @@ class Settings:
     num_ctx: int = 16_384
     # Output tokens per model call. Without it a local model can think endlessly inside one call,
     # where neither the token cap (checked after a call) nor the timeout (per read) can stop it.
-    # 1,024 suits vLLM's 8,192-token context; load_settings uses 4,096 for other providers.
-    max_output_tokens: int = 1024
+    # Qwen's thinking counts against it: at 1,024 it often ran out before the tool call. 8,192
+    # suits vLLM's 32,768-token context; load_settings uses 4,096 for other providers.
+    max_output_tokens: int = 8192
     base_url: str = "http://localhost:8001/v1"  # the vLLM server
 
     def record(self) -> dict[str, object]:
