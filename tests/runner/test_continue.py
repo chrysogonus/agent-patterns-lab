@@ -136,3 +136,15 @@ def test_error_rows_are_not_played_again(tmp_path: Path) -> None:
     plan = _plan(started.path)
     errors = [k for k in plan.done if k.arch != "react"]
     assert len(errors) == 3 and all(k not in plan.left for k in errors)
+
+
+def test_a_run_with_every_row_but_no_completion_is_completed(tmp_path: Path) -> None:  # FR-014
+    whole = _start(tmp_path, text_answer())
+    data = json.loads((whole.path / "run.json").read_text())
+    data["completed"], data["ended"] = False, None  # a crash after the last row
+    (whole.path / "run.json").write_text(json.dumps(data))
+    plan = _plan(whole.path)
+    assert not plan.complete and not plan.left and not plan.refusals
+    outcome = _continue(plan, raise_error(AssertionError("nothing may be played")))
+    assert outcome.exit_code == 0 and outcome.record.completed and outcome.record.ended
+    assert json.loads((whole.path / "run.json").read_text())["completed"] is True

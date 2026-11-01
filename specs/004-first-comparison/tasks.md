@@ -343,12 +343,12 @@ provider failures (contracts/cli.md).
   including the intro line with the seeds and repeats covered and the development or test notice.
 - [X] T044 [US5] In `src/apl/runner/report.py`: append `render_comparison(...)` after the main table
   when the completed rows cover two or more architectures.
-- [ ] T045 [US5] Plan the M4 run (quickstart step 4) on a clean committed tree with
+- [X] T045 [US5] Plan the M4 run (quickstart step 4) on a clean committed tree with
   `APL_MODEL=openai:gpt-6-luna`: check 21 episodes, the seven architectures, seed 1000, "development
   only", a clean `code` line and the cost bound; show the bound to the experimenter before going on.
-- [ ] T046 [US5] The experimenter runs the M4 run with `--execute` (quickstart step 6), continuing it
+- [X] T046 [US5] The experimenter runs the M4 run with `--execute` (quickstart step 6), continuing it
   with the printed `continue with:` line if it stops. Not an agent task: it spends money.
-- [ ] T047 [US5] Draft `docs/findings/m4-first-comparison.md` from the run's `report.md` (research
+- [X] T047 [US5] Draft `docs/findings/m4-first-comparison.md` from the run's `report.md` (research
   R15): the questions, the setup line, the comparison tables, what each question's rows suggest per
   level, the limitation that one episode per cell cannot separate a difference from luck, the reason
   for 21 episodes, and next steps; link it from `README.md`. The experimenter checks and edits it
@@ -441,3 +441,14 @@ Task: "T026 Write src/apl/arch/blackboard.py (A9)"
 - [P] tasks touch different files and depend on no unfinished task.
 - Commit after each checkpoint; the M4 run itself needs a clean tree (research R12).
 - `/speckit-converge` follows `/speckit-implement`, as for every milestone.
+
+---
+
+## Phase 9: Convergence
+
+- [X] T052 Check the merged map after every applied call of a scripted `rounds` and `blackboard` episode against an oracle covering rooms, exits with their locks, connections, items, opened doors, scout rooms and inventories, in `tests/arch/oracle.py` and `tests/arch/test_scouts_shared.py`, per SC-003, US2/AC2 (partial)
+- [X] T053 [P] Add unit tests in `tests/arch/test_scouts_shared.py` that a newer observation replaces an older one in `SharedMap` (a door seen locked by one scout and opened by another) and that `act` applies replies in scout-number order when they arrive out of order, per T015 (partial)
+- [X] T054 [P] Add each scout's last failed tool call (tool, arguments, error message) to A8's round report in `src/apl/arch/rounds.py`, with a test in `tests/arch/test_rounds.py`, per contracts/orchestrators.md A8 input (partial)
+- [X] T055 [P] Add a test in `tests/arch/test_fanout.py` that when one scout's share is used up, it stops and the other scouts go on until done, per spec Edge Cases "a scout of the fan-out architecture uses up its share" (partial)
+- [X] T056 Make `apl continue --execute` mark a run complete and write `report.md` when every planned episode has a row but `run.json` is still incomplete, in `src/apl/runner/run.py` and `src/apl/cli.py`, with a test in `tests/runner/test_continue.py`, per FR-014 (partial)
+- [X] T057 [P] Update `specs/004-first-comparison/plan.md` (Summary and Performance Goals) to say A9 runs one scout per turn, round robin, while A7 and A8 keep parallel turns, per plan: lockstep turn decision (contradicts)

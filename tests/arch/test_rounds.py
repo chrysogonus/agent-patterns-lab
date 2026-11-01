@@ -8,7 +8,15 @@ from langchain_core.messages import AIMessage, BaseMessage
 from apl.arch.rounds import ROUNDS_INSTRUCTIONS
 from apl.dungeon import LEVELS, generate
 from tests.arch.orchestrated import play, recording, roles, text
-from tests.runner.scripted import Strategy, by_system, by_task, json_answer, walk_solution
+from tests.runner.scripted import (
+    Strategy,
+    bump_wall,
+    by_system,
+    by_task,
+    json_answer,
+    walk_solution,
+)
+from tests.runner.test_run import _wall
 
 ROUND = {
     "tasks": [{"scout": 0, "task": "walk", "steps": 3}, {"scout": 1, "task": "rest", "steps": 2}]
@@ -61,3 +69,15 @@ def test_unknown_scout_numbers_are_asked_again() -> None:
 def test_three_invalid_answers_give_up(level: str) -> None:
     row = play("rounds", level, 1000, _strategy(level, 1000, lambda m: AIMessage("?"))).row
     assert row.end_reason == "stopped" and row.orchestrator_calls == 3
+
+
+def test_the_round_report_names_a_failed_call() -> None:  # contracts/orchestrators.md A8
+    seen: list[list[BaseMessage]] = []
+    answers = iter([{"tasks": [{"scout": 0, "task": "bump", "steps": 1}]}, {"done": True}])
+    orchestrator = recording(lambda m: json_answer(next(answers))(m), seen)
+    wall = _wall("L1", 1000)
+    scouts = by_task({"bump": bump_wall(wall)}, lambda m: AIMessage("Idle."))
+    play("rounds", "L1", 1000, by_system({MARKER: orchestrator}, scouts))
+    assert f'scout 0: last failed call: move {{"direction": "{wall}"}}: There is no door' in text(
+        seen[1]
+    )

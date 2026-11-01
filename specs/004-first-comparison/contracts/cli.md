@@ -67,6 +67,13 @@ All refusals are printed together, prefixed `apl: cannot continue <run-id>:`.
 
 `run <run-id> is already complete; nothing to play.` Nothing is written.
 
+### Every episode done, run not marked complete (exit code 0)
+
+For example after a crash between the last row and `run.json`. The dry run prints
+`run <run-id>: every episode has a row; --execute marks the run complete and writes report.md.`
+With `--execute`, nothing is played: `run.json` gets `completed: true` and `ended`, and
+`report.md` is written and printed.
+
 ### Execute
 
 - Removes a cut-off last row (only after every check passed), plays the missing episodes in run

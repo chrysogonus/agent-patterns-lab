@@ -307,3 +307,20 @@ def test_continue_refusals_exit_2(
         assert part in err
     assert main(["continue", str(workdir)]) == 2
     assert "no run.json" in capsys.readouterr().err
+
+
+def test_continue_completes_a_run_whose_episodes_are_all_done(
+    workdir: Path, capsys: pytest.CaptureFixture[str], scripted_loop: None, clean_code: None
+) -> None:
+    main(EXECUTE)
+    (run_dir,) = (workdir / "results").iterdir()
+    data = json.loads((run_dir / "run.json").read_text())
+    data["completed"], data["ended"] = False, None
+    (run_dir / "run.json").write_text(json.dumps(data))
+    (run_dir / "report.md").unlink()
+    capsys.readouterr()
+    assert main(["continue", str(run_dir)]) == 0
+    assert "every episode has a row; --execute marks the run complete" in capsys.readouterr().out
+    assert main(["continue", str(run_dir), "--execute"]) == 0
+    assert (run_dir / "report.md").is_file()
+    assert json.loads((run_dir / "run.json").read_text())["completed"] is True

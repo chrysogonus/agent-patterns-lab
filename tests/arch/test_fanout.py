@@ -1,5 +1,7 @@
 """A7 fan-out once with scripted answers (specs/004 contracts/orchestrators.md, US2)."""
 
+from collections import Counter
+
 import pytest
 from langchain_core.messages import AIMessage, BaseMessage
 
@@ -54,3 +56,11 @@ def test_the_same_answers_give_the_same_episode() -> None:
     first, second = (play("fanout", "L3", 1002, _strategy("L3", 1002)) for _ in range(2))
     assert first.outcome is not None and second.outcome is not None
     assert first.outcome.to_dict() == second.outcome.to_dict()
+
+
+def test_a_scout_whose_share_is_used_up_stops_and_the_others_go_on() -> None:  # edge case
+    plan = {"scouts": [{"task": "walk briefly", "steps": 2}, {"task": "walk on", "steps": 500}]}
+    result = play("fanout", "L2", 1001, _strategy("L2", 1001, json_answer(plan)))
+    assert result.row.success and result.outcome is not None
+    steps = Counter(e.scout for e in result.outcome.log)
+    assert steps == {0: 2, 1: generate("L2", 1001).solution.length}

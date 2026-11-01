@@ -51,10 +51,14 @@ def play(kit: Kit) -> None:
     everyone = [first_scout(kit, lambda number, start: board)]
 
     def plan(state: RoundsState) -> dict[str, Any]:
-        report = [
-            f"scout {s.number}: " + (f"finished: {s.report}" if s.report else "used up its steps")
-            for s in state["scouts"]
-        ]
+        report = []
+        for s in state["scouts"]:
+            report.append(
+                f"scout {s.number}: "
+                + (f"finished: {s.report}" if s.report else "used up its steps")
+            )
+            if s.failed:
+                report.append(f"scout {s.number}: last failed call: {s.failed}")
         last = "Last round:\n" + "\n".join(report) if report else "This is the first round."
         prompt = (
             f"{state['note']}\n\n{board.render(None)}\n\n"
@@ -85,6 +89,7 @@ def play(kit: Kit) -> None:
                 continue
             scout = everyone[number]
             scout.task, scout.steps_left, scout.done, scout.report = task, steps, False, ""
+            scout.failed = ""
             scout.last_turn = []
             scout.view = round_view(board)
             tasked.append(scout)

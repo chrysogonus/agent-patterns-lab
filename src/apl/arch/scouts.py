@@ -91,6 +91,7 @@ class ScoutState:
     turns: int = 0  # model turns taken, for the blackboard's round robin
     done: bool = False
     report: str = ""  # its answer when it finished the task
+    failed: str = ""  # its last failed tool call in this task, for A8's round report
 
 
 def _gather(old: list[Any], new: list[Any]) -> list[Any]:
@@ -186,6 +187,9 @@ def act(state: ScoutGraph) -> dict[str, Any]:
             call = by_id[result.tool_call_id]
             args = call["args"] if isinstance(call["args"], dict) else {}
             data = json.loads(str(result.content))
+            if not data["ok"]:
+                shown = json.dumps(args)
+                scout.failed = f"{call['name']} {shown}: {data['error']['message']}"
             for board in {id(m): m for m in (scout.view, state["board"]) if m is not None}.values():
                 board.apply(number, call["name"] or "", args, data)
         applied += len(results)

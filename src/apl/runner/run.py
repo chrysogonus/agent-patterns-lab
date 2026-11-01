@@ -259,7 +259,8 @@ class ContinuePlan:
 
     @property
     def complete(self) -> bool:
-        return self.record.completed or not self.left
+        """Marked complete. With no episode left but no mark, continuing only marks it."""
+        return self.record.completed
 
 
 def plan_continue(

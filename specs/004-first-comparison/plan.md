@@ -13,8 +13,9 @@ M4 runs the lab's first comparison and adds three orchestrator architectures. It
   `kit.add_scout()`. Scout 0 is the existing agent, so the single-agent architectures run the same
   code on the same state (research R1–R5).
 - **A7–A9**: `fanout`, `rounds` and `blackboard`, built on one shared scout (A2's map-state agent
-  with a task) and one lockstep turn: the scouts' model calls run in parallel, then their tool calls
-  are applied in scout order (R3, R7–R9).
+  with a task). In A7 and A8 a lockstep turn runs the scouts' model calls in parallel, then applies
+  their tool calls in scout order; in A9 one scout acts per turn, round robin, because scouts
+  deciding at the same moment from the same board moved as one pack (R3, R7–R9).
 - **Viewer**: one marker and trail per scout, turns labelled by role (R6).
 - **The run**: the parked design's interleaved order, `apl continue`, code identity and the stop
   after 3 provider failures (R10–R13). The run is 7 architectures × L1–L3 × dev seed 1000 × 1
@@ -54,8 +55,9 @@ and the viewer use the local vLLM server on `localhost:8001`.
 
 **Project Type**: Python library with a CLI (`apl`) and a local web page.
 
-**Performance Goals**: the 21-episode run completes in well under two hours (R16). The parallel
-scout calls make a lockstep turn about as long as its slowest model call.
+**Performance Goals**: the 21-episode run completes in well under two hours (R16). In A7 and A8
+the parallel scout calls make a lockstep turn about as long as its slowest model call; A9's turns
+are one model call each.
 
 **Constraints**:
 

@@ -6,6 +6,9 @@ scored by code.
 > **Status: M4 in progress.** M3 is done: a browser viewer to watch agents play live, and A2 map
 > state. M4 adds three orchestrator architectures with several scouts, continuable runs, and a
 > first comparison of seven architectures. The design and milestones are in [`plan.md`](plan.md).
+>
+> First results (one episode per architecture and level, not reportable):
+> [`docs/findings/m4-first-comparison.md`](docs/findings/m4-first-comparison.md).
 
 ## What this is
 

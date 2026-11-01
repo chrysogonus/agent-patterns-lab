@@ -156,6 +156,12 @@ def _continue(args: argparse.Namespace) -> int:
     if plan.complete:
         print(f"run {plan.record.run_id} is already complete; nothing to play.")
         return 0
+    if not args.execute and not plan.left:
+        print(
+            f"run {plan.record.run_id}: every episode has a row; --execute marks the run complete "
+            "and writes report.md."
+        )
+        return 0
     if not args.execute:
         record = plan.record
         total = len(plan.done) + len(plan.left)

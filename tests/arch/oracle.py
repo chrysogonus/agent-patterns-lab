@@ -96,3 +96,70 @@ def expected_shared(
     rooms = {n: labels[last[n].position] for n in scouts}
     held = {n: tuple(key_name(c) for c in last[n].inventory) for n in scouts}
     return seen, leads, rooms, held
+
+
+def expected_board(
+    dungeon: Dungeon, frames: Sequence[Frame], actors: Sequence[int], upto: int
+) -> DungeonMap:
+    """What all scouts' results up to frame `upto` reveal, as one map (specs/004 SC-003).
+
+    `actors` is the scout of each step. Rooms are as last seen by any scout; walked doors both
+    ways; items lie where they were last seen unless some scout has taken them since.
+    """
+    layout = dungeon.layout
+    shown = frames[: upto + 1]
+
+    def where(frame: Frame, scout: int) -> Pos:
+        return frame.scouts[scout].position if frame.scouts else frame.position
+
+    last_view: dict[Pos, int] = {layout.start: 0}
+    first_seen: dict[Pos, int] = {layout.start: 0}
+    walked: list[tuple[Pos, Pos]] = []
+    opened_from: dict[Edge, Pos] = {}
+    opened_order: list[Edge] = []
+    for i in range(1, len(shown)):
+        frame, before, actor = shown[i], shown[i - 1], actors[i - 1]
+        here, was = where(frame, actor), where(before, actor)
+        tool = frame.action.tool if frame.action else None
+        if frame.ok and tool in ("move", "look"):
+            last_view[here] = i
+            first_seen.setdefault(here, i)
+        if here != was:
+            walked.append((was, here))
+        for new in sorted(frame.opened - before.opened):
+            opened_from[new] = here
+            opened_order.append(new)
+    walked_edges = {Edge(a, b) for a, b in walked}
+    final = shown[-1]
+    rooms: dict[str, RoomNote] = {}
+    for pos in sorted(last_view, key=lambda p: first_seen[p]):
+        seen = shown[last_view[pos]]
+        exits: dict[str, str | None] = {}
+        for direction in Direction:
+            edge = layout.door(pos, direction)
+            if edge is None:
+                continue
+            lock = layout.locks.get(edge)
+            if edge in seen.opened or (
+                edge in final.opened and (opened_from[edge] == pos or edge in walked_edges)
+            ):
+                lock = None
+            exits[str(direction)] = lock
+        items = [
+            key_name(c)
+            for c, p in seen.keys_in_rooms.items()
+            if p == pos and c in final.keys_in_rooms
+        ]
+        rooms[layout.labels[pos]] = RoomNote(exits, {}, items)
+    for a, b in walked:
+        rooms[layout.labels[a]].leads_to[_direction(a, b)] = layout.labels[b]
+        rooms[layout.labels[b]].leads_to[_direction(b, a)] = layout.labels[a]
+    opened = [
+        (
+            layout.labels[opened_from[e]],
+            _direction(opened_from[e], e.other(opened_from[e])),
+            layout.locks[e],
+        )
+        for e in opened_order
+    ]
+    return DungeonMap(rooms=rooms, current="", inventory=(), opened=opened)
