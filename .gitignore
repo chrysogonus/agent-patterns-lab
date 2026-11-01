@@ -10,6 +10,23 @@ dist/
 
 # Secrets: the provider API key lives here
 .env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+
+# Local agent settings and notes
+.claude/settings.local.json
+CLAUDE.local.md
+
+# Coverage, editors, OS
+.coverage
+htmlcov/
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
 
 # Experiment output
 results/
