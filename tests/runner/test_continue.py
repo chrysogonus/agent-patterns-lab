@@ -148,3 +148,40 @@ def test_a_run_with_every_row_but_no_completion_is_completed(tmp_path: Path) -> 
     outcome = _continue(plan, raise_error(AssertionError("nothing may be played")))
     assert outcome.exit_code == 0 and outcome.record.completed and outcome.record.ended
     assert json.loads((whole.path / "run.json").read_text())["completed"] is True
+
+
+SURVEY_ARCHS = ["react", "mapstate", "fanout", "rounds", "blackboard"]
+
+
+def test_a_survey_run_continues_on_the_survey_field(tmp_path: Path) -> None:
+    spec = RunSpec.build(SURVEY_ARCHS, ["S1"], "dev", limit=1, problem="survey")
+    plays = {name: registry.load(name) for name in SURVEY_ARCHS}
+    first = execute(
+        spec, Settings(), results_dir=tmp_path, architectures=plays,
+        model_factory=scripted_factory(then(text_answer(), 2, raise_error(KeyboardInterrupt()))),
+    )  # fmt: skip
+    assert first.exit_code == 130
+    record = json.loads((first.path / "run.json").read_text())
+    assert record["problem"] == "survey"
+    plan = plan_continue(
+        first.path, Settings(), code=CODE, versions=run.package_versions(),
+        written={name: True for name in SURVEY_ARCHS},
+    )  # fmt: skip
+    assert not plan.refusals and len(plan.done) + len(plan.left) == 5
+    done = continue_run(
+        plan, Settings(), model_factory=scripted_factory(text_answer()), architectures=plays
+    )
+    assert done.exit_code == 0
+    rows = [json.loads(line) for line in (first.path / "episodes.jsonl").read_text().splitlines()]
+    assert len(rows) == 5 and all(r["problem"] == "survey" for r in rows)
+    assert all(r["true_total"] == 6 and r["cells"] == 36 for r in rows)
+
+
+def test_an_older_run_without_a_problem_continues_as_a_dungeon_run(tmp_path: Path) -> None:
+    first = _start(tmp_path, then(text_answer(), 3, raise_error(KeyboardInterrupt())))
+    record = json.loads((first.path / "run.json").read_text())
+    del record["problem"]
+    (first.path / "run.json").write_text(json.dumps(record))
+    plan = _plan(first.path)
+    assert plan.record.problem == "dungeon" and not plan.refusals
+    assert {k.level for k in plan.left} <= {"L1", "L2", "L3"}

@@ -8,6 +8,8 @@ from collections.abc import Sequence
 from apl.arch.dungeon_map import DungeonMap, RoomNote
 from apl.dungeon.frames import Frame
 from apl.dungeon.model import Direction, Dungeon, Edge, Pos, key_name
+from apl.survey.env import LogEntry as SurveyLogEntry
+from apl.survey.model import Cell, Field
 
 
 def _direction(a: Pos, b: Pos) -> str:
@@ -163,3 +165,24 @@ def expected_board(
         for e in opened_order
     ]
     return DungeonMap(rooms=rooms, current="", inventory=(), opened=opened)
+
+
+def expected_field_map(field: Field, log: Sequence[SurveyLogEntry], upto: int) -> tuple[
+    dict[str, tuple[bool, tuple[str, ...]]], dict[int, str]
+]:  # fmt: skip
+    """Survey field (specs/005): the cells the first `upto` calls reveal, in first-seen order,
+    with deposit and exits from the field itself, and each scout's cell."""
+    from apl.survey.model import cell_name
+
+    positions: dict[int, Cell] = {0: field.start}
+    order: list[Cell] = [field.start]
+    for entry in log[:upto]:
+        here = positions.setdefault(entry.scout, field.start)
+        if entry.action.tool == "move" and entry.result.ok:
+            nxt = field.neighbor(here, entry.action.args[0])
+            assert nxt is not None
+            positions[entry.scout] = nxt
+            if nxt not in order:
+                order.append(nxt)
+    cells = {cell_name(c): (c in field.deposits, field.exits(c)) for c in order}
+    return cells, {n: cell_name(c) for n, c in positions.items()}

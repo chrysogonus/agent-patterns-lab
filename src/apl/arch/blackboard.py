@@ -2,8 +2,9 @@
 
 One scout acts at a time, round robin, so each sees the board after the previous scout's move and
 claim, with every scout's room. Deciding at the same moment from the same board, the scouts moved
-as one pack in a first live run (specs/004 contracts/orchestrators.md). Written by the agent at
-the experimenter's request.
+as one pack in a first live run (specs/004 contracts/orchestrators.md). On the survey field the
+scouts count the deposits together and any of them submits (specs/005 R14). Written by the agent
+at the experimenter's request.
 """
 
 from collections.abc import Sequence
@@ -12,6 +13,7 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.types import Send
 
 from apl.arch.scouts import (
+    MAX_CLAIMS,
     ScoutGraph,
     ScoutTurn,
     SharedMap,
@@ -27,7 +29,15 @@ from apl.kit import Kit
 TASK = (
     "Find the exit. Other scouts explore the same dungeon; the board shows what all of you have "
     "seen and which exit each of you has claimed. To claim an unexplored exit, add a line "
-    '"claim: <room> <direction>" to your reply.'
+    '"claim: <room> <direction>" to a reply that also makes your next tool call.'
+)
+
+# The survey field's task (specs/005 contracts/architectures.md).
+FIELD_TASK = (
+    "Count all deposits in the field. Other scouts survey the same field; the board shows what "
+    "all of you have seen and which cell each of you has claimed. To claim an unseen cell next to "
+    'a seen one, add a line "claim: <seen cell> <direction>" to a reply that also makes your next '
+    "tool call. When the board shows every cell, submit the total."
 )
 
 
@@ -38,7 +48,7 @@ def play(kit: Kit) -> None:
         board.add(scout.number)
         scouts.append(scout)
     for scout in scouts:
-        scout.task = TASK
+        scout.task = FIELD_TASK if kit.problem == "survey" else TASK
 
     def next_scout(state: ScoutGraph) -> Sequence[Send] | str:
         """The active scout with the fewest turns: one scout per turn, in number order."""
@@ -56,5 +66,7 @@ def play(kit: Kit) -> None:
     graph.add_conditional_edges("act", next_scout, ["scout", END])
     graph.compile().invoke(
         {"scouts": scouts, "replies": [], "board": board, "steps": 0},
-        config={"recursion_limit": kit.recursion_limit},
+        # A scout may take MAX_CLAIMS turns per step, so the step budget can need that many times
+        # the kit's super-steps; still a constant, never derived from the budget.
+        config={"recursion_limit": kit.recursion_limit * MAX_CLAIMS},
     )

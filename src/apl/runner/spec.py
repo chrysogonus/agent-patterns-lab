@@ -3,11 +3,12 @@
 from collections.abc import Collection, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 
-from apl.dungeon import DEV_SEEDS, LEVELS, TEST_SEEDS, generate
-from apl.runner.registry import ARCHITECTURES
+from apl import problems
+from apl.dungeon import DEV_SEEDS, TEST_SEEDS
+from apl.runner.registry import ARCHITECTURES, SUPPORTS, plays, refusal
 from apl.runner.settings import Settings
 
-SEED_SETS = {"dev": DEV_SEEDS, "test": TEST_SEEDS}
+SEED_SETS = {"dev": DEV_SEEDS, "test": TEST_SEEDS}  # the dungeon's; each problem has its own
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,6 +43,7 @@ class RunSpec:
     seed_set: str
     seeds: tuple[int, ...]
     repeats: int
+    problem: str = problems.DEFAULT
 
     @classmethod
     def build(
@@ -53,20 +55,27 @@ class RunSpec:
         only: Sequence[int] | None = None,
         repeats: int = 1,
         known: Collection[str] = ARCHITECTURES,
+        problem: str | None = None,
+        supports: Mapping[str, Collection[str]] = SUPPORTS,
     ) -> "RunSpec":
+        chosen = problems.get(problem)
         for name in architectures:
             if name not in known:
                 raise ValueError(
                     f"unknown architecture {name!r} (registered: {', '.join(sorted(known))})"
                 )
+        for name in architectures:
+            if not plays(name, chosen.name, supports):
+                raise ValueError(refusal(name, chosen.name, supports))
         if list(levels) == ["all"]:
-            levels = sorted(LEVELS)
+            levels = sorted(chosen.levels)
         for level in levels:
-            if level not in LEVELS:
-                raise ValueError(f"unknown level {level!r} (levels: L1, L2, L3, all)")
-        if seed_set not in SEED_SETS:
+            if level not in chosen.levels:
+                names = ", ".join(sorted(chosen.levels))
+                raise ValueError(f"unknown level {level!r} (levels: {names}, all)")
+        if seed_set not in chosen.seed_sets:
             raise ValueError(f"unknown seed set {seed_set!r}: use dev or test")
-        available = tuple(SEED_SETS[seed_set])
+        available = tuple(chosen.seed_sets[seed_set])
         if limit is not None and only is not None:
             raise ValueError("use --limit or --only, not both")
         seeds = available
@@ -87,6 +96,7 @@ class RunSpec:
             seed_set,
             seeds,
             repeats,
+            chosen.name,
         )
 
     def episodes(self) -> Iterator[EpisodeKey]:
@@ -98,11 +108,14 @@ class RunSpec:
                         yield EpisodeKey(arch, level, seed, repeat)
 
     def upper_bounds(self, settings: Settings) -> Bounds:
-        return upper_bounds(list(self.episodes()), settings)
+        return upper_bounds(list(self.episodes()), settings, self.problem)
 
 
-def upper_bounds(keys: Sequence[EpisodeKey], settings: Settings) -> Bounds:
+def upper_bounds(
+    keys: Sequence[EpisodeKey], settings: Settings, problem: str = problems.DEFAULT
+) -> Bounds:
     """Tokens and cost are hard bounds (the token cap); calls assume one per step plus an answer."""
+    generate = problems.get(problem).generate
     budgets = {(k.level, k.seed): generate(k.level, k.seed).budget for k in keys}
     tokens = len(keys) * settings.token_cap
     cost = None
@@ -143,16 +156,17 @@ def format_plan(
     written: Mapping[str, bool],
     code: Mapping[str, object] | None = None,
 ) -> str:
-    record = settings.record()
+    record = settings.record(spec.problem)
     bounds = spec.upper_bounds(settings)
     meaning = (
         "for reporting" if spec.seed_set == "test" else "development only, must not be reported"
     )
-    total = len(SEED_SETS[spec.seed_set])
+    total = len(problems.get(spec.problem).seed_sets[spec.seed_set])
     seeds = f"{spec.seed_set}: {', '.join(map(str, spec.seeds))} ({len(spec.seeds)} of {total})"
     archs = [a if written.get(a, True) else f"{a} (not written yet)" for a in spec.architectures]
     rows = [
         ("architectures", ", ".join(archs)),
+        *([("problem", spec.problem)] if spec.problem != problems.DEFAULT else []),
         ("levels", ", ".join(spec.levels)),
         ("seeds", f"{seeds}  -> {meaning}"),
         ("repeats", str(spec.repeats)),

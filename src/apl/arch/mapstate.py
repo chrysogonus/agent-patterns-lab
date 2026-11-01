@@ -12,6 +12,7 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, System
 from langgraph.graph import END, START, StateGraph
 
 from apl.arch.dungeon_map import DungeonMap
+from apl.arch.field_map import FieldMap
 from apl.kit import Kit
 
 # Explains the map only; strategy advice would mix a prompt effect into the memory effect (R15).
@@ -23,6 +24,14 @@ opened. "unexplored" means you have not gone through that exit yet; "locked (col
 was locked when you last saw it. Your previous reply and its tool results come just before the \
 map."""
 
+# The same for the survey field (specs/005 R10): it explains the map, not where to go.
+FIELD_MAP_INSTRUCTIONS = """\
+You do not see the earlier conversation. Instead, every turn ends with your map. It is built \
+from your own tool results so far: a picture of the field with every cell you have seen and \
+whether it holds a deposit, the number of cells and deposits seen, the walls you have seen, and \
+the unseen cells next to seen ones. Your previous reply and its tool results come just before the \
+map."""
+
 # For the routes variant (mapstate_routes); it explains the list, it does not say which to take.
 ROUTE_INSTRUCTIONS = """\
 Under the map, each unexplored exit is listed with the moves that reach it from your room through \
@@ -32,7 +41,7 @@ doors you have already walked, nearest first."""
 class MapState(TypedDict):
     # No reducers: each write replaces the value, so the history never builds up (R11).
     messages: list[BaseMessage]  # the latest turn only
-    map: DungeonMap
+    map: DungeonMap | FieldMap
 
 
 def play(kit: Kit) -> None:
@@ -41,13 +50,20 @@ def play(kit: Kit) -> None:
 
 def run(kit: Kit, *, routes: bool) -> None:
     model = kit.model.bind_tools(kit.tools)
-    instructions = MAP_INSTRUCTIONS + (" " + ROUTE_INSTRUCTIONS if routes else "")
+    survey = kit.problem == "survey"  # the field map; written by the agent (specs/005 R10)
+    if survey:
+        instructions = FIELD_MAP_INSTRUCTIONS
+    else:
+        instructions = MAP_INSTRUCTIONS + (" " + ROUTE_INSTRUCTIONS if routes else "")
     system = SystemMessage(kit.base_prompt + "\n\n" + instructions)
     start = HumanMessage(kit.start)
 
+    def render(found: DungeonMap | FieldMap) -> str:
+        return found.render(routes) if isinstance(found, DungeonMap) else found.render()
+
     def agent(state: MapState) -> dict[str, list[BaseMessage]]:
         turn = state["messages"] or [start]
-        reply = model.invoke([system, *turn, HumanMessage(state["map"].render(routes))])
+        reply = model.invoke([system, *turn, HumanMessage(render(state["map"]))])
         return {"messages": [reply]}
 
     def act(state: MapState) -> MapState:
@@ -74,6 +90,9 @@ def run(kit: Kit, *, routes: bool) -> None:
     graph.add_conditional_edges("agent", route)
     graph.add_edge("act", "agent")
     graph.compile().invoke(
-        {"messages": [], "map": DungeonMap.from_start(kit.start)},
+        {
+            "messages": [],
+            "map": FieldMap.from_start(kit.start) if survey else DungeonMap.from_start(kit.start),
+        },
         config={"recursion_limit": kit.recursion_limit},
     )

@@ -12,8 +12,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from apl import problems
 from apl.dungeon import DEV_SEEDS, LEVELS, TEST_SEEDS, generate
-from apl.dungeon.env import Episode, LogEntry
 from apl.dungeon.frames import build_frames, snapshot
 from apl.dungeon.model import Dungeon
 from apl.dungeon.render_html import CELL, MARGIN, svg
@@ -25,13 +25,20 @@ from apl.runner.run import code_version, default_model_factory, package_versions
 from apl.runner.settings import Settings
 from apl.runner.spec import EpisodeKey
 from apl.runner.vllm import with_server_context
+from apl.survey import Field
+from apl.survey import generate as generate_field
+from apl.survey.frames import reference_frames
+from apl.survey.frames import snapshot as survey_snapshot
+from apl.survey.render_svg import CELL as FIELD_CELL
+from apl.survey.render_svg import MARGIN as FIELD_MARGIN
+from apl.survey.render_svg import svg as field_svg
 from apl.viewer.events import EpisodeSession, ViewerCallbacks
 
 Response = tuple[int, str, bytes]
 LOCAL_PROVIDERS = ("ollama:", "vllm:")  # no cost, so no --execute needed (research R8)
 MODELS = ("vllm:qwen3.5-9b", "openai:gpt-6-luna")  # the page's model switch, besides APL_MODEL
 # Checked before any file access, so an id can never point outside results/viewer/.
-EPISODE_ID = re.compile(r"\d{8}-\d{6}-[a-z0-9_]+-L[1-3]-\d+(-\d+)?")
+EPISODE_ID = re.compile(r"\d{8}-\d{6}-[a-z0-9_]+-[LS][1-3]-\d+(-\d+)?")
 
 
 def json_response(status: int, data: object) -> Response:
@@ -71,6 +78,9 @@ class Viewer:
             return sorted(self.architectures)
         return sorted(name for name in registry.ARCHITECTURES if registry.is_written(name))
 
+    def plays(self, name: str, problem: str) -> bool:
+        return registry.plays(name, problem)
+
     def options(self) -> Response:
         reason = self.cannot_run_reason(self.settings.model)
         return json_response(
@@ -88,6 +98,17 @@ class Viewer:
                     {"name": name, "cannot_run_reason": self.cannot_run_reason(name)}
                     for name in self.choices()
                 ],
+                "problems": {
+                    name: {
+                        "levels": sorted(p.levels),
+                        "dev_seeds": list(p.dev_seeds),
+                        "test_seeds": [p.test_seeds[0], p.test_seeds[-1]],
+                        "architectures": [
+                            a for a in self.architecture_names() if self.plays(a, name)
+                        ],
+                    }
+                    for name, p in problems.PROBLEMS.items()
+                },
             },
         )
 
@@ -112,6 +133,27 @@ class Viewer:
         }
         return json_response(200, data)
 
+    def survey(self, level: str, seed: str) -> Response:
+        found = parse_field(level, seed)
+        if not isinstance(found, Field):
+            return found
+        data: dict[str, Any] = {
+            "problem": "survey",
+            "level": level,
+            "seed": found.seed,
+            "size": found.size,
+            "budget": found.budget,
+            "optimal_steps": found.reference_steps,
+            "reference_is_optimal": found.reference_is_optimal,
+            "true_total": found.true_total,
+            "start": list(found.start),
+            "cell": FIELD_CELL,
+            "margin": FIELD_MARGIN,
+            "svg": field_svg(found, animated=True),
+            "solution": reference_frames(found),
+        }
+        return json_response(200, data)
+
     # ---------- episodes ----------
 
     def _play(self, arch: str) -> Play:
@@ -122,16 +164,22 @@ class Viewer:
             return error(400, "the request body must be a JSON object")
         arch, level, seed = body.get("arch"), body.get("level"), body.get("seed")
         model = body.get("model", self.settings.model)
+        problem = body.get("problem", problems.DEFAULT)
+        if not isinstance(problem, str) or problem not in problems.PROBLEMS:
+            names = ", ".join(problems.PROBLEMS)
+            return error(400, f"unknown problem {problem!r} (problems: {names})")
         if not isinstance(arch, str) or arch not in self.architecture_names():
             return error(400, f"unknown or unwritten architecture {arch!r}")
+        if not self.plays(arch, problem):
+            return error(400, registry.refusal(arch, problem))
         chosen = self.choices().get(model) if isinstance(model, str) else None
         if chosen is None:
             return error(400, f"unknown model {model!r} (models: {', '.join(self.choices())})")
         if not isinstance(seed, int) or isinstance(seed, bool):
             return error(400, f"seed must be a whole number ≥ 0, got {seed!r}")
-        found = parse_dungeon(str(level), str(seed))
-        if not isinstance(found, Dungeon):
-            return found
+        world = (parse_field if problem == "survey" else parse_dungeon)(str(level), str(seed))
+        if isinstance(world, tuple):
+            return world
         if (reason := self.cannot_run_reason(chosen.model)) is not None:
             return error(403, reason)
         try:
@@ -151,7 +199,7 @@ class Viewer:
             self.running = session
         key = EpisodeKey(arch, str(level), seed, 1)
         session.thread = threading.Thread(
-            target=self._work, args=(session, key, settings), daemon=True
+            target=self._work, args=(session, key, settings, problem), daemon=True
         )
         session.thread.start()
         return json_response(201, {"id": session.id})
@@ -167,13 +215,25 @@ class Viewer:
                 continue
         raise RuntimeError(f"no free folder name for {base}")
 
-    def _work(self, session: EpisodeSession, key: EpisodeKey, settings: Settings) -> None:
+    def _work(
+        self,
+        session: EpisodeSession,
+        key: EpisodeKey,
+        settings: Settings,
+        problem: str = problems.DEFAULT,
+    ) -> None:
         started = datetime.now().astimezone().isoformat(timespec="seconds")
-        record = settings.record()
+        record = settings.record(problem)
+        survey = problem == "survey"
 
-        def on_episode(episode: Episode) -> None:
+        def frame_of(episode: Any, index: int, action: Any, result: Any) -> dict[str, Any]:
+            if survey:
+                return survey_snapshot(episode, index, action, result)
+            return snapshot(episode, index, action, result).to_dict()
+
+        def on_episode(episode: Any) -> None:
             session.episode = episode
-            dungeon = episode.dungeon
+            world = episode.field if survey else episode.dungeon
             session.emit(
                 "start",
                 {
@@ -182,15 +242,17 @@ class Viewer:
                     "seed": key.seed,
                     "model": settings.model,
                     "settings": record,
-                    "budget": dungeon.budget,
-                    "optimal_steps": dungeon.solution.length,
-                    "frame": snapshot(episode, 0, None, None).to_dict(),
+                    "budget": world.budget,
+                    "optimal_steps": problems.get(problem).reference_steps(world),
+                    "frame": frame_of(episode, 0, None, None),
                     "started": started,
+                    # Survey episodes say so; dungeon events stay as they were (specs/005).
+                    **({"problem": problem, "true_total": world.true_total} if survey else {}),
                 },
             )
 
-            def on_step(entry: LogEntry) -> None:
-                frame = snapshot(episode, entry.index + 1, entry.action, entry.result)
+            def on_step(entry: Any) -> None:
+                frame = frame_of(episode, entry.index + 1, entry.action, entry.result)
                 session.emit(
                     "step",
                     {
@@ -201,7 +263,7 @@ class Viewer:
                         "call": session.latest_call.get(f"scout {entry.scout}", session.call),
                         "action": entry.action.to_dict(),
                         "result": entry.result.to_dict(),
-                        "frame": frame.to_dict(),
+                        "frame": frame,
                     },
                 )
 
@@ -210,7 +272,7 @@ class Viewer:
                 episode.stop()
 
         row: dict[str, Any] | None = None
-        problem: str | None = None
+        trouble: str | None = None
         try:
             result = play_episode(
                 key,
@@ -221,6 +283,7 @@ class Viewer:
                 self.model_factory or default_model_factory,
                 callbacks=[ViewerCallbacks(session)],
                 on_episode=on_episode,
+                problem=problem,
             )
             row = result.row.to_dict()
             if result.outcome is not None:
@@ -228,15 +291,16 @@ class Viewer:
             if result.row.llm_calls:
                 write_json(session.folder / "conversation.json", result.transcript.to_dict())
         except PermanentProviderError as failure:
-            problem = f"the provider rejected the request: {failure}"
+            trouble = f"the provider rejected the request: {failure}"
         except Exception as failure:  # a viewer or runner bug must still end the session
-            problem = f"{type(failure).__name__}: {failure}"
+            trouble = f"{type(failure).__name__}: {failure}"
         write_json(
             session.folder / "episode.json",
             {
                 "row": row,
-                "error": problem,
+                "error": trouble,
                 "arch": key.arch,
+                **({"problem": problem} if survey else {}),
                 "level": key.level,
                 "seed": key.seed,
                 "settings": record,
@@ -246,7 +310,7 @@ class Viewer:
                 "ended": datetime.now().astimezone().isoformat(timespec="seconds"),
             },
         )
-        session.emit("end", {"row": row, "error": problem, "saved": str(session.folder)})
+        session.emit("end", {"row": row, "error": trouble, "saved": str(session.folder)})
 
     def stop_episode(self, episode_id: str) -> Response:
         session = self.running
@@ -279,6 +343,7 @@ class Viewer:
             entries.append(
                 {
                     "id": running.id,
+                    "problem": start.get("problem", problems.DEFAULT),
                     "arch": start.get("arch"),
                     "level": start.get("level"),
                     "seed": start.get("seed"),
@@ -302,6 +367,7 @@ class Viewer:
             entries.append(
                 {
                     "id": path.parent.name,
+                    "problem": saved.get("problem", problems.DEFAULT),
                     "arch": saved.get("arch"),
                     "level": saved.get("level"),
                     "seed": saved.get("seed"),
@@ -325,6 +391,22 @@ class Viewer:
         self.stop_episode(session.id)
         if session.thread is not None:
             session.thread.join(timeout)
+
+
+def parse_field(level: str, seed: str) -> Field | Response:
+    """The survey field for a request, or the error response; test seeds are refused."""
+    chosen = problems.get("survey")
+    if level not in chosen.levels:
+        return error(400, f"unknown level {level!r} (levels: {', '.join(sorted(chosen.levels))})")
+    try:
+        number = int(seed)
+    except ValueError:
+        return error(400, f"seed must be a whole number ≥ 0, got {seed!r}")
+    if number in chosen.test_seeds:
+        return error(
+            403, f"seed {number} is a test seed; test seeds are reserved for reported results"
+        )
+    return generate_field(level, number)
 
 
 def parse_dungeon(level: str, seed: str) -> Dungeon | Response:

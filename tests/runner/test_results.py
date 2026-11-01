@@ -83,7 +83,7 @@ def test_row_key_order_matches_the_contract() -> None:
         "end_reason", "steps", "optimal_steps", "budget", "efficiency", "invalid_actions",
         "budget_hit", "token_cap_hit", "output_limit_hits", "llm_calls", "tool_calls",
         "input_tokens", "output_tokens", "latency_s", "arch_error", "error", "scouts",
-        "orchestrator_calls",
+        "orchestrator_calls", "problem", *SURVEY_FIELDS,  # specs/005: added at the end
     ]  # fmt: skip
 
 
@@ -144,3 +144,41 @@ def test_rows_from_before_m4_parse() -> None:
     del data["scouts"], data["orchestrator_calls"]
     row = EpisodeRow.parse(data)
     assert row.scouts is None and row.orchestrator_calls is None
+
+
+SURVEY_FIELDS = (
+    "submitted_total", "true_total", "cells_seen", "cells", "parallel_turns",
+    "reference_is_optimal",
+)  # fmt: skip
+
+
+def test_rows_and_records_without_a_problem_are_dungeon_ones() -> None:
+    row = _completed(3, success=False).to_dict()
+    assert row["problem"] == "dungeon" and all(row[f] is None for f in SURVEY_FIELDS)
+    for name in ("problem", *SURVEY_FIELDS):
+        del row[name]
+    parsed = EpisodeRow.parse(row)
+    assert parsed.problem == "dungeon" and parsed.parallel_turns is None
+    record = RunRecord(
+        "r", "s", None, False, ("react",), ("L1",), "dev", (1000,), 1, {}, {}, {}
+    ).to_dict()
+    assert record["problem"] == "dungeon"
+    del record["problem"]
+    assert RunRecord.parse(record).problem == "dungeon"
+
+
+def test_survey_fields_round_trip_and_are_type_checked() -> None:
+    row = _completed(3, success=False).to_dict() | {
+        "submitted_total": 12, "true_total": 15, "cells_seen": 80, "cells": 100,
+        "parallel_turns": 40, "reference_is_optimal": True,
+    }  # fmt: skip
+    parsed = EpisodeRow.parse(json.loads(json.dumps(row)))
+    assert (parsed.submitted_total, parsed.true_total, parsed.reference_is_optimal) == (
+        12, 15, True,
+    )  # fmt: skip
+    with pytest.raises(ValueError, match="field 'parallel_turns' must be int"):
+        EpisodeRow.parse(row | {"parallel_turns": "40"})
+    with pytest.raises(ValueError, match="field 'reference_is_optimal' must be bool"):
+        EpisodeRow.parse(row | {"reference_is_optimal": 1})
+    with pytest.raises(ValueError, match="field 'problem' must be one of"):
+        EpisodeRow.parse(row | {"problem": "chess"})

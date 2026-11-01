@@ -81,6 +81,9 @@ START → create 4 scouts → one scout's turn (round robin) → act → next sc
   and inventory, and a line `Claims: scout 1 → k7 north; ...`.
 - A reply may contain a line `claim: <room> <direction>`; it replaces that scout's claim. Claims have
   no other effect.
+- Amended by specs/005: the task asks for the claim in a reply that also makes a tool call. A reply
+  with a claim and no tool call does not end the scout, which keeps its turns; the third such reply
+  in a row does. Text after the direction is ignored, since some models run two text parts together.
 
 ## Answers the orchestrator gets wrong
 

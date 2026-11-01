@@ -200,3 +200,54 @@ def test_bad_folders(tmp_path: Path) -> None:
         file.write('{"steps": 1}\n')
     with pytest.raises(ValueError, match=r"episodes.jsonl:3: field"):
         load_run(path)
+
+
+def _survey(arch: str, seed: int, repeat: int, submitted: int | None, **kw: Any) -> dict[str, Any]:
+    right = submitted == 15
+    return _row(
+        seed, repeat, kw.pop("steps", 100), arch=arch, level="S2", problem="survey",
+        success=right, end_reason="submitted" if submitted is not None else "budget",
+        optimal_steps=100, budget=300, submitted_total=submitted, true_total=15,
+        cells_seen=kw.pop("seen", 100), cells=100, parallel_turns=kw.pop("turns", 100),
+        reference_is_optimal=True, input_tokens=900, output_tokens=100, **kw,
+    )  # fmt: skip
+
+
+def test_the_survey_report(tmp_path: Path) -> None:
+    rows = [
+        _survey("react", 1000, 1, 15), _survey("react", 1000, 2, 12, seen=80),
+        _survey("react", 1000, 3, 10, seen=70, steps=140, turns=140),
+        _survey("fanout", 1000, 1, 15, steps=110, turns=30),
+        _survey("fanout", 1000, 2, 15, steps=120, turns=32),
+        _survey("fanout", 1000, 3, 14, steps=100, turns=28),
+    ]  # fmt: skip
+    path = _write(
+        tmp_path / "run-s", rows, problem="survey", architectures=["react", "fanout"],
+        levels=["S2"], seeds=[1000],
+    )  # fmt: skip
+    text = render([load_run(path)])
+    assert text.startswith("# Report: fanout, react on the survey field\n")
+    assert (
+        "| Arch | Level | Episodes | Right | Off by (median) | Seen (median) | Steps (median) "
+        "| Turns (median) | Tokens (median) | Latency (median) |"
+    ) in text
+    # react: right 1 of 3; off by 3 and 5 -> median 4; seen 100%, 80%, 70% -> 80%.
+    assert "| react | S2 | 3 | 33% | 4 | 80% | 100 | 100 | 1,000 | 1.0s |" in text
+    assert "| fanout | S2 | 3 | 67% | 1 | 100% | 110 | 30 | 1,000 | 1.0s |" in text
+    assert "| react | S2 | 0%–100% | 100–140 | 100–140 |" in text
+    # The comparison adds parallel turns; fanout's reference is mapstate, absent here.
+    assert "| Δ right | Δ efficiency | Δ turns | Reference |" in text
+    assert (
+        "| fanout | 67% | 0.87 | 110 | 30 | 1,000 | — / — | 1.0s | — | — | — | — | mapstate |"
+        in text
+    )
+
+
+def test_dungeon_and_survey_runs_are_not_combined(tmp_path: Path) -> None:
+    dungeon = _write(tmp_path / "run-d", [_row(1000, 1, 8)])
+    survey = _write(tmp_path / "run-s", [_survey("react", 1000, 1, 15)], problem="survey")
+    with pytest.raises(
+        ValueError,
+        match=r"^these runs are on different problems \(dungeon, survey\); report them separately$",
+    ):
+        check_compatible([load_run(dungeon), load_run(survey)])

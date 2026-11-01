@@ -60,6 +60,12 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
 .c-blue { stroke: var(--blue); fill: var(--blue); }
 .c-green { stroke: var(--green); fill: var(--green); }
 .c-yellow { stroke: var(--yellow); fill: var(--yellow); }
+/* the survey field (specs/005): cells, deposits, edge and start */
+.cell { fill: var(--floor); stroke: var(--line); }
+.deposit { fill: var(--yellow); }
+.edge { fill: none; stroke: var(--wall); stroke-width: 4; }
+.start { fill: none; stroke: var(--trail); stroke-width: 2; }
+.right { color: var(--green); } .wrong { color: var(--red); }
 #slider { flex: 1 1 160px; }
 #stats { display: grid; grid-template-columns: max-content 1fr; gap: 2px 12px; margin-top: 8px; }
 #stats dt { color: var(--muted); }
@@ -84,6 +90,7 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
 <header>
   <h1>Agent Viewer</h1>
   <div class="row">
+    <label for="problem">Problem</label> <select id="problem"></select>
     <label for="level">Level</label> <select id="level"></select>
     <label for="seed">Seed</label> <input id="seed" inputmode="numeric" value="1000">
     <button id="random" type="button">Random</button>
@@ -104,7 +111,7 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
     <div id="map"></div>
     <div class="row">
       <label><input id="fog" type="checkbox"> Agent's view</label>
-      <label><input id="solution" type="checkbox"> Shortest solution</label>
+      <label><input id="solution" type="checkbox"> <span id="solution-label">Shortest solution</span></label>
     </div>
     <div class="row">
       <button id="play" type="button">Play</button>
@@ -145,12 +152,18 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
     return { ok: response.ok, status: response.status, data };
   }
   const isTestSeed = (n) => S.options && n >= S.options.test_seeds[0] && n <= S.options.test_seeds[1];
+  const problemOf = () => $("problem").value || "dungeon";
+  const isSurvey = () => !!S.dungeon && S.dungeon.problem === "survey";
 
-  /* ---------- the dungeon ---------- */
-  async function loadDungeon(level, seed) {
-    const { ok, data } = await api(`/api/dungeon?level=${encodeURIComponent(level)}&seed=${encodeURIComponent(seed)}`);
+  /* ---------- the world: a dungeon or a survey field (specs/005) ---------- */
+  async function loadDungeon(level, seed, problem = problemOf()) {
+    const path = problem === "survey" ? "/api/survey" : "/api/dungeon";
+    const { ok, data } = await api(`${path}?level=${encodeURIComponent(level)}&seed=${encodeURIComponent(seed)}`);
     if (!ok) { message(data.error); return false; }
+    data.problem = data.problem || "dungeon";
     S.dungeon = data;
+    if ($("problem").value !== data.problem) { $("problem").value = data.problem; fillProblem(); }
+    $("solution-label").textContent = data.problem === "survey" ? "Reference walk" : "Shortest solution";
     $("map").innerHTML = data.svg;
     const line = document.createElementNS(SVGNS, "polyline");
     line.id = "solution-line";
@@ -244,8 +257,15 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
     if (!d) return;
     const f = S.frames[S.current];
     const steps = Math.max(0, ...S.frames.slice(0, S.current + 1).map((g) => g.counted || 0));
-    rows.push(["Dungeon", `${d.level} seed ${d.seed}`]);
-    rows.push(["Steps", S.episode ? `${steps} / ${d.budget} (optimal ${d.optimal_steps})` : `budget ${d.budget}, optimal ${d.optimal_steps}`]);
+    const best = isSurvey() ? "reference" : "optimal";
+    rows.push([isSurvey() ? "Field" : "Dungeon", `${d.level} seed ${d.seed}`]);
+    rows.push(["Steps", S.episode ? `${steps} / ${d.budget} (${best} ${d.optimal_steps})` : `budget ${d.budget}, ${best} ${d.optimal_steps}`]);
+    if (isSurvey()) {
+      rows.push(["True total", String(d.true_total)]);
+      if (f && f.deposits_seen !== undefined) rows.push(["Seen so far", String(f.deposits_seen)]);
+      const submitted = f && f.submitted !== null && f.submitted !== undefined ? f.submitted : null;
+      if (submitted !== null) rows.push(["Submitted", `${submitted} — ${submitted === d.true_total ? "right" : "wrong"}`]);
+    }
     if (S.episode) {
       const turns = [...S.turns.values()];
       const tokens = turns.reduce((sum, t) => sum + (t.usage ? t.usage.input_tokens + t.usage.output_tokens : 0), 0);
@@ -256,7 +276,8 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
       rows.push(["Time", `${seconds.toFixed(1)} s`]);
       if (f && f.action) rows.push(["Step", `${f.action.tool} ${f.action.args.join(" ")} → ${f.ok ? "ok" : f.error}`]);
       const keys = (inventory) => inventory.length ? inventory.map((c) => `${c} key`).join(", ") : "empty";
-      if (f && f.scouts) rows.push(["Inventories", f.scouts.map((s, i) => `scout ${i}: ${keys(s.inventory)}`).join(" · ")]);
+      if (isSurvey()) { /* no inventories on the field */ }
+      else if (f && f.scouts) rows.push(["Inventories", f.scouts.map((s, i) => `scout ${i}: ${keys(s.inventory)}`).join(" · ")]);
       else if (f) rows.push(["Inventory", keys(f.inventory)]);
       if (S.end) {
         const r = S.end.row;
@@ -269,7 +290,11 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
     }
     const dl = $("stats");
     dl.replaceChildren();
-    for (const [k, v] of rows) { dl.append(el("dt", k), el("dd", v)); }
+    for (const [k, v] of rows) {
+      const dd = el("dd", v);
+      if (k === "Submitted") dd.className = v.endsWith("right") ? "right" : "wrong";
+      dl.append(el("dt", k), dd);
+    }
   }
 
   /* ---------- the model turns ---------- */
@@ -372,8 +397,10 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
     const r = data.row;
     const node = el("div", null, "card end");
     node.append(el("h3", "Episode over"));
+    const total = r && r.problem === "survey" ? ` — submitted ${r.submitted_total ?? "nothing"}, true ${r.true_total}${r.success ? ", right" : ""}` : "";
+    const best = r && r.problem === "survey" ? "reference" : "optimal";
     node.append(el("div", !r ? `Error: ${data.error}` : r.status === "error" ? `Infrastructure error: ${r.error}` :
-      `${r.end_reason}${r.success ? ` in ${r.steps} steps (optimal ${r.optimal_steps})` : ""}${r.arch_error ? ` — ${r.arch_error}` : ""}`));
+      `${r.end_reason}${r.success ? ` in ${r.steps} steps (${best} ${r.optimal_steps})` : ""}${total}${r.arch_error ? ` — ${r.arch_error}` : ""}`));
     $("panel").append(node);
     if (S.source) { S.source.close(); S.source = null; }
     $("stop").disabled = true;
@@ -397,8 +424,9 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
       S.start = data;
       S.startedAt = Date.parse(data.started) || Date.now();
       S.frames = [data.frame]; // before the await: steps may arrive while the dungeon loads
-      if (!S.dungeon || S.dungeon.level !== data.level || S.dungeon.seed !== data.seed) {
-        await loadDungeon(data.level, data.seed);
+      const problem = data.problem || "dungeon";
+      if (!S.dungeon || S.dungeon.problem !== problem || S.dungeon.level !== data.level || S.dungeon.seed !== data.seed) {
+        await loadDungeon(data.level, data.seed, problem);
       }
       render(live ? S.frames.length - 1 : 0);
     });
@@ -418,7 +446,7 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
     select.replaceChildren(el("option", "—"));
     select.firstChild.value = "";
     for (const e of data) {
-      const label = `${e.running ? "▶ running: " : ""}${e.arch} ${e.level} ${e.seed} · ${e.model || "?"} · ${e.end_reason || ""} · ${e.id.slice(0, 15)}`;
+      const label = `${e.running ? "▶ running: " : ""}${e.problem === "survey" ? "survey " : ""}${e.arch} ${e.level} ${e.seed} · ${e.model || "?"} · ${e.end_reason || ""} · ${e.id.slice(0, 15)}`;
       const option = el("option", label);
       option.value = e.id;
       select.append(option);
@@ -453,7 +481,7 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
   $("solution").addEventListener("change", toggles);
   $("run").addEventListener("click", async () => {
     if (!S.dungeon) return;
-    const body = JSON.stringify({ arch: $("arch").value, model: $("model").value, level: S.dungeon.level, seed: S.dungeon.seed });
+    const body = JSON.stringify({ problem: S.dungeon.problem, arch: $("arch").value, model: $("model").value, level: S.dungeon.level, seed: S.dungeon.seed });
     const { ok, data } = await api("/api/episodes", { method: "POST", headers: { "Content-Type": "application/json" }, body });
     if (!ok) { message(data.error); return; }
     message("", true);
@@ -489,24 +517,39 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
   $("speed").addEventListener("change", () => { if (player) { pause(); $("play").click(); } });
   setInterval(() => { if (S.episode && !S.end) stats(); }, 500);
 
+  // Levels, dev seeds and agents follow the chosen problem (specs/005 contracts/viewer.md).
+  function fillProblem() {
+    const data = S.options, p = (data.problems || {})[problemOf()] ||
+      { levels: data.levels, dev_seeds: data.dev_seeds, architectures: data.architectures };
+    const keep = { level: $("level").value, arch: $("arch").value };
+    $("level").replaceChildren(...p.levels.map((v) => { const o = el("option", v); o.value = v; return o; }));
+    $("arch").replaceChildren(...p.architectures.map((v) => { const o = el("option", v); o.value = v; return o; }));
+    if (p.levels.includes(keep.level)) $("level").value = keep.level;
+    if (p.architectures.includes(keep.arch)) $("arch").value = keep.arch;
+    $("dev-seeds").replaceChildren(...p.dev_seeds.map((seed) => {
+      const b = el("button", seed);
+      b.type = "button";
+      b.title = `dev seed ${seed}`;
+      b.addEventListener("click", () => { $("seed").value = String(seed); generate(); });
+      return b;
+    }));
+    $("run").disabled = !p.architectures.length;
+  }
+
   /* ---------- start ---------- */
   (async () => {
     const { ok, data } = await api("/api/options");
     if (!ok) { message(data.error); return; }
     S.options = data;
-    for (const level of data.levels) { const o = el("option", level); o.value = level; $("level").append(o); }
-    for (const name of data.architectures) { const o = el("option", name); o.value = name; $("arch").append(o); }
-    for (const seed of data.dev_seeds) {
-      const b = el("button", seed);
-      b.type = "button";
-      b.title = `dev seed ${seed}`;
-      b.addEventListener("click", () => { $("seed").value = String(seed); generate(); });
-      $("dev-seeds").append(b);
+    for (const name of Object.keys(data.problems || { dungeon: null })) {
+      const o = el("option", name); o.value = name; $("problem").append(o);
     }
+    fillProblem();
+    $("problem").addEventListener("change", () => { fillProblem(); generate(); });
     for (const m of data.models) { const o = el("option", m.name); o.value = m.name; $("model").append(o); }
     const canRun = () => {
       const reason = data.models.find((m) => m.name === $("model").value).cannot_run_reason;
-      $("run").disabled = !!reason || !data.architectures.length;
+      $("run").disabled = !!reason || !$("arch").options.length;
       $("run").title = reason || "";
       message(reason, true);
     };

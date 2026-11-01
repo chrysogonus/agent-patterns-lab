@@ -30,9 +30,9 @@ class Settings:
     max_output_tokens: int = 8192
     base_url: str = "http://localhost:8001/v1"  # the vLLM server
 
-    def record(self) -> dict[str, object]:
+    def record(self, problem: str = "dungeon") -> dict[str, object]:
         """The run conditions, as stored in run.json and compared by the report."""
-        from apl.kit import prompt_fingerprint
+        from apl import problems
 
         return {
             "model": self.model,
@@ -44,7 +44,7 @@ class Settings:
             "num_ctx": self.num_ctx if self.model.startswith(("ollama:", "vllm:")) else None,
             "max_output_tokens": self.max_output_tokens,
             "base_url": self.base_url if self.model.startswith("vllm:") else None,
-            "prompt_fingerprint": prompt_fingerprint(),
+            "prompt_fingerprint": problems.get(problem).prompt_fingerprint(),
         }
 
 

@@ -29,7 +29,7 @@ from tests.runner.scripted import (
 )
 
 
-def _board(episode: Episode, scouts: int) -> SharedMap:
+def _board(episode: Episode, scouts: int) -> SharedMap[Any]:
     board = SharedMap.from_start(json.dumps(AgentTools(episode).start.to_dict()), 0)
     for _ in range(scouts - 1):
         number = episode.add_scout()
@@ -108,10 +108,10 @@ def _rounds_walk(level: str, seed: int) -> Strategy:
 def test_the_board_matches_all_tool_results_after_every_call(
     arch: str, level: str, seed: int, monkeypatch: pytest.MonkeyPatch
 ) -> None:  # SC-003, US2/AC2
-    snapshots: list[tuple[int, SharedMap]] = []
+    snapshots: list[tuple[int, SharedMap[Any]]] = []
     apply = SharedMap.apply
 
-    def spy(self: SharedMap, scout: int, name: str, args: Any, result: Any) -> None:
+    def spy(self: SharedMap[Any], scout: int, name: str, args: Any, result: Any) -> None:
         apply(self, scout, name, args, result)
         snapshots.append((id(self), copy.deepcopy(self)))
 

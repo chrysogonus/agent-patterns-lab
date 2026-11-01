@@ -1,18 +1,34 @@
+<!--
+Sync Impact Report (remove before committing)
+- Version: 1.1.0 → 2.0.0 (MAJOR: principle II redefined)
+- Modified principles:
+  - I. Identical Conditions: applies within a problem
+  - II. Tool-Only World Access: each problem's own tools instead of the dungeon's four
+- Modified sections: Experiment Setup (per problem: dungeon, survey field); Governance (no
+  comparison across problems)
+- Added sections: none
+- Removed sections: none
+- Templates: none need changes (they read the constitution at runtime)
+- Deferred: none
+-->
 # agent-patterns-lab Constitution
 
 ## Core Principles
 
 ### I. Identical Conditions
-Every architecture MUST run with the same model, temperature, base prompt, tool descriptions
-and step budget. These values come from one shared configuration (`APL_MODEL` and the run
-settings). An architecture MUST NOT override them.
+Within a problem, every architecture MUST run with the same model, temperature, base prompt, tool
+descriptions and step budget. The base prompt and tool descriptions are the problem's; the model
+settings come from one shared configuration (`APL_MODEL` and the run settings). An architecture
+MUST NOT override them.
 Rationale: any difference in results must come from the architecture alone.
 
 ### II. Tool-Only World Access
-Architectures MUST perceive and act on the dungeon only through `look`, `move`, `take` and
-`use`. They MUST NOT import, call or read environment internals, the generator or the solver.
-That includes the shortest solution and the full map. Plain-code nodes (for example A6) are
-bound by the same rule: they can work only with what earlier tool results revealed.
+Architectures MUST perceive and act on a problem only through that problem's tools: the dungeon's
+`look`, `move`, `take` and `use`; the survey field's `look`, `move` and `submit`. They MUST NOT
+import, call or read environment internals, generators, solvers or reference walks. That includes
+the shortest solution, the full map, the reference walk and the true deposit count. Plain-code
+nodes (for example A6) are bound by the same rule: they can work only with what earlier tool
+results revealed.
 Rationale: an architecture that peeks is not solving the task being measured.
 
 ### III. Only the Graph Varies
@@ -42,11 +58,16 @@ Rationale: runs cost money, and dry runs must be safe by default.
 
 ## Experiment Setup
 
-- Dungeons are generated from a seed and are solvable by construction. A BFS solver over
-  (room, keys held, doors opened) verifies each one and records `optimal_steps`.
-- The step budget is 6× `optimal_steps` (3× until v1.1.0: too tight for a small local model). A per-run token cap stops an episode that loops.
-- Levels L1–L3 are defined in plan.md §2. Changing a level definition or the seed split
-  invalidates earlier results for comparison.
+- **Dungeon**: dungeons are generated from a seed and are solvable by construction. A BFS solver
+  over (room, keys held, doors opened) verifies each one and records `optimal_steps`. The step
+  budget is 6× `optimal_steps` (3× until v1.1.0: too tight for a small local model). Levels L1–L3
+  are defined in plan.md §2.
+- **Survey field**: fields are generated from a seed, with every cell reachable by construction.
+  Code computes a reference walk that enters every cell; it is the shortest on open levels and is
+  marked as a reference, not an optimum, on walled ones. The step budget is 3× the reference
+  steps (the walk plus the submission). Levels S1–S3 are defined in plan.md.
+- A per-run token cap stops an episode that loops.
+- Changing a level definition or the seed split invalidates earlier results for comparison.
 - Stack: Python 3.12, uv, LangGraph 1.2.x, LangChain `init_chat_model`, pytest, ruff, mypy.
 
 ## Development Workflow
@@ -66,6 +87,7 @@ This constitution overrides other project guidance where they conflict. Amendmen
 specs. Versioning is semantic: MAJOR for removing or redefining a principle, MINOR for adding a
 principle or section or materially expanding one, PATCH for clarifications. Each feature's plan
 and review MUST check compliance. An unavoidable violation MUST be recorded in that plan's
-Complexity Tracking table with a justification.
+Complexity Tracking table with a justification. Results from different problems MUST NOT be
+combined in one comparison.
 
-**Version**: 1.1.0 | **Ratified**: 2026-10-28 | **Last Amended**: 2026-10-31
+**Version**: 2.0.0 | **Ratified**: 2026-10-28 | **Last Amended**: 2026-11-01

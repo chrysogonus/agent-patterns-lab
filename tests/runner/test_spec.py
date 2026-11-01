@@ -86,3 +86,25 @@ def test_upper_bounds() -> None:
     assert bounds.cost is None
     priced = spec.upper_bounds(Settings(price_input=0.10, price_output=0.50))
     assert priced.cost == pytest.approx(6.00)
+
+
+def test_the_problem_defaults_to_the_dungeon() -> None:
+    spec = _spec()
+    assert spec.problem == "dungeon"
+    assert RunSpec.build(["react"], ["all"], "dev", problem="dungeon").levels == ("L1", "L2", "L3")
+
+
+def test_an_architecture_must_play_the_problem() -> None:
+    supports = {"react": frozenset({"dungeon", "survey"}), "hybrid": frozenset({"dungeon"})}
+    with pytest.raises(
+        ValueError, match=r"^hybrid does not play the survey problem \(it plays: dungeon\)$"
+    ):
+        RunSpec.build(
+            ["react", "hybrid"], ["all"], "dev", problem="survey", supports=supports,
+            known={"react", "hybrid"},
+        )  # fmt: skip
+
+
+def test_an_unknown_problem_is_refused_when_planning() -> None:
+    with pytest.raises(ValueError, match="unknown problem 'chess'"):
+        RunSpec.build(["react"], ["all"], "dev", problem="chess")

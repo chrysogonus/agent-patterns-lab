@@ -54,6 +54,10 @@ def _distinct(values: Sequence[object]) -> list[str]:
 def check_compatible(runs: Sequence[LoadedRun]) -> list[str]:
     """Refuses runs that cannot be compared; returns notes on harmless differences."""
     records = [r.record for r in runs]
+    if len(problems := _distinct([r.problem for r in records])) > 1:
+        raise ValueError(
+            f"these runs are on different problems ({', '.join(problems)}); report them separately"
+        )
     differing = []
     for name, values in [("seed_set", [r.seed_set for r in records])] + [
         (f, [r.settings.get(f) for r in records]) for f in COMPARED
@@ -132,6 +136,58 @@ _HEADER = (
     "| Output tokens (median) | Latency (median) |"
 )
 
+# The survey field's own table (specs/005 contracts/results.md).
+_SURVEY_HEADER = (
+    "| Arch | Level | Episodes | Right | Off by (median) | Seen (median) | Steps (median) "
+    "| Turns (median) | Tokens (median) | Latency (median) |"
+)
+
+
+def _tokens(row: EpisodeRow) -> int | None:
+    if row.input_tokens is None or row.output_tokens is None:
+        return None
+    return row.input_tokens + row.output_tokens
+
+
+def _survey_row(arch: str, level: str, rows: Sequence[EpisodeRow]) -> str:
+    off = [
+        abs(r.submitted_total - r.true_total)
+        for r in rows
+        if not r.success and r.submitted_total is not None and r.true_total is not None
+    ]
+    seen = [r.cells_seen / r.cells for r in rows if r.cells_seen is not None and r.cells]
+    cells = [
+        arch,
+        level,
+        str(len(rows)),
+        _pct(_rate(rows, lambda r: r.success)),
+        _count(_median(off)),
+        _pct(_median(seen)),
+        _count(_median([r.steps for r in rows])),
+        _count(_median([r.parallel_turns for r in rows])),
+        _count(_median([_tokens(r) for r in rows])),
+        _fixed(_median([r.latency_s for r in rows]), 1, "s"),
+    ]
+    return "| " + " | ".join(cells) + " |"
+
+
+def _survey_spread_row(arch: str, level: str, rows: Sequence[EpisodeRow]) -> str:
+    by_repeat: dict[tuple[str, int], list[EpisodeRow]] = defaultdict(list)
+    for row in rows:
+        by_repeat[row.run_id, row.repeat].append(row)
+    right = [_rate(group, lambda r: r.success) for group in by_repeat.values()]
+    steps = [m for g in by_repeat.values() if (m := _median([r.steps for r in g])) is not None]
+    turns = [
+        m for g in by_repeat.values() if (m := _median([r.parallel_turns for r in g])) is not None
+    ]
+
+    def span(values: Sequence[float]) -> str:
+        return f"{_count(min(values))}–{_count(max(values))}" if values else "—"
+
+    return (
+        f"| {arch} | {level} | {min(right):.0%}–{max(right):.0%} | {span(steps)} | {span(turns)} |"
+    )
+
 
 def render(runs: Sequence[LoadedRun]) -> str:
     notes = check_compatible(runs)
@@ -150,7 +206,8 @@ def render(runs: Sequence[LoadedRun]) -> str:
         for label, key in (("context", "num_ctx"), ("max output", "max_output_tokens"))
         if settings.get(key) is not None
     )
-    lines = [f"# Report: {', '.join(archs)}", ""]
+    survey = first.problem == "survey"
+    lines = [f"# Report: {', '.join(archs)}" + (" on the survey field" if survey else ""), ""]
     if first.seed_set == "test":
         lines.append("> Result on test seeds.")
     else:
@@ -163,14 +220,32 @@ def render(runs: Sequence[LoadedRun]) -> str:
         f"seeds {first.seed_set} {', '.join(map(str, first.seeds))} · "
         f"repeats {', '.join(_distinct([r.record.repeats for r in runs]))}",
         "",
-        _HEADER,
-        "| --- " * 13 + "|",
-        *(_stats_row(arch, level, groups[arch, level]) for arch, level in keys),
     ]
+    if survey:
+        lines += [
+            _SURVEY_HEADER,
+            "| --- " * 10 + "|",
+            *(_survey_row(arch, level, groups[arch, level]) for arch, level in keys),
+        ]
+    else:
+        lines += [
+            _HEADER,
+            "| --- " * 13 + "|",
+            *(_stats_row(arch, level, groups[arch, level]) for arch, level in keys),
+        ]
     from apl.runner.compare import render_comparison  # it uses this module's helpers
 
     lines += render_comparison(runs, completed)
-    if any(r.record.repeats > 1 for r in runs):
+    if survey and any(r.record.repeats > 1 for r in runs):
+        lines += [
+            "",
+            "## Spread across repeats",
+            "",
+            "| Arch | Level | Right (min–max) | Steps (min–max) | Turns (min–max) |",
+            "| --- | --- | --- | --- | --- |",
+            *(_survey_spread_row(arch, level, groups[arch, level]) for arch, level in keys),
+        ]
+    elif any(r.record.repeats > 1 for r in runs):
         lines += [
             "",
             "## Spread across repeats",

@@ -319,3 +319,35 @@ def test_ollama_model_gets_the_retry_transport() -> None:
     model = default_model_factory(Settings(model="ollama:qwen3:8b", max_retries=3), [])
     transport = model.sync_client_kwargs["transport"]  # type: ignore[attr-defined]
     assert isinstance(transport, RetryTransport) and transport.retries == 3
+
+
+def test_a_survey_run_gives_every_architecture_the_same_conditions(tmp_path: Path) -> None:
+    from typing import Any
+
+    from apl.kit import Kit
+    from apl.runner import registry
+    from apl.survey.prompt import prompt_fingerprint
+
+    kits: dict[str, Kit] = {}
+
+    def seen(name: str) -> Any:
+        def play(kit: Kit) -> None:
+            kits[name] = kit
+            registry.load(name)(kit)
+
+        return play
+
+    archs = {name: seen(name) for name in ("react", "mapstate")}
+    spec = RunSpec.build(list(archs), ["S1"], "dev", only=[1000], problem="survey")
+    outcome = execute(
+        spec, Settings(), model_factory=scripted_factory(text_answer()), architectures=archs,
+        results_dir=tmp_path,
+    )  # fmt: skip
+    record = _record(outcome)
+    assert record.problem == "survey"
+    assert record.settings["prompt_fingerprint"] == prompt_fingerprint()
+    rows = _rows(outcome)
+    assert {(r.budget, r.optimal_steps) for r in rows} == {(108, 36)}
+    assert kits["react"].tools == kits["mapstate"].tools
+    assert kits["react"].base_prompt == kits["mapstate"].base_prompt
+    assert kits["react"].problem == kits["mapstate"].problem == "survey"

@@ -189,3 +189,36 @@ class FakeProviderError(Exception):
         super().__init__(f"HTTP {status_code}" + (f": {message}" if message else ""))
         self.status_code = status_code
         self.code = code
+
+
+_CELL = re.compile(r'You are in: (\w+)\.|"cell": "(\w+)"')  # a map, or a raw tool result
+
+
+def walk_field(walk: Sequence[str], start: str = "A1", total: int | None = None) -> Strategy:
+    """Survey field (specs/005): the reference walk's next move from the cell the last message
+    shows (a map's "You are in", or a tool result's "cell").
+
+    At the walk's end it submits `total`, or answers with a report. It reads no counter, so
+    parallel scouts get the same answer in any order.
+    """
+    from apl.survey.model import STEP, cell_name
+
+    def pos(name: str) -> tuple[int, int]:
+        return "ABCDEFGHIJ".index(name[0]), int(name[1:]) - 1
+
+    nexts, here = {}, pos(start)
+    for direction in walk:
+        nexts[cell_name(here)] = direction
+        here = (here[0] + STEP[direction][0], here[1] + STEP[direction][1])
+    end = cell_name(here)
+
+    def strategy(messages: list[BaseMessage]) -> AIMessage:
+        found = _CELL.search(str(messages[-1].content))
+        cell = (found[1] or found[2]) if found else None
+        if cell in nexts:
+            return tool_calls(("move", {"direction": nexts[cell]}))
+        if cell == end and total is not None:
+            return tool_calls(("submit", {"total": total}))
+        return AIMessage("I walked my part of the field.")
+
+    return strategy

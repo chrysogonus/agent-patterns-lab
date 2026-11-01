@@ -11,6 +11,11 @@ efficiency and cost on exploration tasks that get harder step by step?
 The task is deliberately small and fully simulated, so every result can be scored by code and
 every run is cheap to repeat.
 
+Since M5 the lab has two problems: the dungeon (§2) and the survey field (§2b). Each problem has
+its own tools, levels, seeds and budget rule, and architectures are compared only within a
+problem. The survey field is built so that one property shows: on an open field with no dead
+ends, splitting the work between scouts should pay off, unlike in the M4 dungeons.
+
 ## 2. Environment
 
 ### World
@@ -57,14 +62,50 @@ budget is 6× the shortest solution.
 Fixed **dev** seeds are used while building and tuning. Separate **test** seeds are used only
 for reported results, so tuning does not leak into them.
 
+## 2b. Survey field
+
+### World
+
+- An N×N grid of cells under fog. Some cells hold an ore deposit (at most one each). Cells are
+  named column letter then row number: A1 is the north-west corner, columns go east, rows go
+  south.
+- Every agent starts in A1. Walls may separate neighboring cells; every cell is reachable.
+
+### Tools
+
+| Tool | Returns |
+| --- | --- |
+| `look()` | The current cell's name, whether it holds a deposit, the directions one can move, and the field's size |
+| `move(direction)` | The same for the new cell, or an error (wall or field edge) |
+| `submit(total)` | Ends the episode with this number of deposits, or an error (not a whole number) |
+
+### Episode
+
+The episode ends at the first successful submission, when the step budget is used up, or when the
+architecture stops. It is a success when the submitted total is the true number of deposits.
+Code computes a reference walk that enters every cell (the snake walk on open levels, the
+shortest there; a greedy nearest-unseen-cell walk on walled ones). The step budget is 3× the
+reference steps (the walk plus the submission).
+
+### Levels
+
+| Level | Grid | Walls | Deposits | Purpose |
+| --- | --- | --- | --- | --- |
+| S1 | 6×6 | none | 6 | Baseline; every architecture should get it right |
+| S2 | 10×10 | none | 15 | A long history for one agent; open regions for scouts |
+| S3 | 10×10 | 18 interior segments, at least 3 dead ends | 15 | Walls bring back detours, where scouts may lose their lead |
+
+Seeds: the dungeon's numbers (dev 1000–1009, test 2000–2019); the problem name keys the generator,
+so the worlds are unrelated.
+
 ## 3. Fairness rules
 
 These become the Spec Kit constitution.
 
-1. Every architecture uses the same model, temperature, base prompt, tool descriptions and
-   step budget.
-2. Architectures see the world only through the four tools. They never read environment
-   internals, the generator or the solver.
+1. Within a problem, every architecture uses the same model, temperature, base prompt, tool
+   descriptions and step budget.
+2. Architectures see the world only through the problem's tools. They never read environment
+   internals, the generator, the solver or the reference walk.
 3. Only the graph may differ: nodes, edges, state and what each node is told.
 4. Tool results and final outcomes are structured data, not free text, so scoring is exact.
 5. Results are reported on test seeds only, with repeats and their spread.
@@ -75,18 +116,18 @@ These become the Spec Kit constitution.
 Each architecture is built by hand with `StateGraph`. The user writes the graphs; the point of
 the repository is to learn LangGraph.
 
-| ID | Architecture | What it tests | LangGraph features |
-| --- | --- | --- | --- |
-| A1 | ReAct | The baseline: memory is the message history only | Tool node, conditional edge, loop limit |
-| A2 | Map state | Does explicit memory beat history? The explored map lives in graph state and is rendered each turn | State schema, reducers |
-| A2r | Map state with routes (`mapstate_routes`) | Does a planning aid help a small model? A2's map plus the shortest known route to each unexplored exit | Same graph as A2 |
-| A3 | Plan-and-execute | Does planning help on L3? Planner sets subgoals, executor runs them, replanner reacts | Multiple nodes, cycles |
-| A4 | Reflexion | Does learning from a failed attempt pay for itself? All attempts count toward the budget | Outer retry loop, persistent notes |
-| A5 | Supervisor | Do subagents help or only add cost? Navigator and inventory subagents | Subgraphs, handoffs |
-| A6 | Hybrid | How much of the work needs a model at all? Code searches the known map, the model picks targets | Plain Python nodes mixed with model nodes |
-| A7 | Fan-out once (`fanout`) | Does splitting the exploration help? An orchestrator splits the dungeon once; up to 4 scouts explore on their own maps | `Send`, parallel branches, reducers |
-| A8 | Supervisor in rounds (`rounds`) | Does replanning on the merged map help the scouts? Short tasks per round, replanned on what all scouts saw | `Send` in a cycle, shared state |
-| A9 | Shared blackboard (`blackboard`) | Can scouts coordinate without a planner? They take turns on one live map and claim frontiers | Round-robin routing over shared state |
+| ID | Architecture | What it tests | LangGraph features | Problems |
+| --- | --- | --- | --- | --- |
+| A1 | ReAct | The baseline: memory is the message history only | Tool node, conditional edge, loop limit | dungeon, survey |
+| A2 | Map state | Does explicit memory beat history? The explored map lives in graph state and is rendered each turn | State schema, reducers | dungeon, survey |
+| A2r | Map state with routes (`mapstate_routes`) | Does a planning aid help a small model? A2's map plus the shortest known route to each unexplored exit | Same graph as A2 | dungeon |
+| A3 | Plan-and-execute | Does planning help on L3? Planner sets subgoals, executor runs them, replanner reacts | Multiple nodes, cycles | — |
+| A4 | Reflexion | Does learning from a failed attempt pay for itself? All attempts count toward the budget | Outer retry loop, persistent notes | — |
+| A5 | Supervisor | Do subagents help or only add cost? Navigator and inventory subagents | Subgraphs, handoffs | — |
+| A6 | Hybrid | How much of the work needs a model at all? Code searches the known map, the model picks targets | Plain Python nodes mixed with model nodes | dungeon |
+| A7 | Fan-out once (`fanout`) | Does splitting the exploration help? An orchestrator splits the dungeon once; up to 4 scouts explore on their own maps | `Send`, parallel branches, reducers | dungeon, survey |
+| A8 | Supervisor in rounds (`rounds`) | Does replanning on the merged map help the scouts? Short tasks per round, replanned on what all scouts saw | `Send` in a cycle, shared state | dungeon, survey |
+| A9 | Shared blackboard (`blackboard`) | Can scouts coordinate without a planner? They take turns on one live map and claim frontiers | Round-robin routing over shared state | dungeon, survey |
 
 A7–A9 put up to 4 scouts in one episode. Each scout has its own position and inventory; doors,
 items left in rooms and the step budget are shared, and every scout's tool calls count toward the
@@ -137,7 +178,8 @@ Each milestone after M0 is one Spec Kit feature (`/speckit-specify` through
 | M2 | Runner, results format, report, A1 ReAct | One dry run and one small paid run produce a report |
 | M3 | Browser viewer and A2 map state | In the browser, any level and seed can be shown and regenerated, and A1 or A2 can be watched playing it live; episodes are saved and replayable |
 | M4 | First comparison of seven architectures (A1, A2, A2r, A6, and the orchestrators A7–A9 with several scouts) | Continuable runs, a comparison report and a written conclusion, from one dev seed per level on `openai:gpt-6-luna` (21 episodes, a first look) |
-| M5+ | One architecture per feature: A3, A4, A5 | Each one can be watched in the viewer and is added to the comparison on the same seeds |
+| M5 | Several problems and the survey field (A1, A2, A7–A9 on it) | Any survey level and seed can be shown and watched in the viewer; survey runs plan, continue and report like dungeon runs; the dungeon is unchanged |
+| M6+ | One architecture per feature: A3, A4, A5 | Each one can be watched in the viewer and is added to the comparison on the same seeds |
 
 Paperclip comes in from M5, when several architectures can be built as parallel tickets.
 
@@ -160,6 +202,6 @@ Decided:
   experiment episodes: every architecture must call the same raw model (constitution I).
 - License: MIT.
 
-Open:
-
-- Add a second environment later (for example a meeting scheduler for multi-agent patterns)?
+- A second problem (since M5): the survey field, where splitting the work should pay off
+  (specs/005). Further boards are sketched in the problem mock-ups (signal trace, combination
+  vault, workshop, warehouse robots, rune floor), one per later feature.

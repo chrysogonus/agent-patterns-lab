@@ -2,7 +2,7 @@
 
 import importlib
 import importlib.util
-from collections.abc import Callable
+from collections.abc import Callable, Collection, Mapping
 from typing import cast
 
 from apl.kit import Kit
@@ -17,7 +17,29 @@ ARCHITECTURES: dict[str, str] = {
     "blackboard": "apl.arch.blackboard",
 }
 
+# Which problems each architecture plays (specs/005 research R15).
+_BOTH = frozenset({"dungeon", "survey"})
+SUPPORTS: dict[str, frozenset[str]] = {
+    "react": _BOTH,
+    "mapstate": _BOTH,
+    "mapstate_routes": frozenset({"dungeon"}),
+    "hybrid": frozenset({"dungeon"}),
+    "fanout": _BOTH,
+    "rounds": _BOTH,
+    "blackboard": _BOTH,
+}
+
 Play = Callable[[Kit], None]
+
+
+def plays(name: str, problem: str, supports: Mapping[str, Collection[str]] = SUPPORTS) -> bool:
+    """Names outside the table (test doubles) play only the dungeon, as before specs/005."""
+    return problem in supports.get(name, ("dungeon",))
+
+
+def refusal(name: str, problem: str, supports: Mapping[str, Collection[str]] = SUPPORTS) -> str:
+    plays = ", ".join(sorted(supports.get(name, ()))) or "nothing yet"
+    return f"{name} does not play the {problem} problem (it plays: {plays})"
 
 
 def _module(name: str) -> str:

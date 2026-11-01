@@ -6,7 +6,7 @@ import re
 PAGE = (importlib.resources.files("apl.viewer") / "assets" / "index.html").read_text("utf-8")
 IDS = [
     "level", "seed", "random", "dev-seeds", "generate", "arch", "run", "stop", "saved", "map",
-    "slider", "follow", "fog", "solution", "panel", "stats", "message",
+    "slider", "follow", "fog", "solution", "panel", "stats", "message", "problem", "solution-label",
 ]  # fmt: skip
 
 

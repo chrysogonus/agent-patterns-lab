@@ -197,9 +197,10 @@ def execute(
         seed_set=spec.seed_set,
         seeds=spec.seeds,
         repeats=spec.repeats,
-        settings=settings.record(),
+        settings=settings.record(spec.problem),
         code=code_version(),
         versions=package_versions(),
+        problem=spec.problem,
     )
     write_json(path / "run.json", record.to_dict())
     (path / "episodes").mkdir()
@@ -224,7 +225,13 @@ def _play(
     for i, key in enumerate(keys, done + 1):
         try:
             result = play_episode(
-                key, record.run_id, record.seed_set, settings, plays[key.arch], factory
+                key,
+                record.run_id,
+                record.seed_set,
+                settings,
+                plays[key.arch],
+                factory,
+                problem=record.problem,
             )
         except PermanentProviderError as error:
             return RunOutcome(path, record, 3, str(error))
@@ -291,11 +298,16 @@ def plan_continue(
             raise ValueError(f"{rows_path}:{number}: {error}") from None
         done.add(EpisodeKey(row.arch, row.level, row.seed, row.repeat))
     spec = RunSpec(
-        record.architectures, record.levels, record.seed_set, record.seeds, record.repeats
+        record.architectures,
+        record.levels,
+        record.seed_set,
+        record.seeds,
+        record.repeats,
+        record.problem,
     )
     left = tuple(k for k in spec.episodes() if k not in done)
     refusals = []
-    now = settings.record()
+    now = settings.record(record.problem)
     for name in sorted(record.settings.keys() | now.keys()):
         if record.settings.get(name) != now.get(name):
             refusals.append(

@@ -1,0 +1,50 @@
+{
+  "run_id": "20261031-221233-react+mapstate+mapstate_routes+hybrid+fanout+rounds+blackboard",
+  "started": "2026-10-31T22:12:33+01:00",
+  "ended": "2026-10-31T22:35:20+01:00",
+  "completed": true,
+  "architectures": [
+    "react",
+    "mapstate",
+    "mapstate_routes",
+    "hybrid",
+    "fanout",
+    "rounds",
+    "blackboard"
+  ],
+  "levels": [
+    "L1",
+    "L2",
+    "L3"
+  ],
+  "seed_set": "dev",
+  "seeds": [
+    1000
+  ],
+  "repeats": 1,
+  "settings": {
+    "model": "openai:gpt-6-luna",
+    "temperature": "provider default",
+    "reasoning_effort": "provider default",
+    "token_cap": 2000000,
+    "max_retries": 4,
+    "timeout_s": 300,
+    "num_ctx": null,
+    "max_output_tokens": 4096,
+    "base_url": null,
+    "prompt_fingerprint": "ff9afb3b9f66"
+  },
+  "code": {
+    "commit": "781894988c54cea75c2fa6696672037fab37e767",
+    "dirty": false
+  },
+  "versions": {
+    "python": "3.12.13",
+    "langgraph": "1.2.18",
+    "langchain": "1.4.7",
+    "langchain-core": "1.7.3",
+    "langchain-openai": "1.7.3",
+    "langchain-ollama": "1.1.0",
+    "ollama": "0.6.3"
+  }
+}

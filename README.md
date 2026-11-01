@@ -1,11 +1,12 @@
 # agent-patterns-lab
 
-A playground for comparing LangGraph agent architectures on the same generated dungeon,
+A playground for comparing LangGraph agent architectures on the same generated problems,
 scored by code.
 
-> **Status: M4 in progress.** M3 is done: a browser viewer to watch agents play live, and A2 map
-> state. M4 adds three orchestrator architectures with several scouts, continuable runs, and a
-> first comparison of seven architectures. The design and milestones are in [`plan.md`](plan.md).
+> **Status: M5 in progress.** M4 is done: three orchestrator architectures with several scouts,
+> continuable runs, and a first comparison of seven architectures. M5 adds a second problem, the
+> survey field, where splitting the work between scouts should pay off. The design and milestones
+> are in [`plan.md`](plan.md).
 >
 > First results (one episode per architecture and level, not reportable):
 > [`docs/findings/m4-first-comparison.md`](docs/findings/m4-first-comparison.md).
@@ -39,22 +40,46 @@ and records the shortest solution. There are three levels:
 | L2 | 4×4 | one key, one door |
 | L3 | 5×5 | two chained keys, dead ends |
 
+## The survey field
+
+A square grid of cells under fog; some cells hold an ore deposit. Every agent starts in A1, the
+north-west corner, and has to find out how many deposits the field holds. There are no dead ends
+on the open levels, so several scouts can each take a part of the field.
+
+| Tool | What it does |
+| --- | --- |
+| `look()` | Describe the current cell: its name, whether it holds a deposit, the open directions, the field's size |
+| `move(direction)` | Go to the neighboring cell |
+| `submit(total)` | Submit the number of deposits; this ends the episode |
+
+An episode succeeds when the total is right. Code computes a reference walk that enters every
+cell, and the budget is 3× its steps.
+
+| Level | Grid | Walls | Deposits |
+| --- | --- | --- | --- |
+| S1 | 6×6 | none | 6 |
+| S2 | 10×10 | none | 15 |
+| S3 | 10×10 | interior walls, dead ends | 15 |
+
+Each problem has its own tools, prompt and budget; architectures are compared only within a
+problem.
+
 ## Architectures
 
 Each one is built by hand with LangGraph's `StateGraph`.
 
-| ID | Architecture | Idea |
-| --- | --- | --- |
-| A1 | ReAct | The model calls tools in a loop and remembers only through its message history |
-| A2 | Map state | The explored map is kept in graph state and shown to the model every turn |
-| A2r | Map state with routes | A2's map plus the shortest known route to each unexplored exit |
-| A3 | Plan-and-execute | A planner sets subgoals, an executor carries them out, the plan is revised on surprises |
-| A4 | Reflexion | After a failed attempt the agent writes down what went wrong and tries again |
-| A5 | Supervisor | A supervisor delegates to a navigator and an inventory subagent |
-| A6 | Hybrid | Code searches the known map; the model only chooses where to go next |
-| A7 | Fan-out once | An orchestrator sends up to 4 scouts into the dungeon once; each explores on its own map |
-| A8 | Supervisor in rounds | An orchestrator gives scouts short tasks and replans on the map they all saw |
-| A9 | Shared blackboard | No planner: scouts take turns on one shared map and claim unexplored exits |
+| ID | Architecture | Idea | Problems |
+| --- | --- | --- | --- |
+| A1 | ReAct | The model calls tools in a loop and remembers only through its message history | dungeon, survey |
+| A2 | Map state | The explored map is kept in graph state and shown to the model every turn | dungeon, survey |
+| A2r | Map state with routes | A2's map plus the shortest known route to each unexplored exit | dungeon |
+| A3 | Plan-and-execute | A planner sets subgoals, an executor carries them out, the plan is revised on surprises | — |
+| A4 | Reflexion | After a failed attempt the agent writes down what went wrong and tries again | — |
+| A5 | Supervisor | A supervisor delegates to a navigator and an inventory subagent | — |
+| A6 | Hybrid | Code searches the known map; the model only chooses where to go next | dungeon |
+| A7 | Fan-out once | An orchestrator sends up to 4 scouts out once; each explores on its own map | dungeon, survey |
+| A8 | Supervisor in rounds | An orchestrator gives scouts short tasks and replans on the map they all saw | dungeon, survey |
+| A9 | Shared blackboard | No planner: scouts take turns on one shared map and claim unexplored exits | dungeon, survey |
 
 ## How a comparison works
 
@@ -113,6 +138,11 @@ uv run apl dungeon show --level L3 --seed 1000 --route solution      # with the 
 uv run apl dungeon show --level L3 --seed 1000 --route solution --html l3.html  # animation
 ```
 
+```bash
+uv run apl survey show --level S2 --seed 1000                        # a survey field
+uv run apl survey show --level S3 --seed 1000 --route reference      # with the reference walk
+```
+
 Open `l3.html` in a browser to play the route back step by step. `--route` also accepts a JSON
 file with an action list or a recorded outcome; see
 [`contracts/cli.md`](specs/001-dungeon-environment/contracts/cli.md).
@@ -124,6 +154,7 @@ uv run apl run --arch react --level all --seeds dev --limit 2            # plan 
 uv run apl run --arch react --level all --seeds dev --limit 2 --execute  # plays it
 uv run apl report results/<run-id>                                       # report again
 uv run apl continue results/<run-id> [--execute]                         # rest of a cut-off run
+uv run apl run --problem survey --arch react,fanout --level all --seeds dev --limit 1  # survey
 uv run apl dungeon show --level L2 --seed 1001 \
   --route results/<run-id>/episodes/react-L2-1001-r1.outcome.json --html episode.html
 ```
@@ -142,8 +173,10 @@ uv run apl serve        # then open http://127.0.0.1:8765/
 
 The viewer is a local page (reachable only from this machine):
 
-- Pick a level and any seed: the same seed always builds the same dungeon. Test seeds
-  (2000–2019) are refused, so they stay unseen for reported results.
+- Pick a problem (dungeon or survey field), a level and any seed: the same seed always builds the
+  same world. Test seeds (2000–2019) are refused, so they stay unseen for reported results.
+- On the survey field, the panel shows the true total, the deposits seen so far and, at the end,
+  the submitted total with right or wrong.
 - Pick an architecture (`react`, `mapstate`, `mapstate_routes`, `hybrid`, `fanout`, `rounds`,
   `blackboard`) and a model (`APL_MODEL`, `vllm:qwen3.5-9b` or `openai:gpt-6-luna`), and press
   Run. Every step appears on the map as it happens, and every model turn in the side panel: its
@@ -179,7 +212,9 @@ Repeat implement and converge until converge reports `Converged`.
 ## Layout
 
 ```text
+src/apl/problems.py  the problems by name: dungeon, survey
 src/apl/dungeon/   generator, environment, tools, solver, text map, HTML view
+src/apl/survey/    the survey field: generator, reference walk, environment, tools, pictures
 src/apl/cli.py     the `apl` command
 src/apl/kit.py     what an architecture gets per episode (model, tools, prompt)
 src/apl/arch/      one module per architecture, written by hand

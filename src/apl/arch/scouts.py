@@ -18,7 +18,8 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, System
 from langgraph.types import Send
 
 from apl.arch.dungeon_map import DungeonMap
-from apl.arch.mapstate import MAP_INSTRUCTIONS
+from apl.arch.field_map import FieldMap
+from apl.arch.mapstate import FIELD_MAP_INSTRUCTIONS, MAP_INSTRUCTIONS
 from apl.kit import Kit, ToolNode
 
 # Explains the task line and the other scouts; no advice on how to explore.
@@ -27,35 +28,55 @@ You are one of several scouts in the same dungeon; each has its own position and
 line starting with "Your task:" says what to do. When the task is done or cannot be done, answer \
 without a tool call and say briefly what you found."""
 
-_CLAIM = re.compile(r"^claim: (\S+) (north|east|south|west)\s*$", re.MULTILINE)
+# The same for the survey field (specs/005 contracts/architectures.md).
+FIELD_SCOUT_INSTRUCTIONS = """\
+You are one of several scouts on the same field; each has its own position. The line starting \
+with "Your task:" says what to do. When the task is done or cannot be done, answer without a \
+tool call and say briefly what you found."""
+
+# Nothing is required after the direction: some models run two text parts together in one reply.
+_CLAIM = re.compile(r"^claim: (\S+) (north|east|south|west)", re.MULTILINE)
+# A blackboard scout whose reply has only a claim keeps its turn; this many in a row end it.
+MAX_CLAIMS = 3
 
 
 @dataclass
-class SharedMap:
+class SharedMap[MapT: (DungeonMap, FieldMap)]:
     """One map of what all its scouts saw, plus each scout's room and inventory (research R8)."""
 
-    map: DungeonMap
-    start: str  # the start room's label, where new scouts appear
+    map: MapT
+    start: str  # the start room's label (or start cell's name), where new scouts appear
     positions: dict[int, str]
     inventories: dict[int, tuple[str, ...]]
     claims: dict[int, tuple[str, str]] = field(default_factory=dict)  # blackboard only
 
     @classmethod
-    def from_start(cls, start_json: str, scout: int) -> "SharedMap":
+    def from_start(cls, start_json: str, scout: int) -> "SharedMap[Any]":
+        """A dungeon map for a room view, a field map for a cell view (specs/005)."""
+        if "cell" in json.loads(start_json)["data"]:
+            cells = FieldMap.from_start(start_json)
+            return SharedMap(cells, cells.current, {scout: cells.current}, {scout: ()})
         found = DungeonMap.from_start(start_json)
-        return cls(found, found.current, {scout: found.current}, {scout: found.inventory})
+        return SharedMap(found, found.current, {scout: found.current}, {scout: found.inventory})
 
     def add(self, scout: int) -> None:
         self.positions[scout], self.inventories[scout] = self.start, ()
 
     def apply(self, scout: int, name: str, args: Any, result: Any) -> None:
         """One tool call of one scout, seen from that scout (DungeonMap.apply's rules)."""
+        if isinstance(self.map, FieldMap):
+            self.map.current = self.positions[scout]
+            self.map.apply(name, args, result)
+            self.positions[scout] = self.map.current
+            return
         self.map.current, self.map.inventory = self.positions[scout], self.inventories[scout]
         self.map.apply(name, args, result)
         self.positions[scout], self.inventories[scout] = self.map.current, self.map.inventory
 
     def render(self, viewer: int | None) -> str:
         """The map as `viewer` sees it, or as the orchestrator sees it (None)."""
+        if isinstance(self.map, FieldMap):
+            return self._render_field(self.map, viewer)
         current, inventory = self.map.current, self.map.inventory
         if viewer is not None:
             self.map.current, self.map.inventory = self.positions[viewer], self.inventories[viewer]
@@ -77,19 +98,37 @@ class SharedMap:
             lines.append("Claims: " + "; ".join(claimed) + ".")
         return "\n".join(lines)
 
+    def _render_field(self, cells: FieldMap, viewer: int | None) -> str:
+        current = cells.current
+        others = {n: c for n, c in self.positions.items() if n != viewer}
+        if viewer is not None:
+            cells.current = self.positions[viewer]
+        lines = cells.render(others, here=viewer is not None).split("\n")
+        cells.current = current
+        listed = [f"scout {n} is in {c}" for n, c in sorted(others.items())]
+        if viewer is None:
+            lines.insert(2, "Scouts: " + "; ".join(listed) + ".")
+        elif listed:
+            lines.insert(2, "Other scouts: " + "; ".join(listed) + ".")
+        if self.claims:
+            claimed = (f"scout {n} → {r} {d}" for n, (r, d) in sorted(self.claims.items()))
+            lines.append("Claims: " + "; ".join(claimed) + ".")
+        return "\n".join(lines)
+
 
 @dataclass
 class ScoutState:
     number: int
     tool_node: ToolNode
     start: str  # its start room JSON, shown on its first turn
-    view: SharedMap  # the map it is shown; the board itself on the blackboard
+    view: SharedMap[Any]  # the map it is shown; the board itself on the blackboard
     task: str = ""
     steps_left: int | None = None  # None: no limit (blackboard)
     last_turn: list[BaseMessage] = field(default_factory=list)
     started: bool = False
     turns: int = 0  # model turns taken, for the blackboard's round robin
     done: bool = False
+    claims: int = 0  # blackboard replies in a row with a claim and no tool call
     report: str = ""  # its answer when it finished the task
     failed: str = ""  # its last failed tool call in this task, for A8's round report
 
@@ -101,7 +140,7 @@ def _gather(old: list[Any], new: list[Any]) -> list[Any]:
 class ScoutGraph(TypedDict):
     scouts: list[ScoutState]
     replies: Annotated[list[tuple[int, AIMessage]], _gather]
-    board: SharedMap | None  # the merged map, if the pattern keeps one
+    board: SharedMap[Any] | None  # the merged map, if the pattern keeps one
     steps: Annotated[int, operator.add]  # tool calls applied so far
 
 
@@ -111,7 +150,11 @@ class ScoutTurn(TypedDict):
 
 
 def scout_messages(kit: Kit, scout: ScoutState) -> list[BaseMessage]:
-    system = SystemMessage(f"{kit.base_prompt}\n\n{MAP_INSTRUCTIONS} {SCOUT_INSTRUCTIONS}")
+    if kit.problem == "survey":
+        instructions = f"{FIELD_MAP_INSTRUCTIONS} {FIELD_SCOUT_INSTRUCTIONS}"
+    else:
+        instructions = f"{MAP_INSTRUCTIONS} {SCOUT_INSTRUCTIONS}"
+    system = SystemMessage(f"{kit.base_prompt}\n\n{instructions}")
     task = f"You are scout {scout.number}. Your task: {scout.task}"
     if not scout.started:
         task += "\n\n" + scout.start
@@ -164,13 +207,18 @@ def act(state: ScoutGraph) -> dict[str, Any]:
         scout = by_number[number]
         scout.started = True
         scout.turns += 1
-        if match := _CLAIM.search(str(reply.text)):
-            if state["board"] is not None:
-                state["board"].claims[number] = (match[1], match[2])
+        match = _CLAIM.search(str(reply.text))
+        if match and state["board"] is not None:
+            state["board"].claims[number] = (match[1], match[2])
         calls = [*reply.tool_calls, *reply.invalid_tool_calls]
+        # On the blackboard (the scout is shown the board itself) a claim alone is not an answer.
+        if not calls and match and scout.view is state["board"] and scout.claims + 1 < MAX_CLAIMS:
+            scout.claims, scout.last_turn = scout.claims + 1, [reply]
+            continue
         if not calls:
             scout.done, scout.report, scout.last_turn = True, str(reply.text), [reply]
             continue
+        scout.claims = 0
         if scout.steps_left is not None and len(calls) > scout.steps_left:
             # Only the calls within its limit run; the reply is cut to match its results.
             kept = {c["id"] for c in calls[: scout.steps_left]}
@@ -201,7 +249,7 @@ def act(state: ScoutGraph) -> dict[str, Any]:
     return {"scouts": state["scouts"], "replies": [], "steps": applied}
 
 
-def round_view(board: SharedMap) -> SharedMap:
+def round_view(board: SharedMap[Any]) -> SharedMap[Any]:
     """A copy of the board for one round: the scout's own results go on top of it."""
     return copy.deepcopy(board)
 
@@ -246,7 +294,7 @@ def read_tasks(
     return found
 
 
-def new_scout(kit: Kit, view: Callable[[int, str], SharedMap]) -> ScoutState | None:
+def new_scout(kit: Kit, view: Callable[[int, str], SharedMap[Any]]) -> ScoutState | None:
     """A scout from `kit.add_scout()`, with the map `view(number, start)` gives it."""
     added = kit.add_scout()
     if added is None:
@@ -254,5 +302,22 @@ def new_scout(kit: Kit, view: Callable[[int, str], SharedMap]) -> ScoutState | N
     return ScoutState(added.number, added.tool_node, added.start, view(added.number, added.start))
 
 
-def first_scout(kit: Kit, view: Callable[[int, str], SharedMap]) -> ScoutState:
+def first_scout(kit: Kit, view: Callable[[int, str], SharedMap[Any]]) -> ScoutState:
     return ScoutState(0, kit.tool_node, kit.start, view(0, kit.start))
+
+
+def submit(kit: Kit, total: int) -> None:
+    """An orchestrator's total, submitted through scout 0's tool node: one step (R14).
+
+    The submission ends the episode, so the tool node raises `EpisodeEnded` for the runner.
+    """
+    call = {"name": "submit", "args": {"total": total}, "id": "orchestrator-submit"}
+    kit.tool_node({"messages": [AIMessage(content="", tool_calls=[call])]})
+
+
+def read_total(data: dict[str, Any]) -> int | str:
+    """The whole number under "total" in an orchestrator's answer, or what is wrong with it."""
+    total = data.get("total")
+    if not isinstance(total, int) or isinstance(total, bool) or total < 0:
+        return '"total" must be a whole number of deposits'
+    return total

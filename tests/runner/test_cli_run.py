@@ -324,3 +324,42 @@ def test_continue_completes_a_run_whose_episodes_are_all_done(
     assert main(["continue", str(run_dir), "--execute"]) == 0
     assert (run_dir / "report.md").is_file()
     assert json.loads((run_dir / "run.json").read_text())["completed"] is True
+
+
+SURVEY = [
+    "run", "--problem", "survey", "--arch", "react,mapstate,fanout,rounds,blackboard",
+    "--level", "all", "--seeds", "dev", "--limit", "1",
+]  # fmt: skip
+
+
+def test_a_survey_plan(workdir: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    from apl.survey.prompt import prompt_fingerprint
+
+    assert main(SURVEY) == 0
+    out = capsys.readouterr().out
+    lines = out.splitlines()
+    assert lines[1] == "  architectures  react, mapstate, fanout, rounds, blackboard"
+    assert lines[2] == "  problem        survey"
+    for line in [
+        "levels         S1, S2, S3",
+        "episodes       15",
+        f"prompt         {prompt_fingerprint()}",
+    ]:
+        assert line in out
+    assert list(workdir.iterdir()) == []
+
+
+def test_an_architecture_that_does_not_play_the_survey_is_refused(
+    workdir: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    command = ["run", "--problem", "survey", "--arch", "hybrid", "--level", "S1", "--seeds", "dev"]
+    assert main(command) == 2
+    err = capsys.readouterr().err
+    assert err == "apl: hybrid does not play the survey problem (it plays: dungeon)\n"
+
+
+def test_without_a_problem_the_plan_has_no_problem_line(
+    workdir: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert main(DRY) == 0
+    assert "problem" not in capsys.readouterr().out

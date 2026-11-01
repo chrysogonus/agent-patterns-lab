@@ -7,6 +7,7 @@ from typing import Any
 
 from apl.dungeon.env import Episode, Outcome
 from apl.dungeon.results import EndReason
+from apl.problems import PROBLEMS
 from apl.runner.meter import Meter
 from apl.runner.spec import SEED_SETS, EpisodeKey
 
@@ -39,6 +40,15 @@ class EpisodeRow:
     error: str | None
     scouts: int | None  # scouts that made a tool call (specs/004); None for errors and older rows
     orchestrator_calls: int | None  # model calls with the role "orchestrator"; None in older rows
+    # specs/005: the problem ("dungeon" in older rows), and the survey field's own fields (None on
+    # dungeon rows; contracts/results.md).
+    problem: str = "dungeon"
+    submitted_total: int | None = None
+    true_total: int | None = None
+    cells_seen: int | None = None
+    cells: int | None = None
+    parallel_turns: int | None = None
+    reference_is_optimal: bool | None = None
 
     @classmethod
     def completed(
@@ -50,9 +60,11 @@ class EpisodeRow:
         meter: Meter,
         latency_s: float,
         arch_error: str | None,
+        problem: str = "dungeon",
     ) -> "EpisodeRow":
         return cls(
             **_identity(key, run_id, seed_set),
+            problem=problem,
             status="completed",
             success=outcome.success,
             end_reason=str(outcome.end_reason),
@@ -73,6 +85,7 @@ class EpisodeRow:
             output_tokens=_tokens(meter, meter.output_tokens),
             scouts=outcome.scouts,
             orchestrator_calls=meter.orchestrator_calls,
+            **_survey(outcome),
         )
 
     @classmethod
@@ -85,15 +98,22 @@ class EpisodeRow:
         meter: Meter,
         latency_s: float,
         error: str,
+        problem: str = "dungeon",
+        optimal_steps: int | None = None,
+        budget: int | None = None,
     ) -> "EpisodeRow":
+        """An infrastructure error. `optimal_steps` and `budget` default to the dungeon's."""
         return cls(
             **_identity(key, run_id, seed_set),
+            problem=problem,
             status="error",
             success=None,
             end_reason=None,
             steps=None,
-            optimal_steps=episode.dungeon.solution.length,
-            budget=episode.dungeon.budget,
+            optimal_steps=episode.dungeon.solution.length
+            if optimal_steps is None
+            else optimal_steps,
+            budget=episode.dungeon.budget if budget is None else budget,
             efficiency=None,
             invalid_actions=None,
             budget_hit=None,
@@ -108,6 +128,7 @@ class EpisodeRow:
             output_tokens=_tokens(meter, meter.output_tokens),
             scouts=None,
             orchestrator_calls=meter.orchestrator_calls,
+            **_field_totals(episode),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -118,7 +139,10 @@ class EpisodeRow:
         """A row read back from disk; `ValueError` naming the first bad field."""
         if not isinstance(data, dict):
             raise ValueError(f"a row must be an object, got {data!r}")
-        data = {"output_limit_hits": None, "scouts": None, "orchestrator_calls": None, **data}
+        data = {
+            "output_limit_hits": None, "scouts": None, "orchestrator_calls": None,
+            "problem": "dungeon", **dict.fromkeys(_SURVEY_FIELDS), **data,
+        }  # fmt: skip
         names = [f.name for f in fields(cls)]
         odd = sorted(set(names) ^ set(data))
         if odd:
@@ -162,17 +186,42 @@ _ROW_TYPES.update(
     error=str,
     scouts=int,
     orchestrator_calls=int,
+    problem=str,
+    submitted_total=int,
+    true_total=int,
+    cells_seen=int,
+    cells=int,
+    parallel_turns=int,
+    reference_is_optimal=bool,
 )
+_SURVEY_FIELDS = (
+    "submitted_total", "true_total", "cells_seen", "cells", "parallel_turns",
+    "reference_is_optimal",
+)  # fmt: skip
 _NULLABLE = {
     "success", "end_reason", "steps", "efficiency", "invalid_actions", "budget_hit",
     "token_cap_hit", "output_limit_hits", "input_tokens", "output_tokens", "arch_error", "error",
-    "scouts", "orchestrator_calls",
+    "scouts", "orchestrator_calls", *_SURVEY_FIELDS,
 }  # fmt: skip
 _ALLOWED: dict[str, set[str]] = {
     "status": {"completed", "error"},
-    "end_reason": {str(r) for r in EndReason},
+    "end_reason": {str(r) for r in EndReason} | {"submitted"},  # the survey's (specs/005 R7)
     "seed_set": set(SEED_SETS),
+    "problem": set(PROBLEMS),
 }
+
+
+def _survey(outcome: object) -> dict[str, Any]:
+    """The survey field's own row fields from its outcome; none for the dungeon's."""
+    if not hasattr(outcome, "true_total"):
+        return {}
+    return {f: getattr(outcome, f) for f in _SURVEY_FIELDS}
+
+
+def _field_totals(episode: object) -> dict[str, Any]:
+    """An infrastructure error on the survey field still records the field's size and total."""
+    field = getattr(episode, "field", None)
+    return {} if field is None else {"true_total": field.true_total, "cells": field.cells}
 
 
 def _identity(key: EpisodeKey, run_id: str, seed_set: str) -> dict[str, Any]:
@@ -206,6 +255,7 @@ class RunRecord:
     settings: dict[str, Any]
     code: dict[str, Any]
     versions: dict[str, str]
+    problem: str = "dungeon"  # missing in runs from before specs/005
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self) | {
@@ -218,6 +268,7 @@ class RunRecord:
     def parse(cls, data: object) -> "RunRecord":
         if not isinstance(data, dict):
             raise ValueError("run.json must hold an object")
+        data = {"problem": "dungeon", **data}
         names = [f.name for f in fields(cls)]
         for name in names:
             if name not in data:

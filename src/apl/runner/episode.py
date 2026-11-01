@@ -3,15 +3,15 @@
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from typing import Any
 
 import httpx
 import openai
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.language_models import BaseChatModel
 
-from apl.dungeon import generate, start_episode
-from apl.dungeon.env import Episode, Outcome
-from apl.kit import EpisodeEnded, Kit, build_kit
+from apl import problems
+from apl.kit import EpisodeEnded, Kit
 from apl.runner.meter import Meter, Transcript
 from apl.runner.results import EpisodeRow
 from apl.runner.settings import Settings
@@ -30,7 +30,9 @@ class PermanentProviderError(Exception):
 @dataclass(frozen=True, slots=True)
 class EpisodeResult:
     row: EpisodeRow
-    outcome: Outcome | None  # None for an infrastructure error
+    # The Outcome of the episode's problem (apl.dungeon.env or apl.survey.env); None for an
+    # infrastructure error.
+    outcome: Any
     transcript: Transcript
 
 
@@ -61,14 +63,19 @@ def play_episode(
     model_factory: ModelFactory,
     *,
     callbacks: Sequence[BaseCallbackHandler] = (),
-    on_episode: Callable[[Episode], None] | None = None,
+    on_episode: Callable[[Any], None] | None = None,  # gets the problem's Episode
+    problem: str = problems.DEFAULT,
 ) -> EpisodeResult:
     """Plays one episode. `callbacks` and `on_episode` let an observer (the viewer) watch it."""
-    episode = start_episode(generate(key.level, key.seed))
+    chosen = problems.get(problem)
+    world = chosen.generate(key.level, key.seed)
+    episode = chosen.start_episode(world)
     if on_episode is not None:
         on_episode(episode)
     meter = Meter(episode, settings.token_cap)
-    kit = build_kit(episode, model_factory(settings, [meter, *callbacks]))
+    if hasattr(episode, "turn_source"):  # the survey field counts parallel turns (specs/005 R11)
+        episode.turn_source = lambda: meter.llm_calls
+    kit = chosen.build_kit(episode, model_factory(settings, [meter, *callbacks]))
     arch_error = None
     started = time.perf_counter()
     try:
@@ -85,11 +92,15 @@ def play_episode(
         else:  # retries are used up: an infrastructure error, not scored
             latency = time.perf_counter() - started
             row = EpisodeRow.failed(
-                key, run_id, seed_set, episode, meter, latency, _describe(error)
-            )
+                key, run_id, seed_set, episode, meter, latency, _describe(error),
+                problem=chosen.name, optimal_steps=chosen.reference_steps(world),
+                budget=world.budget,
+            )  # fmt: skip
             return EpisodeResult(row, None, meter.transcript)
     episode.stop()  # the architecture returned early; does nothing if the episode already ended
     latency = time.perf_counter() - started
     outcome = episode.outcome()
-    row = EpisodeRow.completed(key, run_id, seed_set, outcome, meter, latency, arch_error)
+    row = EpisodeRow.completed(
+        key, run_id, seed_set, outcome, meter, latency, arch_error, problem=chosen.name
+    )
     return EpisodeResult(row, outcome, meter.transcript)

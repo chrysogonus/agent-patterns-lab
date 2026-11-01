@@ -6,7 +6,16 @@ Each architecture is compared with the one that differs from it in one job, its 
 from collections import defaultdict
 from collections.abc import Sequence
 
-from apl.runner.report import LoadedRun, _count, _distinct, _fixed, _median, _pct, _rate
+from apl.runner.report import (
+    LoadedRun,
+    _count,
+    _distinct,
+    _fixed,
+    _median,
+    _pct,
+    _rate,
+    _tokens,
+)
 from apl.runner.results import EpisodeRow
 
 REFERENCES = {
@@ -32,13 +41,19 @@ def _efficiency(rows: Sequence[EpisodeRow]) -> float | None:
     return _median([r.efficiency for r in rows if r.success])
 
 
-def _tokens(row: EpisodeRow) -> int | None:
-    if row.input_tokens is None or row.output_tokens is None:
-        return None
-    return row.input_tokens + row.output_tokens
+# On the survey field the comparison adds parallel turns (specs/005 contracts/results.md).
+_SURVEY_HEADER = (
+    "| Arch | Right | Efficiency | Steps | Turns | Tokens | Calls: orch / scouts | Latency "
+    "| Scouts | Δ right | Δ efficiency | Δ turns | Reference |"
+)
 
 
-def _row(arch: str, rows: Sequence[EpisodeRow], reference: Sequence[EpisodeRow] | None) -> str:
+def _row(
+    arch: str,
+    rows: Sequence[EpisodeRow],
+    reference: Sequence[EpisodeRow] | None,
+    survey: bool = False,
+) -> str:
     success = _rate(rows, lambda r: r.success)
     efficiency = _efficiency(rows)
     known = [r for r in rows if r.orchestrator_calls is not None]
@@ -65,6 +80,12 @@ def _row(arch: str, rows: Sequence[EpisodeRow], reference: Sequence[EpisodeRow] 
         d_efficiency,
         REFERENCES.get(arch, "—"),
     ]
+    if survey:
+        turns = _median([r.parallel_turns for r in rows])
+        ref_turns = _median([r.parallel_turns for r in reference]) if reference else None
+        d_turns = "—" if turns is None or ref_turns is None else _signed(turns - ref_turns, 0)
+        cells[4:4] = [_count(turns)]
+        cells[-1:-1] = [d_turns]
     return "| " + " | ".join(cells) + " |"
 
 
@@ -96,10 +117,12 @@ def render_comparison(runs: Sequence[LoadedRun], completed: Sequence[EpisodeRow]
         f"Seeds {seeds}, {repeats} repeat{plural}. Differences are against the reference "
         "architecture in the last column.",
     ]
+    survey = first.problem == "survey"
+    header, columns = (_SURVEY_HEADER, 13) if survey else (_HEADER, 11)
     for level in sorted({level for level, _ in groups}):
-        lines += ["", f"### {level}", "", _HEADER, "| --- " * 11 + "|"]
+        lines += ["", f"### {level}", "", header, "| --- " * columns + "|"]
         for arch in order:
             if (level, arch) in groups:
                 reference = groups.get((level, REFERENCES.get(arch, "")))
-                lines.append(_row(arch, groups[level, arch], reference))
+                lines.append(_row(arch, groups[level, arch], reference, survey))
     return lines

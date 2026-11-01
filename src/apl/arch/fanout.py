@@ -1,8 +1,9 @@
 """A7 fan-out once: the orchestrator splits the work once; scouts explore on their own maps.
 
 The orchestrator is called once with the start room. Each scout sees only its own map and never
-hears from the others (specs/004 contracts/orchestrators.md). Written by the agent at the
-experimenter's request.
+hears from the others (specs/004 contracts/orchestrators.md). On the survey field the
+orchestrator is called once more with the scouts' reports and submits the total (specs/005 R14).
+Written by the agent at the experimenter's request.
 """
 
 from typing import Any
@@ -22,7 +23,9 @@ from apl.arch.scouts import (
     new_scout,
     read_answer,
     read_tasks,
+    read_total,
     scout_node,
+    submit,
 )
 from apl.kit import Kit
 
@@ -35,6 +38,23 @@ with the scout that took them. Every tool call of every scout costs a step from 
 budget. You decide once, now. Answer with one JSON object and nothing else:
 {"scouts": [{"task": "<what this scout should do>", "steps": <its step limit>}, ...]}"""
 
+# The same for the survey field, plus the collect step (specs/005 contracts/architectures.md).
+FIELD_FANOUT_INSTRUCTIONS = """\
+In this setup you do not call the tools yourself. You send between 1 and 4 scouts onto the \
+field. Each starts in A1, calls the tools itself, carries out the task you give it within the \
+number of steps you give it, reports back by answering without a tool call, and never hears \
+from the other scouts. Every tool call of every scout costs a step from the one shared budget. \
+When all scouts are done, you get their reports and submit the total. You decide the scouts \
+once, now. Answer with one JSON object and nothing else:
+{"scouts": [{"task": "<what this scout should do>", "steps": <its step limit>}, ...]}"""
+
+COLLECT = """\
+The scouts are done. Their reports:
+{reports}
+
+Answer with one JSON object and nothing else:
+{{"total": <the number of deposits in the whole field>}}"""
+
 
 class FanoutState(ScoutGraph):
     note: str  # why the last answer was not used
@@ -42,13 +62,17 @@ class FanoutState(ScoutGraph):
 
 
 def play(kit: Kit) -> None:
-    system = SystemMessage(kit.base_prompt + "\n\n" + FANOUT_INSTRUCTIONS)
+    survey = kit.problem == "survey"
+    instructions = FIELD_FANOUT_INSTRUCTIONS if survey else FANOUT_INSTRUCTIONS
+    system = SystemMessage(kit.base_prompt + "\n\n" + instructions)
+    after_scouts = "collect" if survey else END
 
-    def own_map(number: int, start: str) -> SharedMap:
+    def own_map(number: int, start: str) -> SharedMap[Any]:
         return SharedMap.from_start(start, number)
 
     def orchestrate(state: FanoutState) -> dict[str, Any]:
-        prompt = f"{state['note']}\n\nThe start room:\n{kit.start}".lstrip()
+        start = "The start cell" if survey else "The start room"
+        prompt = f"{state['note']}\n\n{start}:\n{kit.start}".lstrip()
         config: Any = {"metadata": {"role": "orchestrator"}}
         reply = kit.model.invoke([system, HumanMessage(prompt)], config=config)
         assert isinstance(reply, AIMessage)
@@ -70,8 +94,28 @@ def play(kit: Kit) -> None:
 
     def after_orchestrate(state: FanoutState) -> Any:
         if state["scouts"]:
-            return dispatch(kit, END)(state)
+            return dispatch(kit, after_scouts)(state)
         return END if state["misses"] >= MAX_MISSES else "orchestrate"
+
+    def collect(state: FanoutState) -> dict[str, Any]:
+        """Survey only: the orchestrator turns the scouts' reports into one total and submits it."""
+        reports = "\n".join(
+            f"scout {s.number}: " + (s.report or "used up its steps") for s in state["scouts"]
+        )
+        prompt = f"{state['note']}\n\n{COLLECT.format(reports=reports)}".lstrip()
+        config: Any = {"metadata": {"role": "orchestrator"}}
+        reply = kit.model.invoke([system, HumanMessage(prompt)], config=config)
+        assert isinstance(reply, AIMessage)
+        answer = read_answer(str(reply.text))
+        total = read_total(answer) if isinstance(answer, dict) else answer
+        if isinstance(total, str):
+            note = f"Your answer was not used: {total}. Answer with one JSON object as described."
+            return {"note": note, "misses": state["misses"] + 1}
+        submit(kit, total)  # ends the episode
+        return {"note": "", "misses": 0}
+
+    def after_collect(state: FanoutState) -> str:
+        return END if state["misses"] >= MAX_MISSES else "collect"
 
     graph = StateGraph(FanoutState)
     graph.add_node("orchestrate", orchestrate)
@@ -80,7 +124,10 @@ def play(kit: Kit) -> None:
     graph.add_edge(START, "orchestrate")
     graph.add_conditional_edges("orchestrate", after_orchestrate, ["orchestrate", "scout", END])
     graph.add_edge("scout", "act")
-    graph.add_conditional_edges("act", dispatch(kit, END), ["scout", END])
+    graph.add_conditional_edges("act", dispatch(kit, after_scouts), ["scout", after_scouts])
+    if survey:
+        graph.add_node("collect", collect)
+        graph.add_conditional_edges("collect", after_collect, ["collect", END])
     graph.compile().invoke(
         {"scouts": [], "replies": [], "board": None, "steps": 0, "note": "", "misses": 0},
         config={"recursion_limit": kit.recursion_limit},

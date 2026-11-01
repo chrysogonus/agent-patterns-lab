@@ -42,6 +42,22 @@ def _show(args: argparse.Namespace) -> int:
     return 0
 
 
+def _survey_show(args: argparse.Namespace) -> int:
+    from apl.survey import generate as generate_field
+    from apl.survey.render_svg import html
+    from apl.survey.render_text import render_text as render_field
+
+    try:
+        field = generate_field(args.level, args.seed)
+        if args.html:
+            Path(args.html).write_text(html(field), encoding="utf-8")
+    except (OSError, ValueError) as error:
+        print(f"apl: {error}", file=sys.stderr)
+        return 2
+    print(render_field(field, route=args.route == "reference"), end="")
+    return 0
+
+
 def _csv(text: str) -> list[str]:
     return [part.strip() for part in text.split(",") if part.strip()]
 
@@ -60,7 +76,13 @@ def _run(args: argparse.Namespace) -> int:
     try:
         settings = load_settings()
         spec = RunSpec.build(
-            _csv(args.arch), _csv(args.level), args.seeds, args.limit, only, args.repeats
+            _csv(args.arch),
+            _csv(args.level),
+            args.seeds,
+            args.limit,
+            only,
+            args.repeats,
+            problem=args.problem,
         )
     except ValueError as error:
         print(f"apl: {error}", file=sys.stderr)
@@ -177,7 +199,8 @@ def _continue(args: argparse.Namespace) -> int:
         print("\n".join(f"  {k:<15}{v}" for k, v in rows))
         if plan.cut_off:
             print("  a cut-off last row will be removed")
-        print("\n".join(format_limits(upper_bounds(plan.left, settings), settings)))
+        bounds = upper_bounds(plan.left, settings, plan.record.problem)
+        print("\n".join(format_limits(bounds, settings)))
         print("Run with --execute to continue it (a paid provider then costs money).")
         return 0
     key_var = required_key_var(settings.model)
@@ -262,9 +285,19 @@ def main(argv: list[str] | None = None) -> int:
     show.add_argument("--seed", required=True, type=int)
     show.add_argument("--route", help='"solution", or a route file (contracts/cli.md)')
     show.add_argument("--html", metavar="OUT", help="also write a picture; animated with --route")
+    survey = commands.add_parser("survey", help="inspect generated survey fields")
+    survey_commands = survey.add_subparsers(dest="survey_command")
+    field_show = survey_commands.add_parser("show", help="print a survey field as a text map")
+    field_show.add_argument("--level", required=True, choices=["S1", "S2", "S3"])
+    field_show.add_argument("--seed", required=True, type=int)
+    field_show.add_argument("--route", choices=["reference"], help="number the reference walk")
+    field_show.add_argument("--html", metavar="OUT", help="also write a picture")
     run = commands.add_parser("run", help="plan a run, or play it with --execute")
+    run.add_argument(
+        "--problem", default="dungeon", choices=["dungeon", "survey"], help="default: dungeon"
+    )
     run.add_argument("--arch", required=True, help="architecture names, comma-separated")
-    run.add_argument("--level", required=True, help="L1, L2, L3, comma-separated, or all")
+    run.add_argument("--level", required=True, help="the problem's levels, comma-separated, or all")
     run.add_argument("--seeds", required=True, help="the seed set: dev or test")
     run.add_argument("--limit", type=int, help="only the first K seeds of the set")
     run.add_argument("--only", help="only these seeds of the set, comma-separated")
@@ -283,6 +316,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.command == "dungeon" and args.dungeon_command == "show":
         return _show(args)
+    if args.command == "survey" and args.survey_command == "show":
+        return _survey_show(args)
     if args.command == "run":
         return _run(args)
     if args.command == "report":
@@ -291,5 +326,5 @@ def main(argv: list[str] | None = None) -> int:
         return _continue(args)
     if args.command == "serve":
         return _serve(args)
-    (dungeon if args.command == "dungeon" else parser).print_help()
+    {"dungeon": dungeon, "survey": survey}.get(args.command, parser).print_help()
     return 2

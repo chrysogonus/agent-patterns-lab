@@ -139,3 +139,11 @@ def test_required_key_var() -> None:
     assert required_key_var("anthropic:claude-haiku-5-5") == "ANTHROPIC_API_KEY"
     assert required_key_var("ollama:qwen3:8b") is None
     assert required_key_var("vllm:qwen3.5-9b") is None
+
+
+def test_record_takes_the_fingerprint_of_the_problem() -> None:
+    from apl.kit import prompt_fingerprint
+
+    settings = Settings()
+    assert settings.record() == settings.record(problem="dungeon")
+    assert settings.record()["prompt_fingerprint"] == prompt_fingerprint()
