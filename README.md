@@ -1,4 +1,4 @@
-# agent-patterns-lab
+# langgraph-architecture-lab
 
 **Same model, same tools, same world. Only the agent's graph changes.** So when one agent does
 better than another, the architecture is the reason.
