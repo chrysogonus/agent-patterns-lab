@@ -20,6 +20,7 @@ from apl.dungeon.results import (
 )
 
 MAX_SCOUTS = 4  # per episode, scout 0 included (specs/004 research R1)
+MAX_ATTEMPTS = 3  # for a retrying architecture (constitution 2.1.0, specs/007 research R1)
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,13 +30,15 @@ class LogEntry:
     action: Action
     result: ToolResult
     scout: int = 0
+    attempt: int = 1
 
     def to_dict(self) -> dict[str, object]:
-        # "scout" only when it says something, so single-agent logs stay as they were.
+        # "scout" and "attempt" only when they say something, so other logs stay as they were.
         return {
             "index": self.index,
             "step": self.step,
             **({"scout": self.scout} if self.scout else {}),
+            **({"attempt": self.attempt} if self.attempt > 1 else {}),
             "action": self.action.to_dict(),
             "result": self.result.to_dict(),
         }
@@ -51,6 +54,7 @@ class Outcome:
     budget: int
     invalid_actions: int
     log: tuple[LogEntry, ...]
+    attempts: int = 1  # the attempt the episode ended in (specs/007)
 
     @property
     def scouts(self) -> int:
@@ -77,6 +81,7 @@ class Outcome:
             "invalid_actions": self.invalid_actions,
             "budget_hit": self.budget_hit,
             **({"scouts": self.scouts} if self.scouts > 1 else {}),
+            **({"attempts": self.attempts} if self.attempts > 1 else {}),
             "log": [e.to_dict() for e in self.log],
         }
 
@@ -109,6 +114,9 @@ class Episode:
         self.end_reason: EndReason | None = None
         self.log: list[LogEntry] = []
         self.on_step: Callable[[LogEntry], None] | None = None  # an observer, e.g. the viewer
+        self.attempt = 1
+        self.max_attempts = 1  # MAX_ATTEMPTS for a retrying architecture (specs/007 R2)
+        self.on_restart: Callable[[], None] | None = None  # an observer, e.g. the viewer
 
     # The acting scout's body; scout 0's outside a call, for everything that knows one agent.
     @property
@@ -134,6 +142,20 @@ class Episode:
             return None
         self.scouts.append(Scout(self.dungeon.layout.start, []))
         return len(self.scouts) - 1
+
+    def restart(self) -> bool:
+        """The world back in its start state for the next attempt; steps and log go on.
+
+        Costs no step. Refused once the episode is over or the attempts are used up.
+        """
+        if self.end_reason is not None or self.attempt >= self.max_attempts:
+            return False
+        self.scouts = [Scout(self.dungeon.layout.start, [])]  # keys go back with the inventories
+        self.opened = set()
+        self.attempt += 1
+        if self.on_restart is not None:
+            self.on_restart()
+        return True
 
     def describe(self, scout: int = 0) -> RoomView:
         """A scout's room, as it sees it. Free: does not count as a step."""
@@ -194,6 +216,7 @@ class Episode:
             budget=d.budget,
             invalid_actions=self.invalid_actions,
             log=tuple(self.log),
+            attempts=self.attempt,
         )
 
     def _scout(self, number: int) -> Scout:
@@ -205,7 +228,7 @@ class Episode:
         self._scout(scout)
         if self.end_reason is not None:
             result = ToolResult.failure(ErrorCode.EPISODE_OVER, "The episode is over.")
-            self._append(LogEntry(len(self.log), None, action, result, scout))
+            self._append(LogEntry(len(self.log), None, action, result, scout, self.attempt))
             return result
         self.steps += 1
         self._acting = scout
@@ -221,7 +244,7 @@ class Episode:
             self.end_reason = EndReason.EXIT
         elif self.steps >= self.dungeon.budget:
             self.end_reason = EndReason.BUDGET
-        self._append(LogEntry(len(self.log), self.steps, action, result, scout))
+        self._append(LogEntry(len(self.log), self.steps, action, result, scout, self.attempt))
         return result
 
     def _append(self, entry: LogEntry) -> None:

@@ -248,6 +248,8 @@ class Viewer:
                     "started": started,
                     # Survey episodes say so; dungeon events stay as they were (specs/005).
                     **({"problem": problem, "true_total": world.true_total} if survey else {}),
+                    # A retrying architecture's cap; other events stay as they were (specs/007).
+                    **({"attempts": episode.max_attempts} if episode.max_attempts > 1 else {}),
                 },
             )
 
@@ -268,6 +270,13 @@ class Viewer:
                 )
 
             episode.on_step = on_step
+
+            def on_restart() -> None:  # A4's next attempt (specs/007 research R8)
+                frame = frame_of(episode, len(episode.log), None, None)
+                data = {"attempt": episode.attempt, "of": episode.max_attempts, "frame": frame}
+                session.emit("restart", data)
+
+            episode.on_restart = on_restart
             if session.stop_requested:
                 episode.stop()
 

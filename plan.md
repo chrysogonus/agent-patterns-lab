@@ -1,7 +1,7 @@
 # Plan
 
 > **At a glance.** Two small simulated problems (a dungeon and a survey field), one model, and
-> several hand-built LangGraph architectures, scored by code. M0–M5 are built; A3–A5 come next.
+> several hand-built LangGraph architectures, scored by code. M0–M8 are built: every architecture in §4 is in.
 > The [README](README.md) is the short tour. This file holds the design: the worlds (§2, §2b),
 > the fairness rules (§3), the architectures (§4), the metrics (§5) and the milestones (§7).
 
@@ -126,9 +126,9 @@ the repository is to learn LangGraph.
 | A1 | ReAct | The baseline: memory is the message history only | Tool node, conditional edge, loop limit | dungeon, survey |
 | A2 | Map state | Does explicit memory beat history? The explored map lives in graph state and is rendered each turn | State schema, reducers | dungeon, survey |
 | A2r | Map state with routes (`mapstate_routes`) | Does a planning aid help a small model? A2's map plus the shortest known route to each unexplored exit | Same graph as A2 | dungeon |
-| A3 | Plan-and-execute | Does planning help on L3? Planner sets subgoals, executor runs them, replanner reacts | Multiple nodes, cycles | — |
-| A4 | Reflexion | Does learning from a failed attempt pay for itself? All attempts count toward the budget | Outer retry loop, persistent notes | — |
-| A5 | Supervisor | Do subagents help or only add cost? Navigator and inventory subagents | Subgraphs, handoffs | — |
+| A3 | Plan-and-execute | Does planning help on L3? Planner sets subgoals, executor runs them, replanner reacts | Multiple nodes, cycles | dungeon, survey |
+| A4 | Reflexion | Does learning from a failed attempt pay for itself? All attempts count toward the budget | Outer retry loop, persistent notes | dungeon, survey |
+| A5 | Supervisor (`supervisor`) | Do subagents help or only add cost? A supervisor hands tasks to a navigator (look, move) and an inventory subagent (take, use) | Subgraphs, handoffs (`Command`) | dungeon |
 | A6 | Hybrid | How much of the work needs a model at all? Code searches the known map, the model picks targets | Plain Python nodes mixed with model nodes | dungeon |
 | A7 | Fan-out once (`fanout`) | Does splitting the exploration help? An orchestrator splits the dungeon once; up to 4 scouts explore on their own maps | `Send`, parallel branches, reducers | dungeon, survey |
 | A8 | Supervisor in rounds (`rounds`) | Does replanning on the merged map help the scouts? Short tasks per round, replanned on what all scouts saw | `Send` in a cycle, shared state | dungeon, survey |
@@ -184,7 +184,9 @@ Each milestone after M0 is one Spec Kit feature (`/speckit-specify` through
 | M3 | Browser viewer and A2 map state | In the browser, any level and seed can be shown and regenerated, and A1 or A2 can be watched playing it live; episodes are saved and replayable | ✅ |
 | M4 | First comparison of seven architectures (A1, A2, A2r, A6, and the orchestrators A7–A9 with several scouts) | Continuable runs, a comparison report and a written conclusion, from one dev seed per level on `openai:gpt-6-luna` (21 episodes, a first look) | ✅ |
 | M5 | Several problems and the survey field (A1, A2, A7–A9 on it) | Any survey level and seed can be shown and watched in the viewer; survey runs plan, continue and report like dungeon runs; the dungeon is unchanged | ✅ |
-| M6+ | One architecture per feature: A3, A4, A5 | Each one can be watched in the viewer and is added to the comparison on the same seeds | ⏳ |
+| M6 | A3 plan-and-execute (`plan_execute`) on both problems | It can be watched in the viewer and is added to the comparison on the same seeds | ✅ |
+| M7 | A4 Reflexion (`reflexion`) on both problems, with up to 3 attempts per episode (constitution 2.1.0) | It can be watched in the viewer and is added to the comparison on the same seeds | ✅ |
+| M8 | A5 supervisor (`supervisor`) on the dungeon | It can be watched in the viewer and is added to the comparison on the same seeds | ✅ |
 
 Paperclip comes in from M5, when several architectures can be built as parallel tickets.
 

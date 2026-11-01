@@ -9,6 +9,8 @@ from dataclasses import dataclass
 from typing import Any
 
 from apl import dungeon, survey
+from apl.dungeon.env import MAX_ATTEMPTS as DUNGEON_ATTEMPTS
+from apl.survey.env import MAX_ATTEMPTS as SURVEY_ATTEMPTS
 
 
 @dataclass(frozen=True, slots=True)
@@ -22,6 +24,7 @@ class Problem:
     start_episode: Callable[[Any], Any]
     build_kit: Callable[[Any, Any], Any]  # (episode, model) -> Kit
     prompt_fingerprint: Callable[[], str]
+    max_attempts: int  # for a retrying architecture (constitution 2.1.0, specs/007)
 
     @property
     def seed_sets(self) -> dict[str, range]:
@@ -66,6 +69,7 @@ PROBLEMS: dict[str, Problem] = {
         start_episode=dungeon.start_episode,
         build_kit=_dungeon_kit,
         prompt_fingerprint=_dungeon_fingerprint,
+        max_attempts=DUNGEON_ATTEMPTS,
     ),
     "survey": Problem(
         name="survey",
@@ -77,6 +81,7 @@ PROBLEMS: dict[str, Problem] = {
         start_episode=survey.start_episode,
         build_kit=_survey_kit,
         prompt_fingerprint=_survey_fingerprint,
+        max_attempts=SURVEY_ATTEMPTS,
     ),
 }
 DEFAULT = "dungeon"

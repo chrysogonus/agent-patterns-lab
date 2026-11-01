@@ -15,6 +15,9 @@ ARCHITECTURES: dict[str, str] = {
     "fanout": "apl.arch.fanout",
     "rounds": "apl.arch.rounds",
     "blackboard": "apl.arch.blackboard",
+    "plan_execute": "apl.arch.plan_execute",
+    "reflexion": "apl.arch.reflexion",
+    "supervisor": "apl.arch.supervisor",
 }
 
 # Which problems each architecture plays (specs/005 research R15).
@@ -27,7 +30,13 @@ SUPPORTS: dict[str, frozenset[str]] = {
     "fanout": _BOTH,
     "rounds": _BOTH,
     "blackboard": _BOTH,
+    "plan_execute": _BOTH,
+    "reflexion": _BOTH,
+    "supervisor": frozenset({"dungeon"}),  # its inventory helper needs items (specs/008)
 }
+
+# Architectures that may restart the world, up to 3 attempts (constitution 2.1.0, specs/007 R2).
+RETRYING: frozenset[str] = frozenset({"reflexion"})
 
 Play = Callable[[Kit], None]
 

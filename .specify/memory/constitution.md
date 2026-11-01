@@ -1,11 +1,8 @@
 <!--
 Sync Impact Report (remove before committing)
-- Version: 1.1.0 → 2.0.0 (MAJOR: principle II redefined)
-- Modified principles:
-  - I. Identical Conditions: applies within a problem
-  - II. Tool-Only World Access: each problem's own tools instead of the dungeon's four
-- Modified sections: Experiment Setup (per problem: dungeon, survey field); Governance (no
-  comparison across problems)
+- Version: 2.0.0 → 2.1.0 (MINOR: Experiment Setup materially expanded with the attempt rule)
+- Modified principles: none
+- Modified sections: Experiment Setup (new "Attempts" bullet, specs/007 research R9)
 - Added sections: none
 - Removed sections: none
 - Templates: none need changes (they read the constitution at runtime)
@@ -66,6 +63,11 @@ Rationale: runs cost money, and dry runs must be safe by default.
   Code computes a reference walk that enters every cell; it is the shortest on open levels and is
   marked as a reference, not an optimum, on walled ones. The step budget is 3× the reference
   steps (the walk plus the submission). Levels S1–S3 are defined in plan.md.
+- **Attempts**: an architecture registered as retrying (A4) may restart the world up to 3
+  attempts per episode. A restart puts the world back in its start state and costs no step; every
+  tool call of every attempt counts toward the one budget. On the survey field, a wrong total ends
+  such an architecture's attempt while attempts are left, with a result that says only that it was
+  wrong. Every other architecture has one attempt.
 - A per-run token cap stops an episode that loops.
 - Changing a level definition or the seed split invalidates earlier results for comparison.
 - Stack: Python 3.12, uv, LangGraph 1.2.x, LangChain `init_chat_model`, pytest, ruff, mypy.
@@ -90,4 +92,4 @@ and review MUST check compliance. An unavoidable violation MUST be recorded in t
 Complexity Tracking table with a justification. Results from different problems MUST NOT be
 combined in one comparison.
 
-**Version**: 2.0.0 | **Ratified**: 2026-10-28 | **Last Amended**: 2026-11-01
+**Version**: 2.1.0 | **Ratified**: 2026-10-28 | **Last Amended**: 2026-11-01

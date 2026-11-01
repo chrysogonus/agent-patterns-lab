@@ -49,6 +49,8 @@ class EpisodeRow:
     cells: int | None = None
     parallel_turns: int | None = None
     reference_is_optimal: bool | None = None
+    # specs/007: attempts used by a retrying architecture; None for the others and older rows.
+    attempts: int | None = None
 
     @classmethod
     def completed(
@@ -61,6 +63,7 @@ class EpisodeRow:
         latency_s: float,
         arch_error: str | None,
         problem: str = "dungeon",
+        attempts: int | None = None,
     ) -> "EpisodeRow":
         return cls(
             **_identity(key, run_id, seed_set),
@@ -86,6 +89,7 @@ class EpisodeRow:
             scouts=outcome.scouts,
             orchestrator_calls=meter.orchestrator_calls,
             **_survey(outcome),
+            attempts=attempts,
         )
 
     @classmethod
@@ -141,7 +145,7 @@ class EpisodeRow:
             raise ValueError(f"a row must be an object, got {data!r}")
         data = {
             "output_limit_hits": None, "scouts": None, "orchestrator_calls": None,
-            "problem": "dungeon", **dict.fromkeys(_SURVEY_FIELDS), **data,
+            "problem": "dungeon", **dict.fromkeys(_SURVEY_FIELDS), "attempts": None, **data,
         }  # fmt: skip
         names = [f.name for f in fields(cls)]
         odd = sorted(set(names) ^ set(data))
@@ -193,6 +197,7 @@ _ROW_TYPES.update(
     cells=int,
     parallel_turns=int,
     reference_is_optimal=bool,
+    attempts=int,
 )
 _SURVEY_FIELDS = (
     "submitted_total", "true_total", "cells_seen", "cells", "parallel_turns",
@@ -201,7 +206,7 @@ _SURVEY_FIELDS = (
 _NULLABLE = {
     "success", "end_reason", "steps", "efficiency", "invalid_actions", "budget_hit",
     "token_cap_hit", "output_limit_hits", "input_tokens", "output_tokens", "arch_error", "error",
-    "scouts", "orchestrator_calls", *_SURVEY_FIELDS,
+    "scouts", "orchestrator_calls", *_SURVEY_FIELDS, "attempts",
 }  # fmt: skip
 _ALLOWED: dict[str, set[str]] = {
     "status": {"completed", "error"},

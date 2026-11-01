@@ -111,11 +111,13 @@ is used in the docs, and the name column is what you pass to `--arch`.
 | A1 | `react` | The model calls tools in a loop and remembers only through its message history | ✓ | ✓ |
 | A2 | `mapstate` | The explored map lives in graph state and is shown to the model every turn | ✓ | ✓ |
 | A2r | `mapstate_routes` | A2, plus the shortest known route to each unexplored exit | ✓ | |
+| A3 | `plan_execute` | A planner writes subgoals, A2's agent carries them out, a replanner reacts to each report | ✓ | ✓ |
+| A4 | `reflexion` | A2 that tries again: after a failed attempt it writes a note, the world restarts, all steps count | ✓ | ✓ |
+| A5 | `supervisor` | A supervisor hands tasks to a navigator (look, move) and an inventory helper (take, use), each a subgraph on A2's map | ✓ | |
 | A6 | `hybrid` | Code keeps the map and walks the routes; the model only picks where to go | ✓ | |
 | A7 | `fanout` | An orchestrator sends out up to 4 scouts once; each explores alone | ✓ | ✓ |
 | A8 | `rounds` | An orchestrator gives scouts short tasks and replans on the map they all saw | ✓ | ✓ |
 | A9 | `blackboard` | No planner: scouts take turns on one shared map and claim unexplored exits | ✓ | ✓ |
-| A3–A5 | | Plan-and-execute, Reflexion, supervisor with subagents | planned | |
 
 ### One agent: where the memory lives
 
@@ -293,7 +295,9 @@ These optional settings are the same for every architecture in a run:
 1. Within a problem, every architecture gets the same model, temperature, base prompt, tool
    descriptions and step budget.
 2. Architectures see the world only through the tools. A test enforces this.
-3. Only the graph may differ: nodes, edges, state and what each node is told.
+3. Only the graph may differ: nodes, edges, state and what each node is told. A retrying
+   architecture (A4) may restart the world up to 3 times per episode, and every attempt's steps
+   count toward the one budget.
 4. Results are reported on test seeds only, with repeats and their spread.
 5. No paid call happens without `--execute`.
 
@@ -308,7 +312,9 @@ The full rules are in [`.specify/memory/constitution.md`](.specify/memory/consti
 | ✅ | M3 | The browser viewer, A2 map state |
 | ✅ | M4 | Scouts (A7–A9), A2r, A6, `apl continue`, the first comparison |
 | ✅ | M5 | The survey field; A1, A2 and A7–A9 play it |
-| ⏳ | M6+ | A3 plan-and-execute, A4 Reflexion, A5 supervisor |
+| ✅ | M6 | A3 plan-and-execute on both problems |
+| ✅ | M7 | A4 Reflexion on both problems; attempts and restarts in both problems |
+| ✅ | M8 | A5 supervisor on the dungeon |
 
 The full design is in [`plan.md`](plan.md).
 

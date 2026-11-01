@@ -189,6 +189,11 @@ def _survey_spread_row(arch: str, level: str, rows: Sequence[EpisodeRow]) -> str
     )
 
 
+def _attempts_row(arch: str, level: str, rows: Sequence[EpisodeRow]) -> str:
+    used = [r.attempts or 1 for r in rows]  # rows without attempts had one (specs/007)
+    return f"| {arch} | {level} | {statistics.median(used):g} | {max(used)} |"
+
+
 def render(runs: Sequence[LoadedRun]) -> str:
     notes = check_compatible(runs)
     first = runs[0].record
@@ -236,6 +241,15 @@ def render(runs: Sequence[LoadedRun]) -> str:
     from apl.runner.compare import render_comparison  # it uses this module's helpers
 
     lines += render_comparison(runs, completed)
+    if any((r.attempts or 1) > 1 for r in completed):  # specs/007 contracts/attempts.md
+        lines += [
+            "",
+            "## Attempts",
+            "",
+            "| Arch | Level | Attempts (median) | Attempts (max) |",
+            "| --- | --- | --- | --- |",
+            *(_attempts_row(arch, level, groups[arch, level]) for arch, level in keys),
+        ]
     if survey and any(r.record.repeats > 1 for r in runs):
         lines += [
             "",

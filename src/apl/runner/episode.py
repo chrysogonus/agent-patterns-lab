@@ -12,6 +12,7 @@ from langchain_core.language_models import BaseChatModel
 
 from apl import problems
 from apl.kit import EpisodeEnded, Kit
+from apl.runner import registry
 from apl.runner.meter import Meter, Transcript
 from apl.runner.results import EpisodeRow
 from apl.runner.settings import Settings
@@ -70,6 +71,9 @@ def play_episode(
     chosen = problems.get(problem)
     world = chosen.generate(key.level, key.seed)
     episode = chosen.start_episode(world)
+    retrying = key.arch in registry.RETRYING
+    if retrying:  # before the kit is built, which reads the cap (specs/007 R2)
+        episode.max_attempts = chosen.max_attempts
     if on_episode is not None:
         on_episode(episode)
     meter = Meter(episode, settings.token_cap)
@@ -101,6 +105,7 @@ def play_episode(
     latency = time.perf_counter() - started
     outcome = episode.outcome()
     row = EpisodeRow.completed(
-        key, run_id, seed_set, outcome, meter, latency, arch_error, problem=chosen.name
-    )
+        key, run_id, seed_set, outcome, meter, latency, arch_error, problem=chosen.name,
+        attempts=outcome.attempts if retrying else None,
+    )  # fmt: skip
     return EpisodeResult(row, outcome, meter.transcript)

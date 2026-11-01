@@ -47,6 +47,7 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
 .room { fill: transparent; pointer-events: none; }
 .room.fog { fill: var(--fog); }
 #trail { fill: none; stroke: var(--trail); stroke-width: 3; stroke-opacity: 0.5; }
+#trail-past { fill: none; stroke: var(--trail); stroke-width: 2; stroke-opacity: 0.3; stroke-dasharray: 4 4; }
 #agent, .scout-agent { fill: var(--agent); transition: cx var(--move, 0.25s), cy var(--move, 0.25s); }
 .scout-trail { fill: none; stroke-width: 3; stroke-opacity: 0.5; }
 .s1 { fill: var(--scout1); stroke: var(--scout1); } .s2 { fill: var(--scout2); stroke: var(--scout2); }
@@ -190,7 +191,12 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
     const frames = S.frames.length ? S.frames : [S.dungeon.solution[0]];
     S.current = Math.max(0, Math.min(frames.length - 1, n));
     const f = frames[S.current];
-    const shown = frames.slice(0, S.current + 1);
+    const all = frames.slice(0, S.current + 1);
+    // A4's attempts (specs/007): the trail and fog of the current attempt; earlier ones dashed.
+    const attempt = f.attempt || 1;
+    const first = all.findIndex((g) => (g.attempt || 1) === attempt);
+    const shown = all.slice(first), past = all.slice(0, first);
+    pastTrail().setAttribute("points", past.map((g) => center(positionOf(g, 0)).join(",")).join(" "));
     const count = f.scouts ? f.scouts.length : 1;
     document.querySelectorAll(".scout-agent, .scout-trail").forEach((x) => { if (Number(x.dataset.scout) >= count) x.remove(); });
     S.drawn = S.drawn || [];
@@ -226,6 +232,15 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
     stats();
   }
 
+  function pastTrail() {
+    let line = $("trail-past");
+    if (!line) {
+      line = document.createElementNS(SVGNS, "polyline");
+      line.id = "trail-past";
+      $("trail").before(line);
+    }
+    return line;
+  }
   // Scout i's room in a frame; frames of single-agent episodes have no "scouts".
   function positionOf(g, i) {
     if (g.scouts) return g.scouts[i] ? g.scouts[i].position : null;
@@ -259,6 +274,7 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
     const steps = Math.max(0, ...S.frames.slice(0, S.current + 1).map((g) => g.counted || 0));
     const best = isSurvey() ? "reference" : "optimal";
     rows.push([isSurvey() ? "Field" : "Dungeon", `${d.level} seed ${d.seed}`]);
+    if (S.attempts) rows.push(["Attempt", `${(f && f.attempt) || 1} / ${S.attempts}`]);
     rows.push(["Steps", S.episode ? `${steps} / ${d.budget} (${best} ${d.optimal_steps})` : `budget ${d.budget}, ${best} ${d.optimal_steps}`]);
     if (isSurvey()) {
       rows.push(["True total", String(d.true_total)]);
@@ -376,6 +392,15 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
     }
     if ($("follow").checked) follow(); else render(S.current);
   }
+  function onRestart(data) {
+    S.attempts = data.of;
+    S.frames.push(data.frame);
+    const node = el("div", null, "card");
+    node.append(el("h3", `Attempt ${data.attempt} starts`));
+    node.append(el("div", "The world is back at the start; the steps so far still count.", "waiting"));
+    $("panel").append(node);
+    if ($("follow").checked) follow(); else render(S.current);
+  }
   // Steps can arrive in a burst (A6's code walks a whole route between two model calls), so the
   // map walks through them one room at a time, faster the more are waiting: 50 waiting steps take
   // about 1.5 s (SC-003). FRAME_MS keeps it to one room per drawn frame, so no glide cuts a corner.
@@ -413,7 +438,7 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
   async function attach(id, live) {
     if (S.source) S.source.close();
     Object.assign(S, { episode: id, frames: [], current: 0, turns: new Map(), start: null, end: null,
-      waitingSince: null, startedAt: null });
+      waitingSince: null, startedAt: null, attempts: null });
     $("panel").replaceChildren();
     $("follow").checked = live;
     $("stop").disabled = !live;
@@ -422,6 +447,7 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
     source.addEventListener("start", async (e) => {
       const data = JSON.parse(e.data);
       S.start = data;
+      S.attempts = data.attempts || null;
       S.startedAt = Date.parse(data.started) || Date.now();
       S.frames = [data.frame]; // before the await: steps may arrive while the dungeon loads
       const problem = data.problem || "dungeon";
@@ -433,6 +459,7 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
     source.addEventListener("thinking", (e) => onThinking(JSON.parse(e.data)));
     source.addEventListener("turn", (e) => onTurn(JSON.parse(e.data)));
     source.addEventListener("step", (e) => onStep(JSON.parse(e.data)));
+    source.addEventListener("restart", (e) => onRestart(JSON.parse(e.data)));
     source.addEventListener("stopping", () => message("Stopping after the current model turn…", true));
     source.addEventListener("end", (e) => onEnd(JSON.parse(e.data)));
     // A saved episode is complete once sent; a live one reconnects and resumes after its last id.

@@ -43,7 +43,10 @@ def test_the_m4_run_has_21_episodes() -> None:  # specs/004 FR-011
 def test_known_architectures_are_checked() -> None:
     with pytest.raises(
         ValueError,
-        match="registered: blackboard, fanout, hybrid, mapstate, mapstate_routes, react, rounds",
+        match=(
+            "registered: blackboard, fanout, hybrid, mapstate, mapstate_routes, plan_execute, "
+            "react, reflexion, rounds, supervisor"
+        ),
     ):
         _spec(architectures=["nope"])
     spec = RunSpec.build(["loop"], ["L1"], "dev", known={"loop"})

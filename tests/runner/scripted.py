@@ -108,12 +108,8 @@ def _state(text: str) -> tuple[str, str, int] | None:
     return here[1], here[2], len(opened[1].split("; ")) if opened else 0
 
 
-def walk_solution(dungeon: Dungeon) -> Strategy:
-    """For map-showing agents: the solution's next action from the state the last map shows.
-
-    It reads no counter, so parallel scouts get the same answer in any order. Off the solution's
-    path it answers with text, which ends a scout's task.
-    """
+def next_action(dungeon: Dungeon) -> Callable[[list[BaseMessage]], Action | None]:
+    """The solution's next action from the state the last message's map shows, if on its path."""
     episode = start_episode(dungeon)
     states: dict[tuple[str, str, int], Action] = {}
     for action in dungeon.solution.actions:
@@ -121,9 +117,23 @@ def walk_solution(dungeon: Dungeon) -> Strategy:
         states[room.label, ", ".join(room.inventory) or "nothing", len(episode.opened)] = action
         call(episode, action)
 
-    def strategy(messages: list[BaseMessage]) -> AIMessage:
+    def find(messages: list[BaseMessage]) -> Action | None:
         state = _state(str(messages[-1].content))
-        action = states.get(state) if state else None
+        return states.get(state) if state else None
+
+    return find
+
+
+def walk_solution(dungeon: Dungeon) -> Strategy:
+    """For map-showing agents: the solution's next action from the state the last map shows.
+
+    It reads no counter, so parallel scouts get the same answer in any order. Off the solution's
+    path it answers with text, which ends a scout's task.
+    """
+    find = next_action(dungeon)
+
+    def strategy(messages: list[BaseMessage]) -> AIMessage:
+        action = find(messages)
         if action is None:
             return AIMessage("Nothing to do here.")
         return tool_calls((action.tool, _args(action)))
