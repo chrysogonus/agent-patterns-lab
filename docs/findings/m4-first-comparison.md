@@ -3,6 +3,23 @@
 > Development result (dev seeds). Must not be reported. One episode per architecture and level:
 > these are tendencies from a first look, not measurements.
 
+## In short
+
+| Question | Tendency |
+| --- | --- |
+| Does an explicit map beat message history? (A1 vs A2) | No sign of it with this model |
+| Does a route aid help? (A2 vs A2r) | No sign of it |
+| How much needs a model? (A2r vs A6) | The clearest result: code walking the routes made A6 cheaper and more efficient on L2 and L3 |
+| Do several scouts help? (A7–A9 vs A2) | Not in these small dungeons: 2–5× the tokens and more steps; A7 failed L3 |
+
+```mermaid
+xychart-beta
+    title "Tokens per episode on L3 (lower is cheaper)"
+    x-axis [react, mapstate, routes, hybrid, fanout, rounds, blackboard]
+    y-axis "thousand tokens" 0 --> 140
+    bar [72, 46, 50, 16, 127, 95, 129]
+```
+
 ## Questions
 
 1. Does explicit memory beat history? (A1 ReAct vs A2 map state)
@@ -118,4 +135,4 @@ the orchestrators' extra cost are the patterns most worth checking first.
   after commit `7818949`; the comparison section could first gain the min–max across repeats.
 - Try larger or sparser dungeons where parallel scouts could save dead ends, and a fan-out that
   limits each scout's share of the budget more tightly.
-- Build A3–A5 (M5+) and add them on the same seeds.
+- Build A3–A5 (M6+) and add them on the same seeds.

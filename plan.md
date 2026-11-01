@@ -1,5 +1,10 @@
 # Plan
 
+> **At a glance.** Two small simulated problems (a dungeon and a survey field), one model, and
+> several hand-built LangGraph architectures, scored by code. M0–M5 are built; A3–A5 come next.
+> The [README](README.md) is the short tour. This file holds the design: the worlds (§2, §2b),
+> the fairness rules (§3), the architectures (§4), the metrics (§5) and the milestones (§7).
+
 ## 1. Goal
 
 Learn how agent architectures behave by building several of them for one task and measuring
@@ -171,15 +176,15 @@ efficiency, tokens and the spread across repeats.
 Each milestone after M0 is one Spec Kit feature (`/speckit-specify` through
 `/speckit-implement`).
 
-| Milestone | Scope | Done when |
-| --- | --- | --- |
-| M0 | Repository, README, this plan, Spec Kit for Claude Code and Codex | `specify` is set up for both agents |
-| M1 | Generator, environment, tools, solver. No model | Tests show every generated dungeon is solvable and the solver finds the shortest solution |
-| M2 | Runner, results format, report, A1 ReAct | One dry run and one small paid run produce a report |
-| M3 | Browser viewer and A2 map state | In the browser, any level and seed can be shown and regenerated, and A1 or A2 can be watched playing it live; episodes are saved and replayable |
-| M4 | First comparison of seven architectures (A1, A2, A2r, A6, and the orchestrators A7–A9 with several scouts) | Continuable runs, a comparison report and a written conclusion, from one dev seed per level on `openai:gpt-6-luna` (21 episodes, a first look) |
-| M5 | Several problems and the survey field (A1, A2, A7–A9 on it) | Any survey level and seed can be shown and watched in the viewer; survey runs plan, continue and report like dungeon runs; the dungeon is unchanged |
-| M6+ | One architecture per feature: A3, A4, A5 | Each one can be watched in the viewer and is added to the comparison on the same seeds |
+| Milestone | Scope | Done when | Status |
+| --- | --- | --- | :---: |
+| M0 | Repository, README, this plan, Spec Kit for Claude Code and Codex | `specify` is set up for both agents | ✅ |
+| M1 | Generator, environment, tools, solver. No model | Tests show every generated dungeon is solvable and the solver finds the shortest solution | ✅ |
+| M2 | Runner, results format, report, A1 ReAct | One dry run and one small paid run produce a report | ✅ |
+| M3 | Browser viewer and A2 map state | In the browser, any level and seed can be shown and regenerated, and A1 or A2 can be watched playing it live; episodes are saved and replayable | ✅ |
+| M4 | First comparison of seven architectures (A1, A2, A2r, A6, and the orchestrators A7–A9 with several scouts) | Continuable runs, a comparison report and a written conclusion, from one dev seed per level on `openai:gpt-6-luna` (21 episodes, a first look) | ✅ |
+| M5 | Several problems and the survey field (A1, A2, A7–A9 on it) | Any survey level and seed can be shown and watched in the viewer; survey runs plan, continue and report like dungeon runs; the dungeon is unchanged | ✅ |
+| M6+ | One architecture per feature: A3, A4, A5 | Each one can be watched in the viewer and is added to the comparison on the same seeds | ⏳ |
 
 Paperclip comes in from M5, when several architectures can be built as parallel tickets.
 
@@ -187,21 +192,20 @@ Paperclip comes in from M5, when several architectures can be built as parallel 
 
 - Dry run by default; `--execute` to spend money.
 - Start with small matrices and grow them only once results look stable.
-- A per-run token cap stops an episode that loops.
+- A per-episode token cap (`APL_TOKEN_CAP`) stops an episode that loops.
 
 ## 9. Decisions and open questions
 
 Decided:
 
 - Default model (since M3): `vllm:qwen3.5-9b`, Qwen3.5 9B on a local vLLM server (free, about
-  2 s per call, 8,192-token context set on the server), through `APL_MODEL` and `APL_BASE_URL`.
+  2 s per call, 32,768-token context set on the server), through `APL_MODEL` and `APL_BASE_URL`.
   `ollama:qwen3:8b` (the M2 default, 16,384-token `APL_NUM_CTX`) and `openai:gpt-6-luna` remain
   options. Runs with different models are never combined.
 - The subscription gateway (`~/workspace/subscription-gateway`) is used wherever a step needs no
   tool calls. It rejects `tools` and runs the request through an agent CLI, so it never runs
   experiment episodes: every architecture must call the same raw model (constitution I).
 - License: MIT.
-
 - A second problem (since M5): the survey field, where splitting the work should pay off
   (specs/005). Further boards are sketched in the problem mock-ups (signal trace, combination
   vault, workshop, warehouse robots, rune floor), one per later feature.
