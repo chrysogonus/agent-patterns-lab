@@ -18,10 +18,11 @@ REQUIRED_CHECKS="${REQUIRED_CHECKS:-}"
 step() { printf '\n==> %s\n' "$*"; }
 info() { printf '    %s\n' "$*"; }
 
-# Send a JSON body read from stdin.
+# Send a JSON body read from stdin; an empty path means the repository itself.
 api_json() {
   local method="$1" path="$2"
-  gh api --method "$method" -H "Accept: application/vnd.github+json" "repos/$REPO/$path" --input - >/dev/null
+  gh api --method "$method" -H "Accept: application/vnd.github+json" \
+    "repos/$REPO${path:+/$path}" --input - >/dev/null
 }
 
 step "Preflight"
