@@ -25,8 +25,12 @@ from apl.runner.run import code_version, default_model_factory, package_versions
 from apl.runner.settings import Settings
 from apl.runner.spec import EpisodeKey
 from apl.runner.vllm import with_server_context
+from apl.signal_trace import Pipe
+from apl.signal_trace import start_episode as start_signal
+from apl.signal_trace.frames import reference_frames as reference_probes
+from apl.signal_trace.frames import snapshot as signal_snapshot
+from apl.signal_trace.render_svg import svg as pipe_svg
 from apl.survey import Field
-from apl.survey import generate as generate_field
 from apl.survey.frames import reference_frames
 from apl.survey.frames import snapshot as survey_snapshot
 from apl.survey.render_svg import CELL as FIELD_CELL
@@ -38,7 +42,7 @@ Response = tuple[int, str, bytes]
 LOCAL_PROVIDERS = ("ollama:", "vllm:")  # no cost, so no --execute needed (research R8)
 MODELS = ("vllm:qwen3.5-9b", "openai:gpt-6-luna")  # the page's model switch, besides APL_MODEL
 # Checked before any file access, so an id can never point outside results/viewer/.
-EPISODE_ID = re.compile(r"\d{8}-\d{6}-[a-z0-9_]+-[LS][1-3]-\d+(-\d+)?")
+EPISODE_ID = re.compile(r"\d{8}-\d{6}-[a-z0-9_]+-[LST][1-3]-\d+(-\d+)?")
 
 
 def json_response(status: int, data: object) -> Response:
@@ -154,6 +158,26 @@ class Viewer:
         }
         return json_response(200, data)
 
+    def signal(self, level: str, seed: str) -> Response:
+        """A pipe for the page (specs/009 contracts/viewer.md); test seeds are refused."""
+        found = parse_pipe(level, seed)
+        if not isinstance(found, Pipe):
+            return found
+        data: dict[str, Any] = {
+            "problem": "signal",
+            "level": level,
+            "seed": found.seed,
+            "segments": found.segments,
+            "runs": _runs(found),
+            "broken": found.broken,
+            "budget": found.budget,
+            "optimal_steps": found.reference_steps,
+            "reference_is_optimal": found.reference_is_optimal,
+            "svg": pipe_svg(found, animated=True),
+            "solution": reference_probes(found),
+        }
+        return json_response(200, data)
+
     # ---------- episodes ----------
 
     def _play(self, arch: str) -> Play:
@@ -177,7 +201,8 @@ class Viewer:
             return error(400, f"unknown model {model!r} (models: {', '.join(self.choices())})")
         if not isinstance(seed, int) or isinstance(seed, bool):
             return error(400, f"seed must be a whole number ≥ 0, got {seed!r}")
-        world = (parse_field if problem == "survey" else parse_dungeon)(str(level), str(seed))
+        parse = {"survey": parse_field, "signal": parse_pipe}.get(problem, parse_dungeon)
+        world = parse(str(level), str(seed))
         if isinstance(world, tuple):
             return world
         if (reason := self.cannot_run_reason(chosen.model)) is not None:
@@ -225,15 +250,21 @@ class Viewer:
         started = datetime.now().astimezone().isoformat(timespec="seconds")
         record = settings.record(problem)
         survey = problem == "survey"
+        signal = problem == "signal"  # specs/009
 
         def frame_of(episode: Any, index: int, action: Any, result: Any) -> dict[str, Any]:
             if survey:
                 return survey_snapshot(episode, index, action, result)
+            if signal:
+                return signal_snapshot(episode, index, action, result)
             return snapshot(episode, index, action, result).to_dict()
 
         def on_episode(episode: Any) -> None:
             session.episode = episode
-            world = episode.field if survey else episode.dungeon
+            if signal:
+                world = episode.pipe
+            else:
+                world = episode.field if survey else episode.dungeon
             session.emit(
                 "start",
                 {
@@ -248,6 +279,11 @@ class Viewer:
                     "started": started,
                     # Survey episodes say so; dungeon events stay as they were (specs/005).
                     **({"problem": problem, "true_total": world.true_total} if survey else {}),
+                    **(
+                        {"problem": problem, "segments": world.segments, "broken": world.broken}
+                        if signal
+                        else {}
+                    ),
                     # A retrying architecture's cap; other events stay as they were (specs/007).
                     **({"attempts": episode.max_attempts} if episode.max_attempts > 1 else {}),
                 },
@@ -309,7 +345,7 @@ class Viewer:
                 "row": row,
                 "error": trouble,
                 "arch": key.arch,
-                **({"problem": problem} if survey else {}),
+                **({"problem": problem} if survey or signal else {}),
                 "level": key.level,
                 "seed": key.seed,
                 "settings": record,
@@ -404,7 +440,19 @@ class Viewer:
 
 def parse_field(level: str, seed: str) -> Field | Response:
     """The survey field for a request, or the error response; test seeds are refused."""
-    chosen = problems.get("survey")
+    found: Field | Response = _parse_world("survey", level, seed)
+    return found
+
+
+def parse_pipe(level: str, seed: str) -> Pipe | Response:
+    """The signal-trace pipe for a request, or the error response; test seeds are refused."""
+    found: Pipe | Response = _parse_world("signal", level, seed)
+    return found
+
+
+def _parse_world(problem: str, level: str, seed: str) -> Any:
+    """A problem's world for a request, or the error response (specs/005, specs/009)."""
+    chosen = problems.get(problem)
     if level not in chosen.levels:
         return error(400, f"unknown level {level!r} (levels: {', '.join(sorted(chosen.levels))})")
     try:
@@ -415,7 +463,14 @@ def parse_field(level: str, seed: str) -> Field | Response:
         return error(
             403, f"seed {number} is a test seed; test seeds are reserved for reported results"
         )
-    return generate_field(level, number)
+    return chosen.generate(level, number)
+
+
+def _runs(pipe: Pipe) -> list[object]:
+    """The layout's runs as the agent sees them in its free start view."""
+    runs = start_signal(pipe).describe().to_dict()["runs"]
+    assert isinstance(runs, list)
+    return runs
 
 
 def parse_dungeon(level: str, seed: str) -> Dungeon | Response:

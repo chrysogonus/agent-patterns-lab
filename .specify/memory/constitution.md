@@ -1,13 +1,3 @@
-<!--
-Sync Impact Report (remove before committing)
-- Version: 2.0.0 → 2.1.0 (MINOR: Experiment Setup materially expanded with the attempt rule)
-- Modified principles: none
-- Modified sections: Experiment Setup (new "Attempts" bullet, specs/007 research R9)
-- Added sections: none
-- Removed sections: none
-- Templates: none need changes (they read the constitution at runtime)
-- Deferred: none
--->
 # agent-patterns-lab Constitution
 
 ## Core Principles
@@ -21,9 +11,10 @@ Rationale: any difference in results must come from the architecture alone.
 
 ### II. Tool-Only World Access
 Architectures MUST perceive and act on a problem only through that problem's tools: the dungeon's
-`look`, `move`, `take` and `use`; the survey field's `look`, `move` and `submit`. They MUST NOT
-import, call or read environment internals, generators, solvers or reference walks. That includes
-the shortest solution, the full map, the reference walk and the true deposit count. Plain-code
+`look`, `move`, `take` and `use`; the survey field's `look`, `move` and `submit`; the signal
+trace's `look`, `probe` and `submit`. They MUST NOT import, call or read environment internals,
+generators, solvers or reference walks. That includes the shortest solution, the full map, the
+reference walk, the true deposit count, the broken segment and the reference probes. Plain-code
 nodes (for example A6) are bound by the same rule: they can work only with what earlier tool
 results revealed.
 Rationale: an architecture that peeks is not solving the task being measured.
@@ -63,11 +54,20 @@ Rationale: runs cost money, and dry runs must be safe by default.
   Code computes a reference walk that enters every cell; it is the shortest on open levels and is
   marked as a reference, not an optimum, on walled ones. The step budget is 3× the reference
   steps (the walk plus the submission). Levels S1–S3 are defined in plan.md.
+- **Signal trace**: pipes of numbered segments are generated from a seed; each segment is fed from
+  the source S or from one other segment, and exactly one segment is broken. A probe answer is
+  always true, and the layout is given free at the start. Code computes a reference: the
+  worst-case probes of code's own probe strategy on that layout, plus one submission. On straight
+  levels the strategy is bisection, the optimum there; elsewhere the reference is marked as a
+  reference, not an optimum. The step budget is the larger of 3× the reference and a full
+  probe-by-probe scan (every segment but one probed, plus one submission). Levels T1–T3 are
+  defined in plan.md.
 - **Attempts**: an architecture registered as retrying (A4) may restart the world up to 3
   attempts per episode. A restart puts the world back in its start state and costs no step; every
-  tool call of every attempt counts toward the one budget. On the survey field, a wrong total ends
-  such an architecture's attempt while attempts are left, with a result that says only that it was
-  wrong. Every other architecture has one attempt.
+  tool call of every attempt counts toward the one budget. On the survey field a wrong total, and
+  on the signal trace a wrong submitted segment, ends such an architecture's attempt while attempts
+  are left, with a result that says only that it was wrong. Every other architecture has one
+  attempt.
 - A per-run token cap stops an episode that loops.
 - Changing a level definition or the seed split invalidates earlier results for comparison.
 - Stack: Python 3.12, uv, LangGraph 1.2.x, LangChain `init_chat_model`, pytest, ruff, mypy.
@@ -92,4 +92,4 @@ and review MUST check compliance. An unavoidable violation MUST be recorded in t
 Complexity Tracking table with a justification. Results from different problems MUST NOT be
 combined in one comparison.
 
-**Version**: 2.1.0 | **Ratified**: 2026-10-28 | **Last Amended**: 2026-11-01
+**Version**: 2.2.0 | **Ratified**: 2026-10-28 | **Last Amended**: 2026-11-02

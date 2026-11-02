@@ -251,3 +251,54 @@ def test_dungeon_and_survey_runs_are_not_combined(tmp_path: Path) -> None:
         match=r"^these runs are on different problems \(dungeon, survey\); report them separately$",
     ):
         check_compatible([load_run(dungeon), load_run(survey)])
+
+
+def _signal(arch: str, seed: int, repeat: int, submitted: int | None, **kw: Any) -> dict[str, Any]:
+    right = submitted == 22
+    probes = kw.pop("probes", 6)
+    return _row(
+        seed, repeat, kw.pop("steps", probes + 1), arch=arch, level="T2", problem="signal",
+        success=right, end_reason="submitted" if submitted is not None else "budget",
+        budget_hit=submitted is None, optimal_steps=7, budget=64, submitted_segment=submitted,
+        broken_segment=22, segments=64, probes=probes, wasted_probes=kw.pop("wasted", 0),
+        reference_is_optimal=True, input_tokens=900, output_tokens=100, **kw,
+    )  # fmt: skip
+
+
+def test_the_signal_report(tmp_path: Path) -> None:  # specs/009 US3 4
+    rows = [
+        _signal("react", 1000, 1, 22, probes=21, wasted=3),
+        _signal("react", 1000, 2, 22, probes=13),
+        _signal("react", 1000, 3, None, probes=60, steps=64, wasted=9),
+        _signal("hybrid", 1000, 1, 22), _signal("hybrid", 1000, 2, 22),
+        _signal("hybrid", 1000, 3, 22),
+        _signal("mapstate", 1000, 1, 22, probes=9), _signal("mapstate", 1000, 2, 22, probes=9),
+        _signal("mapstate", 1000, 3, 21, probes=9),
+    ]  # fmt: skip
+    path = _write(
+        tmp_path / "run-t", rows, problem="signal", architectures=["react", "mapstate", "hybrid"],
+        levels=["T2"], seeds=[1000],
+    )  # fmt: skip
+    text = render([load_run(path)])
+    assert text.startswith("# Report: hybrid, mapstate, react on the signal trace\n")
+    assert (
+        "| Arch | Level | Episodes | Right | Probes (median) | Wasted (median) "
+        "| Efficiency (median) | Budget hit | Tokens (median) | Latency (median) |"
+    ) in text
+    # react: right 2 of 3; probes 21, 13, 60 -> 21; wasted 3, 0, 9 -> 3; efficiency 7/22, 7/14.
+    assert "| react | T2 | 3 | 67% | 21 | 3 | 0.41 | 33% | 1,000 | 1.0s |" in text
+    assert "| hybrid | T2 | 3 | 100% | 6 | 0 | 1.00 | 0% | 1,000 | 1.0s |" in text
+    assert "| Arch | Level | Right (min–max) | Probes (min–max) |" in text
+    assert "| react | T2 | 0%–100% | 13–60 |" in text
+    # The comparison: the dungeon's columns; on the signal trace A6's reference is A2.
+    assert "| Δ success | Δ efficiency | Reference |" in text
+    lines = text[text.index("## Comparison") :].splitlines()
+    hybrid = next(line for line in lines if line.startswith("| hybrid |"))
+    assert hybrid.endswith("| mapstate |")
+
+
+def test_signal_and_survey_runs_are_not_combined(tmp_path: Path) -> None:
+    survey = _write(tmp_path / "run-s", [_survey("react", 1000, 1, 15)], problem="survey")
+    signal = _write(tmp_path / "run-t", [_signal("react", 1000, 1, 22)], problem="signal")
+    with pytest.raises(ValueError, match="different problems"):
+        check_compatible([load_run(survey), load_run(signal)])

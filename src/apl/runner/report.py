@@ -143,6 +143,39 @@ _SURVEY_HEADER = (
 )
 
 
+# The signal trace's own table (specs/009 contracts/results.md).
+_SIGNAL_HEADER = (
+    "| Arch | Level | Episodes | Right | Probes (median) | Wasted (median) | Efficiency (median) "
+    "| Budget hit | Tokens (median) | Latency (median) |"
+)
+
+
+def _signal_row(arch: str, level: str, rows: Sequence[EpisodeRow]) -> str:
+    cells = [
+        arch,
+        level,
+        str(len(rows)),
+        _pct(_rate(rows, lambda r: r.success)),
+        _count(_median([r.probes for r in rows])),
+        _count(_median([r.wasted_probes for r in rows])),
+        _fixed(_median([r.efficiency for r in rows if r.success]), 2),
+        _pct(_rate(rows, lambda r: r.budget_hit)),
+        _count(_median([_tokens(r) for r in rows])),
+        _fixed(_median([r.latency_s for r in rows]), 1, "s"),
+    ]
+    return "| " + " | ".join(cells) + " |"
+
+
+def _signal_spread_row(arch: str, level: str, rows: Sequence[EpisodeRow]) -> str:
+    by_repeat: dict[tuple[str, int], list[EpisodeRow]] = defaultdict(list)
+    for row in rows:
+        by_repeat[row.run_id, row.repeat].append(row)
+    right = [_rate(group, lambda r: r.success) for group in by_repeat.values()]
+    probes = [m for g in by_repeat.values() if (m := _median([r.probes for r in g])) is not None]
+    span = f"{_count(min(probes))}–{_count(max(probes))}" if probes else "—"
+    return f"| {arch} | {level} | {min(right):.0%}–{max(right):.0%} | {span} |"
+
+
 def _tokens(row: EpisodeRow) -> int | None:
     if row.input_tokens is None or row.output_tokens is None:
         return None
@@ -212,7 +245,9 @@ def render(runs: Sequence[LoadedRun]) -> str:
         if settings.get(key) is not None
     )
     survey = first.problem == "survey"
-    lines = [f"# Report: {', '.join(archs)}" + (" on the survey field" if survey else ""), ""]
+    signal = first.problem == "signal"  # specs/009
+    where = " on the survey field" if survey else " on the signal trace" if signal else ""
+    lines = [f"# Report: {', '.join(archs)}" + where, ""]
     if first.seed_set == "test":
         lines.append("> Result on test seeds.")
     else:
@@ -231,6 +266,12 @@ def render(runs: Sequence[LoadedRun]) -> str:
             _SURVEY_HEADER,
             "| --- " * 10 + "|",
             *(_survey_row(arch, level, groups[arch, level]) for arch, level in keys),
+        ]
+    elif signal:
+        lines += [
+            _SIGNAL_HEADER,
+            "| --- " * 10 + "|",
+            *(_signal_row(arch, level, groups[arch, level]) for arch, level in keys),
         ]
     else:
         lines += [
@@ -258,6 +299,15 @@ def render(runs: Sequence[LoadedRun]) -> str:
             "| Arch | Level | Right (min–max) | Steps (min–max) | Turns (min–max) |",
             "| --- | --- | --- | --- | --- |",
             *(_survey_spread_row(arch, level, groups[arch, level]) for arch, level in keys),
+        ]
+    elif signal and any(r.record.repeats > 1 for r in runs):
+        lines += [
+            "",
+            "## Spread across repeats",
+            "",
+            "| Arch | Level | Right (min–max) | Probes (min–max) |",
+            "| --- | --- | --- | --- |",
+            *(_signal_spread_row(arch, level, groups[arch, level]) for arch, level in keys),
         ]
     elif any(r.record.repeats > 1 for r in runs):
         lines += [

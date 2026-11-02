@@ -2,7 +2,7 @@
 
 Each turn the model sees the base prompt with the map instructions, its previous reply with that
 reply's tool results, and the map (specs/003 contracts/mapstate.md). Written by the agent at the
-experimenter's request.
+experimenter's request; the signal trace's probe log too (specs/009).
 """
 
 import json
@@ -13,6 +13,7 @@ from langgraph.graph import END, START, StateGraph
 
 from apl.arch.dungeon_map import DungeonMap
 from apl.arch.field_map import FieldMap
+from apl.arch.probe_log import ProbeLog
 from apl.kit import Kit
 
 # Explains the map only; strategy advice would mix a prompt effect into the memory effect (R15).
@@ -32,6 +33,12 @@ whether it holds a deposit, the number of cells and deposits seen, the walls you
 the unseen cells next to seen ones. Your previous reply and its tool results come just before the \
 map."""
 
+# The same for the signal trace (specs/009 contracts/architectures.md): the log, not a strategy.
+PROBE_LOG_INSTRUCTIONS = """\
+You do not see the earlier conversation. Instead, every turn ends with your probe log. It is built \
+from your own tool results so far: the pipe's runs and every probe answer, in the order you got \
+them. Your previous reply and its tool results come just before the log."""
+
 # For the routes variant (mapstate_routes); it explains the list, it does not say which to take.
 ROUTE_INSTRUCTIONS = """\
 Under the map, each unexplored exit is listed with the moves that reach it from your room through \
@@ -41,7 +48,7 @@ doors you have already walked, nearest first."""
 class MapState(TypedDict):
     # No reducers: each write replaces the value, so the history never builds up (R11).
     messages: list[BaseMessage]  # the latest turn only
-    map: DungeonMap | FieldMap
+    map: DungeonMap | FieldMap | ProbeLog
 
 
 def play(kit: Kit) -> None:
@@ -51,14 +58,17 @@ def play(kit: Kit) -> None:
 def run(kit: Kit, *, routes: bool) -> None:
     model = kit.model.bind_tools(kit.tools)
     survey = kit.problem == "survey"  # the field map; written by the agent (specs/005 R10)
-    if survey:
+    signal = kit.problem == "signal"  # the probe log; written by the agent (specs/009 R11)
+    if signal:
+        instructions = PROBE_LOG_INSTRUCTIONS
+    elif survey:
         instructions = FIELD_MAP_INSTRUCTIONS
     else:
         instructions = MAP_INSTRUCTIONS + (" " + ROUTE_INSTRUCTIONS if routes else "")
     system = SystemMessage(kit.base_prompt + "\n\n" + instructions)
     start = HumanMessage(kit.start)
 
-    def render(found: DungeonMap | FieldMap) -> str:
+    def render(found: DungeonMap | FieldMap | ProbeLog) -> str:
         return found.render(routes) if isinstance(found, DungeonMap) else found.render()
 
     def agent(state: MapState) -> dict[str, list[BaseMessage]]:
@@ -89,10 +99,14 @@ def run(kit: Kit, *, routes: bool) -> None:
     graph.add_edge(START, "agent")
     graph.add_conditional_edges("agent", route)
     graph.add_edge("act", "agent")
+    found: DungeonMap | FieldMap | ProbeLog
+    if signal:
+        found = ProbeLog.from_start(kit.start)
+    elif survey:
+        found = FieldMap.from_start(kit.start)
+    else:
+        found = DungeonMap.from_start(kit.start)
     graph.compile().invoke(
-        {
-            "messages": [],
-            "map": FieldMap.from_start(kit.start) if survey else DungeonMap.from_start(kit.start),
-        },
+        {"messages": [], "map": found},
         config={"recursion_limit": kit.recursion_limit},
     )

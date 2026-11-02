@@ -12,7 +12,8 @@ there is no LLM judge.
 An orchestrator (first card on the right) gives four scouts short tasks. Each colored line is
 one scout's trail, and the triangles are ore deposits. The scouts found all 15.</sub>
 
-> **Status:** M5 built: a second problem, the survey field, alongside the dungeon. First
+> **Status:** M9 built: a third problem, the signal trace, alongside the dungeon and the survey
+> field; every architecture in the plan is in. First
 > results (M4, dungeon only, a first look): [`docs/findings/m4-first-comparison.md`](docs/findings/m4-first-comparison.md).
 
 ---
@@ -22,7 +23,7 @@ one scout's trail, and the triangles are ore deposits. The scouts found all 15.<
 ```mermaid
 flowchart LR
     model["One model<br/>for every architecture"] --> arch["Architecture<br/>a LangGraph graph<br/><b>the one thing that changes</b>"]
-    arch <-->|"tools only:<br/>look · move · …"| world["World<br/>dungeon or survey field"]
+    arch <-->|"tools only:<br/>look · move · probe · …"| world["World<br/>dungeon, survey field<br/>or signal trace"]
     seed(["seed"]) --> world
     world --> score["Score by code<br/>success · steps vs. best<br/>tokens · time"]
 ```
@@ -42,6 +43,7 @@ You need [uv](https://docs.astral.sh/uv/). These commands need no model and cost
 uv sync
 uv run apl dungeon show --level L3 --seed 1000 --route solution   # a dungeon and its shortest route
 uv run apl survey show --level S2 --seed 1000                     # a survey field
+uv run apl signal show --level T3 --seed 1000 --route reference   # a signal trace pipe
 uv run apl serve                                                  # the viewer: http://127.0.0.1:8765/
 ```
 
@@ -50,9 +52,9 @@ In the viewer, pick a problem, level and seed, and press **Generate** to see the
 
 ---
 
-## The two problems
+## The three problems
 
-Architectures are compared only within a problem, never across the two.
+Architectures are compared only within a problem, never across problems.
 
 ### 1. The dungeon: find the exit
 
@@ -99,6 +101,28 @@ can each take a part of it. This is where splitting the work should pay off.
 
 **Success** means submitting the right total.
 
+### 3. The signal trace: find the broken segment
+
+Water flows from a source S through numbered pipe segments; exactly one is broken, and it and
+everything downstream of it are dry. The whole layout is given at the start, and every answer is
+true, so a model can never be misled, only waste probes. An agent that tests segment after
+segment needs about N probes; one that halves the suspects each time needs about log₂ N.
+
+| Tool | What it does |
+| --- | --- |
+| `look()` | The layout again (it is also given free at the start) |
+| `probe(segment)` | Whether water reaches that segment |
+| `submit(segment)` | Name the broken segment; this ends the episode |
+
+| Level | Segments | Layout | Reference | Step budget |
+| --- | --- | --- | --- | --- |
+| T1 | 16 | one straight run | 4 probes + submit | 16 |
+| T2 | 64 | one straight run | 6 probes + submit | 64 |
+| T3 | 64 | a tree with 4 pipe ends | about 7 probes + submit | 64 |
+
+**Success** means naming the broken segment. The report also counts **wasted probes**: probes
+whose answer earlier answers already implied.
+
 ---
 
 ## The architectures
@@ -106,18 +130,18 @@ can each take a part of it. This is where splitting the work should pay off.
 Each one is a `StateGraph` written by hand in [`src/apl/arch/`](src/apl/arch/). The ID column
 is used in the docs, and the name column is what you pass to `--arch`.
 
-| ID | Name | Idea in one line | Dungeon | Survey |
-| --- | --- | --- | :---: | :---: |
-| A1 | `react` | The model calls tools in a loop and remembers only through its message history | ✓ | ✓ |
-| A2 | `mapstate` | The explored map lives in graph state and is shown to the model every turn | ✓ | ✓ |
-| A2r | `mapstate_routes` | A2, plus the shortest known route to each unexplored exit | ✓ | |
-| A3 | `plan_execute` | A planner writes subgoals, A2's agent carries them out, a replanner reacts to each report | ✓ | ✓ |
-| A4 | `reflexion` | A2 that tries again: after a failed attempt it writes a note, the world restarts, all steps count | ✓ | ✓ |
-| A5 | `supervisor` | A supervisor hands tasks to a navigator (look, move) and an inventory helper (take, use), each a subgraph on A2's map | ✓ | |
-| A6 | `hybrid` | Code keeps the map and walks the routes; the model only picks where to go | ✓ | |
-| A7 | `fanout` | An orchestrator sends out up to 4 scouts once; each explores alone | ✓ | ✓ |
-| A8 | `rounds` | An orchestrator gives scouts short tasks and replans on the map they all saw | ✓ | ✓ |
-| A9 | `blackboard` | No planner: scouts take turns on one shared map and claim unexplored exits | ✓ | ✓ |
+| ID | Name | Idea in one line | Dungeon | Survey | Signal |
+| --- | --- | --- | :---: | :---: | :---: |
+| A1 | `react` | The model calls tools in a loop and remembers only through its message history | ✓ | ✓ | ✓ |
+| A2 | `mapstate` | The explored map lives in graph state and is shown to the model every turn (on the signal trace: a probe log) | ✓ | ✓ | ✓ |
+| A2r | `mapstate_routes` | A2, plus the shortest known route to each unexplored exit | ✓ | | |
+| A3 | `plan_execute` | A planner writes subgoals, A2's agent carries them out, a replanner reacts to each report | ✓ | ✓ | ✓ |
+| A4 | `reflexion` | A2 that tries again: after a failed attempt it writes a note, the world restarts, all steps count | ✓ | ✓ | ✓ |
+| A5 | `supervisor` | A supervisor hands tasks to a navigator (look, move) and an inventory helper (take, use), each a subgraph on A2's map | ✓ | | |
+| A6 | `hybrid` | Code keeps the map and walks the routes; the model only picks where to go (on the signal trace: code lists the probes that split the suspects best) | ✓ | | ✓ |
+| A7 | `fanout` | An orchestrator sends out up to 4 scouts once; each explores alone | ✓ | ✓ | |
+| A8 | `rounds` | An orchestrator gives scouts short tasks and replans on the map they all saw | ✓ | ✓ | |
+| A9 | `blackboard` | No planner: scouts take turns on one shared map and claim unexplored exits | ✓ | ✓ | |
 
 ### One agent: where the memory lives
 
@@ -210,6 +234,7 @@ flowchart LR
 uv run apl run --arch react --level all --seeds dev --limit 2            # plan only (free)
 uv run apl run --arch react --level all --seeds dev --limit 2 --execute  # play it
 uv run apl run --problem survey --arch react,fanout --level all --seeds dev --limit 1
+uv run apl run --problem signal --arch react,hybrid --level all --seeds dev --limit 1
 uv run apl continue results/<run-id> [--execute]                         # finish a cut-off run
 uv run apl report results/<run-id>                                       # rebuild the report
 ```
@@ -315,6 +340,7 @@ The full rules are in [`.specify/memory/constitution.md`](.specify/memory/consti
 | ✅ | M6 | A3 plan-and-execute on both problems |
 | ✅ | M7 | A4 Reflexion on both problems; attempts and restarts in both problems |
 | ✅ | M8 | A5 supervisor on the dungeon |
+| ✅ | M9 | The signal trace; A1–A4 and A6 play it |
 
 The full design is in [`plan.md`](plan.md).
 
@@ -327,9 +353,10 @@ The full design is in [`plan.md`](plan.md).
 
 ```text
 src/apl/
-├── problems.py   the problems by name: dungeon, survey
+├── problems.py   the problems by name: dungeon, survey, signal
 ├── dungeon/      generator, environment, tools, solver, text map, HTML view
 ├── survey/       the survey field: generator, reference walk, environment, tools, pictures
+├── signal_trace/ the signal trace: generator, reference strategy, environment, tools, pictures
 ├── arch/         one module per architecture, each with play(kit), written by hand
 ├── kit.py        what an architecture gets per episode: model, tools, prompt
 ├── runner/       run matrix, results, report, model providers
@@ -347,7 +374,8 @@ Useful contracts:
 [the results format](specs/002-runner-react/contracts/results.md),
 [the CLI](specs/001-dungeon-environment/contracts/cli.md),
 [the viewer API](specs/003-viewer-mapstate/contracts/viewer-api.md),
-[the survey tools](specs/005-survey-field/contracts/survey-tools.md).
+[the survey tools](specs/005-survey-field/contracts/survey-tools.md),
+[the signal trace tools](specs/009-signal-trace/contracts/signal-tools.md).
 
 </details>
 

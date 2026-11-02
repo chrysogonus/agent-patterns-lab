@@ -67,6 +67,16 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
 .edge { fill: none; stroke: var(--wall); stroke-width: 4; }
 .start { fill: none; stroke: var(--trail); stroke-width: 2; }
 .right { color: var(--green); } .wrong { color: var(--red); }
+/* the signal trace (specs/009): segment boxes wet, dry, suspect or cleared */
+.seg { fill: var(--floor); stroke: var(--line); }
+.seg.suspect { fill: var(--fog); fill-opacity: 0.45; }
+.seg.wet { fill: var(--blue); fill-opacity: 0.6; }
+.seg.dry { fill: var(--red); fill-opacity: 0.5; }
+.seg.last { stroke: var(--ink); stroke-width: 2.5; }
+.seg-label { fill: var(--ink); font-size: 11px; font-family: ui-monospace, monospace; pointer-events: none; }
+.broken { fill: none; stroke: var(--red); stroke-width: 2.5; }
+.broken.hide, #ref-marks.hide { display: none; }
+.ref-mark { fill: var(--solution); font-size: 10px; font-weight: 700; font-family: ui-monospace, monospace; }
 #slider { flex: 1 1 160px; }
 #stats { display: grid; grid-template-columns: max-content 1fr; gap: 2px 12px; margin-top: 8px; }
 #stats dt { color: var(--muted); }
@@ -155,21 +165,27 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
   const isTestSeed = (n) => S.options && n >= S.options.test_seeds[0] && n <= S.options.test_seeds[1];
   const problemOf = () => $("problem").value || "dungeon";
   const isSurvey = () => !!S.dungeon && S.dungeon.problem === "survey";
+  const isSignal = () => !!S.dungeon && S.dungeon.problem === "signal";
+  const PATHS = { survey: "/api/survey", signal: "/api/signal" };
 
   /* ---------- the world: a dungeon or a survey field (specs/005) ---------- */
   async function loadDungeon(level, seed, problem = problemOf()) {
-    const path = problem === "survey" ? "/api/survey" : "/api/dungeon";
+    const path = PATHS[problem] || "/api/dungeon";
     const { ok, data } = await api(`${path}?level=${encodeURIComponent(level)}&seed=${encodeURIComponent(seed)}`);
     if (!ok) { message(data.error); return false; }
     data.problem = data.problem || "dungeon";
     S.dungeon = data;
     if ($("problem").value !== data.problem) { $("problem").value = data.problem; fillProblem(); }
-    $("solution-label").textContent = data.problem === "survey" ? "Reference walk" : "Shortest solution";
+    const labels = { survey: "Reference walk", signal: "Reference probes" };
+    $("solution-label").textContent = labels[data.problem] || "Shortest solution";
     $("map").innerHTML = data.svg;
-    const line = document.createElementNS(SVGNS, "polyline");
-    line.id = "solution-line";
-    line.setAttribute("points", data.solution.map((f) => center(f.position).join(",")).join(" "));
-    $("map").querySelector("svg").insertBefore(line, $("trail"));
+    if (data.problem === "signal") referenceMarks(data.solution);
+    else {
+      const line = document.createElementNS(SVGNS, "polyline");
+      line.id = "solution-line";
+      line.setAttribute("points", data.solution.map((f) => center(f.position).join(",")).join(" "));
+      $("map").querySelector("svg").insertBefore(line, $("trail"));
+    }
     $("level").value = data.level;
     $("seed").value = data.seed;
     toggles();
@@ -182,14 +198,72 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
   function toggles() {
     const line = $("solution-line");
     if (line) line.classList.toggle("show", $("solution").checked);
+    const marks = $("ref-marks");
+    if (marks) marks.classList.toggle("hide", !$("solution").checked);
     render(S.current);
+  }
+  // The reference's probes, numbered in order on their boxes (specs/009 contracts/viewer.md).
+  function referenceMarks(frames) {
+    const group = document.createElementNS(SVGNS, "g");
+    group.id = "ref-marks";
+    let n = 0;
+    for (const f of frames) {
+      if (!f.action || f.action.tool !== "probe") continue;
+      const box = $("map").querySelector(`.seg[data-seg="${f.action.args[0]}"]`);
+      if (!box) continue;
+      const mark = document.createElementNS(SVGNS, "text");
+      mark.setAttribute("class", "ref-mark");
+      mark.setAttribute("x", Number(box.getAttribute("x")) + 2);
+      mark.setAttribute("y", Number(box.getAttribute("y")) + 10);
+      mark.textContent = String(++n);
+      group.append(mark);
+    }
+    $("map").querySelector("svg").append(group);
+  }
+  // Each segment's feeder (0 is S), from the runs the pipe was sent with.
+  function feeders() {
+    const feeder = new Map();
+    for (const r of S.dungeon.runs || []) {
+      feeder.set(r.first, r.from === "S" ? 0 : r.from);
+      for (let k = r.first + 1; k <= r.last; k++) feeder.set(k, k - 1);
+    }
+    return feeder;
+  }
+  function renderSignal(frames) {
+    const f = frames[S.current];
+    const wet = new Set(), dry = new Set(), suspect = new Set(f.suspects || []);
+    const feeder = feeders();
+    for (const [k, water] of f.answers || []) {
+      if (!water) { dry.add(String(k)); continue; }
+      // Water reached k, so it reached every segment between S and k (FR-016).
+      for (let j = k; j; j = feeder.get(j) || 0) wet.add(String(j));
+    }
+    const last = f.action && f.action.tool === "probe" ? f.action.args[0] : null;
+    document.querySelectorAll(".seg").forEach((box) => {
+      const k = box.dataset.seg;
+      box.classList.toggle("wet", wet.has(k));
+      box.classList.toggle("dry", dry.has(k));
+      box.classList.toggle("suspect", !wet.has(k) && !dry.has(k) && suspect.has(Number(k)));
+      box.classList.toggle("last", k === last);
+    });
+    const ring = $("broken");
+    if (ring) ring.classList.toggle("hide", $("fog").checked);
   }
 
   /* ---------- drawing one step (as the M1 player does) ---------- */
   function render(n, ms = 250) {
     if (!S.dungeon) return;
+    // While an episode's own world is still loading, its frames do not fit the world shown.
+    if (S.start && (S.start.problem || "dungeon") !== S.dungeon.problem) return;
     const frames = S.frames.length ? S.frames : [S.dungeon.solution[0]];
     S.current = Math.max(0, Math.min(frames.length - 1, n));
+    if (isSignal()) {
+      renderSignal(frames);
+      $("slider").max = String(frames.length - 1);
+      $("slider").value = String(S.current);
+      stats();
+      return;
+    }
     const f = frames[S.current];
     const all = frames.slice(0, S.current + 1);
     // A4's attempts (specs/007): the trail and fog of the current attempt; earlier ones dashed.
@@ -272,8 +346,8 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
     if (!d) return;
     const f = S.frames[S.current];
     const steps = Math.max(0, ...S.frames.slice(0, S.current + 1).map((g) => g.counted || 0));
-    const best = isSurvey() ? "reference" : "optimal";
-    rows.push([isSurvey() ? "Field" : "Dungeon", `${d.level} seed ${d.seed}`]);
+    const best = isSurvey() || isSignal() ? "reference" : "optimal";
+    rows.push([isSignal() ? "Pipe" : isSurvey() ? "Field" : "Dungeon", `${d.level} seed ${d.seed}`]);
     if (S.attempts) rows.push(["Attempt", `${(f && f.attempt) || 1} / ${S.attempts}`]);
     rows.push(["Steps", S.episode ? `${steps} / ${d.budget} (${best} ${d.optimal_steps})` : `budget ${d.budget}, ${best} ${d.optimal_steps}`]);
     if (isSurvey()) {
@@ -281,6 +355,13 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
       if (f && f.deposits_seen !== undefined) rows.push(["Seen so far", String(f.deposits_seen)]);
       const submitted = f && f.submitted !== null && f.submitted !== undefined ? f.submitted : null;
       if (submitted !== null) rows.push(["Submitted", `${submitted} — ${submitted === d.true_total ? "right" : "wrong"}`]);
+    }
+    if (isSignal() && f) {
+      rows.push(["Probes", `${f.probes} (reference ${d.optimal_steps - 1})`]);
+      rows.push(["Suspects left", String((f.suspects || []).length)]);
+      rows.push(["Wasted probes", String(f.wasted)]);
+      if (!$("fog").checked) rows.push(["Broken", String(d.broken)]);
+      if (f.submitted !== null && f.submitted !== undefined) rows.push(["Submitted", `${f.submitted} — ${f.submitted === d.broken ? "right" : "wrong"}`]);
     }
     if (S.episode) {
       const turns = [...S.turns.values()];
@@ -292,7 +373,7 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
       rows.push(["Time", `${seconds.toFixed(1)} s`]);
       if (f && f.action) rows.push(["Step", `${f.action.tool} ${f.action.args.join(" ")} → ${f.ok ? "ok" : f.error}`]);
       const keys = (inventory) => inventory.length ? inventory.map((c) => `${c} key`).join(", ") : "empty";
-      if (isSurvey()) { /* no inventories on the field */ }
+      if (isSurvey() || isSignal()) { /* no inventories on the field or the pipe */ }
       else if (f && f.scouts) rows.push(["Inventories", f.scouts.map((s, i) => `scout ${i}: ${keys(s.inventory)}`).join(" · ")]);
       else if (f) rows.push(["Inventory", keys(f.inventory)]);
       if (S.end) {
@@ -422,8 +503,9 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
     const r = data.row;
     const node = el("div", null, "card end");
     node.append(el("h3", "Episode over"));
-    const total = r && r.problem === "survey" ? ` — submitted ${r.submitted_total ?? "nothing"}, true ${r.true_total}${r.success ? ", right" : ""}` : "";
-    const best = r && r.problem === "survey" ? "reference" : "optimal";
+    let total = r && r.problem === "survey" ? ` — submitted ${r.submitted_total ?? "nothing"}, true ${r.true_total}${r.success ? ", right" : ""}` : "";
+    if (r && r.problem === "signal") total = ` — submitted ${r.submitted_segment ?? "nothing"}, broken ${r.broken_segment}${r.success ? ", right" : ""}`;
+    const best = r && (r.problem === "survey" || r.problem === "signal") ? "reference" : "optimal";
     node.append(el("div", !r ? `Error: ${data.error}` : r.status === "error" ? `Infrastructure error: ${r.error}` :
       `${r.end_reason}${r.success ? ` in ${r.steps} steps (${best} ${r.optimal_steps})` : ""}${total}${r.arch_error ? ` — ${r.arch_error}` : ""}`));
     $("panel").append(node);
@@ -487,7 +569,12 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
     const seed = $("seed").value.trim();
     if (!/^\d+$/.test(seed)) { message(`seed must be a whole number ≥ 0, got "${seed}"`); return; }
     if (S.source && !S.end) { message("An episode is running; stop it first or wait for it to end."); return; }
-    if (await loadDungeon($("level").value, seed)) {
+    // The old episode's frames belong to the old world: drop them before the new one is drawn
+    // (a signal frame has no position for a dungeon or field), and keep them if loading fails.
+    const kept = S.frames;
+    S.frames = [];
+    if (!(await loadDungeon($("level").value, seed))) S.frames = kept;
+    else {
       Object.assign(S, { episode: null, frames: [], current: 0, start: null, end: null });
       $("panel").replaceChildren();
       $("saved").value = "";

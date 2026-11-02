@@ -8,8 +8,9 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from apl import dungeon, survey
+from apl import dungeon, signal_trace, survey
 from apl.dungeon.env import MAX_ATTEMPTS as DUNGEON_ATTEMPTS
+from apl.signal_trace.env import MAX_ATTEMPTS as SIGNAL_ATTEMPTS
 from apl.survey.env import MAX_ATTEMPTS as SURVEY_ATTEMPTS
 
 
@@ -58,6 +59,21 @@ def _survey_fingerprint() -> str:
     return prompt_fingerprint()
 
 
+def _signal_kit(episode: Any, model: Any) -> Any:
+    from apl.signal_trace.kit import build_kit
+
+    return build_kit(episode, model)
+
+
+_signal_kit.__name__ = "build_kit"
+
+
+def _signal_fingerprint() -> str:
+    from apl.signal_trace.prompt import prompt_fingerprint
+
+    return prompt_fingerprint()
+
+
 PROBLEMS: dict[str, Problem] = {
     "dungeon": Problem(
         name="dungeon",
@@ -82,6 +98,18 @@ PROBLEMS: dict[str, Problem] = {
         build_kit=_survey_kit,
         prompt_fingerprint=_survey_fingerprint,
         max_attempts=SURVEY_ATTEMPTS,
+    ),
+    "signal": Problem(  # specs/009
+        name="signal",
+        levels=signal_trace.LEVELS,
+        dev_seeds=signal_trace.DEV_SEEDS,
+        test_seeds=signal_trace.TEST_SEEDS,
+        generate=signal_trace.generate,
+        reference_steps=lambda world: int(world.reference_steps),
+        start_episode=signal_trace.start_episode,
+        build_kit=_signal_kit,
+        prompt_fingerprint=_signal_fingerprint,
+        max_attempts=SIGNAL_ATTEMPTS,
     ),
 }
 DEFAULT = "dungeon"

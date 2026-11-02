@@ -1,8 +1,10 @@
 """What an architecture gets for one episode (contracts/kit.md). Architectures may import this.
 
 Besides this module, architectures may import only each problem's tools and results:
-`apl.dungeon.tools`, `apl.dungeon.results`, `apl.survey.tools` and `apl.survey.results`. The
-dungeon's kit is built here; the survey field's in `apl.survey.kit` (specs/005).
+`apl.dungeon.tools`, `apl.dungeon.results`, `apl.survey.tools`, `apl.survey.results`,
+`apl.signal_trace.tools` and `apl.signal_trace.results`. The dungeon's kit is built here; the
+survey field's in `apl.survey.kit` (specs/005) and the signal trace's in `apl.signal_trace.kit`
+(specs/009).
 """
 
 import copy

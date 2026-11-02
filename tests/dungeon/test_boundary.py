@@ -15,8 +15,8 @@ ARCH_DIR = Path(__file__).resolve().parents[2] / "src" / "apl" / "arch"
 # Architectures may import from apl only these (and each other, inside apl.arch).
 ALLOWED = {
     "apl.kit", "apl.dungeon.tools", "apl.dungeon.results", "apl.survey.tools",
-    "apl.survey.results", "apl.arch",
-}  # fmt: skip  # each problem's tools and results (constitution 2.0.0, specs/005 FR-024)
+    "apl.survey.results", "apl.signal_trace.tools", "apl.signal_trace.results", "apl.arch",
+}  # fmt: skip  # each problem's tools and results (constitution 2.2.0, specs/005, specs/009)
 # They must use kit.model, never create a model of their own (Constitution I, research R15).
 MODEL_MODULES = (
     "openai",
@@ -218,4 +218,21 @@ def test_the_survey_field_internals_are_forbidden_too(tmp_path: Path) -> None:  
         "peek.py: apl.survey.env",
         "peek.py: apl.survey.generator.generate",
         "peek.py: apl.survey.walk",
+    ]
+
+
+def test_the_signal_trace_internals_are_forbidden_too(tmp_path: Path) -> None:  # specs/009 US4
+    (tmp_path / "ok.py").write_text(
+        "from apl.signal_trace.tools import AgentTools\n"
+        "from apl.signal_trace.results import ToolResult\n"
+    )
+    (tmp_path / "peek.py").write_text(
+        "from apl.signal_trace.generator import generate\nimport apl.signal_trace.env\n"
+        "from apl.signal_trace import strategy\nfrom apl.signal_trace.model import Pipe\n"
+    )
+    assert _forbidden(tmp_path) == [
+        "peek.py: apl.signal_trace.env",
+        "peek.py: apl.signal_trace.generator.generate",
+        "peek.py: apl.signal_trace.model.Pipe",
+        "peek.py: apl.signal_trace.strategy",
     ]

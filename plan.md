@@ -1,8 +1,9 @@
 # Plan
 
-> **At a glance.** Two small simulated problems (a dungeon and a survey field), one model, and
-> several hand-built LangGraph architectures, scored by code. M0–M8 are built: every architecture in §4 is in.
-> The [README](README.md) is the short tour. This file holds the design: the worlds (§2, §2b),
+> **At a glance.** Three small simulated problems (a dungeon, a survey field and a signal trace),
+> one model, and several hand-built LangGraph architectures, scored by code. M0–M9 are built: every
+> architecture in §4 is in, and M9 added the signal trace.
+> The [README](README.md) is the short tour. This file holds the design: the worlds (§2, §2b, §2c),
 > the fairness rules (§3), the architectures (§4), the metrics (§5) and the milestones (§7).
 
 ## 1. Goal
@@ -103,6 +104,47 @@ reference steps (the walk plus the submission).
 Seeds: the dungeon's numbers (dev 1000–1009, test 2000–2019); the problem name keys the generator,
 so the worlds are unrelated.
 
+## 2c. Signal trace
+
+Built so that the choice of what to look at next is the only thing that differs (specs/009): every
+answer is true and the whole layout is known, so a model can only waste probes, never be misled.
+
+### World
+
+- Water flows from a source S through segments numbered 1..N. Each segment is fed from S or from
+  one other segment with a lower number; a segment feeds at most two others, so the pipe can
+  branch. Exactly one segment is broken: it and every segment downstream of it are dry, every
+  other segment is wet.
+- The layout is given free at the start, as runs: `{"from": F, "first": a, "last": b}` means F
+  feeds a, a feeds a+1, and so on up to b.
+
+### Tools
+
+| Tool | Returns |
+| --- | --- |
+| `look()` | The layout again: the number of segments and the runs |
+| `probe(segment)` | Whether water reaches that segment, or an error (no such segment) |
+| `submit(segment)` | Ends the episode naming that segment as broken, or an error (no such segment) |
+
+### Episode
+
+The episode ends at the first submission, when the step budget is used up, or when the
+architecture stops. It is a success when the submitted segment is the broken one. Code computes a
+reference: the worst case of a greedy split strategy (bisection on a single run, the optimum
+there) plus the submission. The step budget is the larger of 3× the reference and a full
+probe-by-probe scan (N−1 probes and the submission). A probe whose answer earlier answers already
+implied counts as wasted.
+
+### Levels
+
+| Level | Segments | Layout | Reference | Budget | Purpose |
+| --- | --- | --- | --- | --- | --- |
+| T1 | 16 | one run | 5 (optimal) | 16 | Baseline; every architecture should find it |
+| T2 | 64 | one run | 7 (optimal) | 64 | About 6 probes for bisection, about 32 for a scan |
+| T3 | 64 | a tree with 4 pipe ends, every run ≥ 4 | about 8 | 64 | Halfway along the numbers is no longer the best probe |
+
+Seeds: the same numbers as the other problems, keyed by the problem name.
+
 ## 3. Fairness rules
 
 These become the Spec Kit constitution.
@@ -123,13 +165,13 @@ the repository is to learn LangGraph.
 
 | ID | Architecture | What it tests | LangGraph features | Problems |
 | --- | --- | --- | --- | --- |
-| A1 | ReAct | The baseline: memory is the message history only | Tool node, conditional edge, loop limit | dungeon, survey |
-| A2 | Map state | Does explicit memory beat history? The explored map lives in graph state and is rendered each turn | State schema, reducers | dungeon, survey |
+| A1 | ReAct | The baseline: memory is the message history only | Tool node, conditional edge, loop limit | dungeon, survey, signal |
+| A2 | Map state | Does explicit memory beat history? The explored map lives in graph state and is rendered each turn | State schema, reducers | dungeon, survey, signal |
 | A2r | Map state with routes (`mapstate_routes`) | Does a planning aid help a small model? A2's map plus the shortest known route to each unexplored exit | Same graph as A2 | dungeon |
-| A3 | Plan-and-execute | Does planning help on L3? Planner sets subgoals, executor runs them, replanner reacts | Multiple nodes, cycles | dungeon, survey |
-| A4 | Reflexion | Does learning from a failed attempt pay for itself? All attempts count toward the budget | Outer retry loop, persistent notes | dungeon, survey |
+| A3 | Plan-and-execute | Does planning help on L3? Planner sets subgoals, executor runs them, replanner reacts | Multiple nodes, cycles | dungeon, survey, signal |
+| A4 | Reflexion | Does learning from a failed attempt pay for itself? All attempts count toward the budget | Outer retry loop, persistent notes | dungeon, survey, signal |
 | A5 | Supervisor (`supervisor`) | Do subagents help or only add cost? A supervisor hands tasks to a navigator (look, move) and an inventory subagent (take, use) | Subgraphs, handoffs (`Command`) | dungeon |
-| A6 | Hybrid | How much of the work needs a model at all? Code searches the known map, the model picks targets | Plain Python nodes mixed with model nodes | dungeon |
+| A6 | Hybrid | How much of the work needs a model at all? Code searches the known map, the model picks targets | Plain Python nodes mixed with model nodes | dungeon, signal |
 | A7 | Fan-out once (`fanout`) | Does splitting the exploration help? An orchestrator splits the dungeon once; up to 4 scouts explore on their own maps | `Send`, parallel branches, reducers | dungeon, survey |
 | A8 | Supervisor in rounds (`rounds`) | Does replanning on the merged map help the scouts? Short tasks per round, replanned on what all scouts saw | `Send` in a cycle, shared state | dungeon, survey |
 | A9 | Shared blackboard (`blackboard`) | Can scouts coordinate without a planner? They take turns on one live map and claim frontiers | Round-robin routing over shared state | dungeon, survey |
@@ -187,6 +229,7 @@ Each milestone after M0 is one Spec Kit feature (`/speckit-specify` through
 | M6 | A3 plan-and-execute (`plan_execute`) on both problems | It can be watched in the viewer and is added to the comparison on the same seeds | ✅ |
 | M7 | A4 Reflexion (`reflexion`) on both problems, with up to 3 attempts per episode (constitution 2.1.0) | It can be watched in the viewer and is added to the comparison on the same seeds | ✅ |
 | M8 | A5 supervisor (`supervisor`) on the dungeon | It can be watched in the viewer and is added to the comparison on the same seeds | ✅ |
+| M9 | The signal trace (§2c), with A1–A4 and A6 on it | Any signal level and seed can be shown and watched in the viewer; signal runs plan, continue and report like the other problems; the dungeon and the survey field are unchanged | ✅ |
 
 Paperclip comes in from M5, when several architectures can be built as parallel tickets.
 
@@ -211,3 +254,5 @@ Decided:
 - A second problem (since M5): the survey field, where splitting the work should pay off
   (specs/005). Further boards are sketched in the problem mock-ups (signal trace, combination
   vault, workshop, warehouse robots, rune floor), one per later feature.
+- A third problem (since M9): the signal trace, where the choice of the next probe is all that
+  differs (specs/009). Noisy probes are left for a later level or feature.

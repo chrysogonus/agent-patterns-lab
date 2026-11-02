@@ -85,6 +85,7 @@ def test_row_key_order_matches_the_contract() -> None:
         "input_tokens", "output_tokens", "latency_s", "arch_error", "error", "scouts",
         "orchestrator_calls", "problem", *SURVEY_FIELDS,  # specs/005: added at the end
         "attempts",  # specs/007
+        "submitted_segment", "broken_segment", "segments", "probes", "wasted_probes",  # specs/009
     ]  # fmt: skip
 
 

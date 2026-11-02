@@ -232,3 +232,16 @@ def walk_field(walk: Sequence[str], start: str = "A1", total: int | None = None)
         return AIMessage("I walked my part of the field.")
 
     return strategy
+
+
+def play_calls(calls: Sequence[tuple[str, Mapping[str, object]]]) -> Strategy:
+    """One tool call per model turn, in order, then a text answer (specs/009)."""
+    turn = itertools.count()
+
+    def strategy(messages: list[BaseMessage]) -> AIMessage:
+        n = next(turn)
+        if n < len(calls):
+            return tool_calls(calls[n])
+        return AIMessage("Done.")
+
+    return strategy

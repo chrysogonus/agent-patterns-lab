@@ -51,6 +51,13 @@ class EpisodeRow:
     reference_is_optimal: bool | None = None
     # specs/007: attempts used by a retrying architecture; None for the others and older rows.
     attempts: int | None = None
+    # specs/009: the signal trace's own fields (None on the other problems' rows;
+    # contracts/results.md). `reference_is_optimal` above is shared with the survey field.
+    submitted_segment: int | None = None
+    broken_segment: int | None = None
+    segments: int | None = None
+    probes: int | None = None
+    wasted_probes: int | None = None
 
     @classmethod
     def completed(
@@ -89,6 +96,7 @@ class EpisodeRow:
             scouts=outcome.scouts,
             orchestrator_calls=meter.orchestrator_calls,
             **_survey(outcome),
+            **_signal(outcome),
             attempts=attempts,
         )
 
@@ -133,6 +141,7 @@ class EpisodeRow:
             scouts=None,
             orchestrator_calls=meter.orchestrator_calls,
             **_field_totals(episode),
+            **_pipe_totals(episode),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -145,7 +154,8 @@ class EpisodeRow:
             raise ValueError(f"a row must be an object, got {data!r}")
         data = {
             "output_limit_hits": None, "scouts": None, "orchestrator_calls": None,
-            "problem": "dungeon", **dict.fromkeys(_SURVEY_FIELDS), "attempts": None, **data,
+            "problem": "dungeon", **dict.fromkeys(_SURVEY_FIELDS), "attempts": None,
+            **dict.fromkeys(_SIGNAL_FIELDS), **data,
         }  # fmt: skip
         names = [f.name for f in fields(cls)]
         odd = sorted(set(names) ^ set(data))
@@ -198,15 +208,21 @@ _ROW_TYPES.update(
     parallel_turns=int,
     reference_is_optimal=bool,
     attempts=int,
+    submitted_segment=int,
+    broken_segment=int,
+    segments=int,
+    probes=int,
+    wasted_probes=int,
 )
 _SURVEY_FIELDS = (
     "submitted_total", "true_total", "cells_seen", "cells", "parallel_turns",
     "reference_is_optimal",
 )  # fmt: skip
+_SIGNAL_FIELDS = ("submitted_segment", "broken_segment", "segments", "probes", "wasted_probes")
 _NULLABLE = {
     "success", "end_reason", "steps", "efficiency", "invalid_actions", "budget_hit",
     "token_cap_hit", "output_limit_hits", "input_tokens", "output_tokens", "arch_error", "error",
-    "scouts", "orchestrator_calls", *_SURVEY_FIELDS, "attempts",
+    "scouts", "orchestrator_calls", *_SURVEY_FIELDS, "attempts", *_SIGNAL_FIELDS,
 }  # fmt: skip
 _ALLOWED: dict[str, set[str]] = {
     "status": {"completed", "error"},
@@ -221,6 +237,19 @@ def _survey(outcome: object) -> dict[str, Any]:
     if not hasattr(outcome, "true_total"):
         return {}
     return {f: getattr(outcome, f) for f in _SURVEY_FIELDS}
+
+
+def _signal(outcome: object) -> dict[str, Any]:
+    """The signal trace's own row fields from its outcome; none for the other problems'."""
+    if not hasattr(outcome, "broken_segment"):
+        return {}
+    return {f: getattr(outcome, f) for f in (*_SIGNAL_FIELDS, "reference_is_optimal")}
+
+
+def _pipe_totals(episode: object) -> dict[str, Any]:
+    """An infrastructure error on the signal trace still records the pipe's size and break."""
+    pipe = getattr(episode, "pipe", None)
+    return {} if pipe is None else {"broken_segment": pipe.broken, "segments": pipe.segments}
 
 
 def _field_totals(episode: object) -> dict[str, Any]:

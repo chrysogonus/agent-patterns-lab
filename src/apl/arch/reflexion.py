@@ -3,7 +3,8 @@
 The actor plays each attempt as A2 plays an episode, with a map built from that attempt's tool
 results and the notes from earlier attempts. After a failed attempt the reflector writes a note
 and the world is restarted; every attempt's steps count toward the one budget (specs/007
-contracts/reflexion.md, constitution 2.1.0). Written by the agent at the experimenter's request.
+contracts/reflexion.md, constitution 2.1.0). Written by the agent at the experimenter's request,
+as is its signal-trace version on the probe log (specs/009).
 """
 
 import json
@@ -14,7 +15,8 @@ from langgraph.graph import END, START, StateGraph
 
 from apl.arch.dungeon_map import DungeonMap
 from apl.arch.field_map import FieldMap
-from apl.arch.mapstate import FIELD_MAP_INSTRUCTIONS, MAP_INSTRUCTIONS
+from apl.arch.mapstate import FIELD_MAP_INSTRUCTIONS, MAP_INSTRUCTIONS, PROBE_LOG_INSTRUCTIONS
+from apl.arch.probe_log import ProbeLog
 from apl.kit import Kit
 
 # Actor turns in a row that add no room or cell to the map; then the attempt has failed. A
@@ -36,12 +38,15 @@ for the next attempt, which starts again from the start with an empty map and se
 notes. Answer with the note only."""
 
 WRONG_TOTAL = "wrong total"
+WRONG_SEGMENT = "wrong segment"  # the signal trace's (specs/009)
+# Failures after which the environment has already restarted itself (specs/007 research R3).
+RESTARTED = frozenset({WRONG_TOTAL, WRONG_SEGMENT})
 
 
 class ReflexionState(TypedDict):
     # No reducers: each write replaces the value, as in A2 (data-model.md).
     messages: list[BaseMessage]  # the actor's latest turn only
-    map: DungeonMap | FieldMap  # this attempt's
+    map: DungeonMap | FieldMap | ProbeLog  # this attempt's
     notes: list[str]
     attempt: int
     stale: int  # actor turns in a row that added nothing to the map
@@ -66,7 +71,9 @@ def _until_submit(message: BaseMessage) -> AIMessage:
     return message.model_copy(update={"tool_calls": kept, "invalid_tool_calls": []})
 
 
-def _size(found: DungeonMap | FieldMap) -> int:
+def _size(found: DungeonMap | FieldMap | ProbeLog) -> int:
+    if isinstance(found, ProbeLog):
+        return found.known  # distinct segments probed (specs/009)
     return len(found.rooms) if isinstance(found, DungeonMap) else len(found.cells)
 
 
@@ -79,16 +86,22 @@ def _notes(notes: list[str]) -> str:
 def play(kit: Kit) -> None:
     model = kit.model.bind_tools(kit.tools)
     survey = kit.problem == "survey"
-    map_instructions = FIELD_MAP_INSTRUCTIONS if survey else MAP_INSTRUCTIONS
+    signal = kit.problem == "signal"  # the probe log (specs/009 R11)
+    if signal:
+        map_instructions = PROBE_LOG_INSTRUCTIONS
+    else:
+        map_instructions = FIELD_MAP_INSTRUCTIONS if survey else MAP_INSTRUCTIONS
     actor_text = ACTOR_INSTRUCTIONS.format(max_attempts=kit.max_attempts)
     actor_system = SystemMessage(kit.base_prompt + "\n\n" + map_instructions + " " + actor_text)
     reflector_system = SystemMessage(kit.base_prompt + "\n\n" + REFLECTOR_INSTRUCTIONS)
 
-    def new_map() -> DungeonMap | FieldMap:
+    def new_map() -> DungeonMap | FieldMap | ProbeLog:
         # A restarted world looks exactly like the start (research R5).
+        if signal:
+            return ProbeLog.from_start(kit.start)
         return FieldMap.from_start(kit.start) if survey else DungeonMap.from_start(kit.start)
 
-    def render(found: DungeonMap | FieldMap) -> str:
+    def render(found: DungeonMap | FieldMap | ProbeLog) -> str:
         return found.render(False) if isinstance(found, DungeonMap) else found.render()
 
     def actor(state: ReflexionState) -> dict[str, Any]:
@@ -133,7 +146,7 @@ def play(kit: Kit) -> None:
             found = data.get("data")
             wrong = wrong or (isinstance(found, dict) and found.get("correct") is False)
         stale = 0 if _size(state["map"]) > before else state["stale"] + 1
-        failure = WRONG_TOTAL if wrong else ""
+        failure = (WRONG_SEGMENT if signal else WRONG_TOTAL) if wrong else ""
         if not failure and stale >= MAX_STALE:
             failure = f"nothing new for {MAX_STALE} turns"
         return {
@@ -158,8 +171,8 @@ def play(kit: Kit) -> None:
         return {"notes": [*state["notes"], note] if note else state["notes"]}
 
     def restart(state: ReflexionState) -> dict[str, Any]:
-        # After a wrong total the field has already been restarted (research R3).
-        if state["failure"] != WRONG_TOTAL and not kit.restart():
+        # After a wrong total or segment the world has already been restarted (research R3).
+        if state["failure"] not in RESTARTED and not kit.restart():
             return {"failure": "no attempt left"}
         return {
             "messages": [],

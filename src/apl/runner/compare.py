@@ -30,6 +30,10 @@ REFERENCES = {
     "supervisor": "mapstate",  # A2 split into a navigator and an inventory helper (specs/008)
 }
 
+# Per-problem changes to the references (specs/009): A2r does not play the signal trace, so A6 is
+# measured against A2 there.
+PROBLEM_REFERENCES: dict[str, dict[str, str]] = {"signal": {"hybrid": "mapstate"}}
+
 _HEADER = (
     "| Arch | Success | Efficiency | Steps | Tokens | Calls: orch / scouts | Latency | Scouts "
     "| Δ success | Δ efficiency | Reference |"
@@ -56,6 +60,7 @@ def _row(
     rows: Sequence[EpisodeRow],
     reference: Sequence[EpisodeRow] | None,
     survey: bool = False,
+    references: dict[str, str] = REFERENCES,
 ) -> str:
     success = _rate(rows, lambda r: r.success)
     efficiency = _efficiency(rows)
@@ -81,7 +86,7 @@ def _row(
         _count(_median([r.scouts for r in rows])),
         d_success,
         d_efficiency,
-        REFERENCES.get(arch, "—"),
+        references.get(arch, "—"),
     ]
     if survey:
         turns = _median([r.parallel_turns for r in rows])
@@ -121,11 +126,12 @@ def render_comparison(runs: Sequence[LoadedRun], completed: Sequence[EpisodeRow]
         "architecture in the last column.",
     ]
     survey = first.problem == "survey"
+    references = REFERENCES | PROBLEM_REFERENCES.get(first.problem, {})
     header, columns = (_SURVEY_HEADER, 13) if survey else (_HEADER, 11)
     for level in sorted({level for level, _ in groups}):
         lines += ["", f"### {level}", "", header, "| --- " * columns + "|"]
         for arch in order:
             if (level, arch) in groups:
-                reference = groups.get((level, REFERENCES.get(arch, "")))
-                lines.append(_row(arch, groups[level, arch], reference, survey))
+                reference = groups.get((level, references.get(arch, "")))
+                lines.append(_row(arch, groups[level, arch], reference, survey, references))
     return lines

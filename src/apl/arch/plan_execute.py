@@ -3,7 +3,8 @@ and a replanner reacts to each report.
 
 The executor is A2's map-state agent with a subgoal line; the planner and replanner see the same
 map and make no tool calls, so A3 differs from A2 in planning alone (specs/006
-contracts/plan-execute.md). Written by the agent at the experimenter's request.
+contracts/plan-execute.md). Written by the agent at the experimenter's request, as is its
+signal-trace version on the probe log (specs/009).
 """
 
 import json
@@ -16,7 +17,8 @@ from langgraph.graph import END, START, StateGraph
 from apl.arch.dungeon_map import DungeonMap
 from apl.arch.field_map import FieldMap
 from apl.arch.hybrid import MAX_MISSES
-from apl.arch.mapstate import FIELD_MAP_INSTRUCTIONS, MAP_INSTRUCTIONS
+from apl.arch.mapstate import FIELD_MAP_INSTRUCTIONS, MAP_INSTRUCTIONS, PROBE_LOG_INSTRUCTIONS
+from apl.arch.probe_log import ProbeLog
 from apl.arch.scouts import read_answer
 from apl.kit import Kit
 
@@ -62,7 +64,7 @@ class Outcome:
 class PlanState(TypedDict):
     # No reducers: each write replaces the value, as in A2 (data-model.md).
     messages: list[BaseMessage]  # the executor's latest turn only
-    map: DungeonMap | FieldMap
+    map: DungeonMap | FieldMap | ProbeLog
     plan: list[str]  # subgoals still to do; plan[0] is the current one
     finished: list[Outcome]
     subgoal: int  # subgoals started so far, for the executor's role
@@ -110,14 +112,18 @@ def _finish(state: PlanState, status: Literal["done", "unfinished"], report: str
 def play(kit: Kit) -> None:
     model = kit.model.bind_tools(kit.tools)
     survey = kit.problem == "survey"
-    map_instructions = FIELD_MAP_INSTRUCTIONS if survey else MAP_INSTRUCTIONS
+    signal = kit.problem == "signal"  # the probe log (specs/009 R11)
+    if signal:
+        map_instructions = PROBE_LOG_INSTRUCTIONS
+    else:
+        map_instructions = FIELD_MAP_INSTRUCTIONS if survey else MAP_INSTRUCTIONS
     planner_system = SystemMessage(kit.base_prompt + "\n\n" + PLANNER_INSTRUCTIONS)
     replanner_system = SystemMessage(kit.base_prompt + "\n\n" + REPLANNER_INSTRUCTIONS)
     executor_system = SystemMessage(
         kit.base_prompt + "\n\n" + map_instructions + " " + EXECUTOR_INSTRUCTIONS
     )
 
-    def render(found: DungeonMap | FieldMap) -> str:
+    def render(found: DungeonMap | FieldMap | ProbeLog) -> str:
         return found.render(False) if isinstance(found, DungeonMap) else found.render()
 
     def ask(system: SystemMessage, parts: list[str], role: str) -> dict[str, Any] | str:
@@ -225,10 +231,17 @@ def play(kit: Kit) -> None:
     graph.add_conditional_edges(
         "replanner", after_planning("replanner"), ["replanner", "executor", END]
     )
+    found: DungeonMap | FieldMap | ProbeLog
+    if signal:
+        found = ProbeLog.from_start(kit.start)
+    elif survey:
+        found = FieldMap.from_start(kit.start)
+    else:
+        found = DungeonMap.from_start(kit.start)
     graph.compile().invoke(
         {
             "messages": [],
-            "map": FieldMap.from_start(kit.start) if survey else DungeonMap.from_start(kit.start),
+            "map": found,
             "plan": [],
             "finished": [],
             "subgoal": 0,
