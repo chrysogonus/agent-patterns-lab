@@ -26,10 +26,13 @@ reference strategy's run as frames (data-model.md).
 
 ## The page
 
-- Problem `signal`: the SVG shows each run as a row of segment boxes (`.seg[data-seg]`, wrapped
-  at 16 a row, an arrow from its feeder), S at the start.
-- Per frame: boxes wet (blue), dry (grey-red), suspect (shaded), cleared (plain); the broken
-  segment ringed unless "Agent's view" is on; the reference toggle ("Reference probes") numbers
-  the reference's probes.
+- Problem `signal`: drawn as in the problem mock-up. Each run snakes 8 segments a row
+  (`.seg[data-seg]` boxes, small segment numbers) with a grey pipe line through the centres;
+  runs are stacked, each starting at an inlet left of its first segment labelled "S" or
+  "from 18", so no line crosses the board.
+- Per frame: the water line runs from S along every segment known to be wet; a probe is a dot
+  where water was found and a cross where it was not, the latest one larger; suspects are shaded,
+  and the last one left turns red; the broken segment's dashed ring hides under "Agent's view";
+  the reference toggle ("Reference probes") numbers the reference's probes.
 - Stats: `Pipe T2 seed 1000`, steps against budget and reference, probes, suspects left, wasted,
   broken (unless "Agent's view"), and at the end `Submitted 41 — right` or `— wrong`.

@@ -67,14 +67,20 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
 .edge { fill: none; stroke: var(--wall); stroke-width: 4; }
 .start { fill: none; stroke: var(--trail); stroke-width: 2; }
 .right { color: var(--green); } .wrong { color: var(--red); }
-/* the signal trace (specs/009): segment boxes wet, dry, suspect or cleared */
+/* the signal trace (specs/009), drawn as in the problem mock-up: a snaking pipe, the water line,
+   wet probes as dots, dry probes as crosses, suspects shaded */
 .seg { fill: var(--floor); stroke: var(--line); }
 .seg.suspect { fill: var(--fog); fill-opacity: 0.45; }
-.seg.wet { fill: var(--blue); fill-opacity: 0.6; }
-.seg.dry { fill: var(--red); fill-opacity: 0.5; }
-.seg.last { stroke: var(--ink); stroke-width: 2.5; }
-.seg-label { fill: var(--ink); font-size: 11px; font-family: ui-monospace, monospace; pointer-events: none; }
-.broken { fill: none; stroke: var(--red); stroke-width: 2.5; }
+.seg.found { fill: var(--red); fill-opacity: 0.35; }
+.pipe { fill: none; stroke: var(--muted); stroke-width: 3; stroke-opacity: 0.45; stroke-linejoin: round; }
+.water { fill: none; stroke: var(--solution); stroke-width: 4; stroke-linejoin: round; stroke-linecap: round; }
+.source-dot { fill: var(--solution); }
+.inlet { fill: var(--muted); }
+.source { fill: var(--ink); font-weight: 700; }
+.probe-wet { fill: var(--solution); stroke: var(--card); stroke-width: 1.5; }
+.probe-dry { fill: none; stroke: var(--red); stroke-width: 2.4; stroke-linecap: round; }
+.seg-label { fill: var(--muted); font-size: 7px; font-family: ui-monospace, monospace; pointer-events: none; }
+.broken { fill: none; stroke: var(--red); stroke-width: 2; stroke-dasharray: 3 2; }
 .broken.hide, #ref-marks.hide { display: none; }
 .ref-mark { fill: var(--solution); font-size: 10px; font-weight: 700; font-family: ui-monospace, monospace; }
 #slider { flex: 1 1 160px; }
@@ -213,8 +219,9 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
       if (!box) continue;
       const mark = document.createElementNS(SVGNS, "text");
       mark.setAttribute("class", "ref-mark");
-      mark.setAttribute("x", Number(box.getAttribute("x")) + 2);
-      mark.setAttribute("y", Number(box.getAttribute("y")) + 10);
+      mark.setAttribute("x", Number(box.getAttribute("x")) + Number(box.getAttribute("width")) - 2);
+      mark.setAttribute("y", Number(box.getAttribute("y")) + Number(box.getAttribute("height")) - 3);
+      mark.setAttribute("text-anchor", "end");
       mark.textContent = String(++n);
       group.append(mark);
     }
@@ -229,22 +236,54 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
     }
     return feeder;
   }
+  // A segment's centre, and the source's, from the drawn pipe.
+  function centreOf(k) {
+    const box = $("map").querySelector(`.seg[data-seg="${k}"]`);
+    if (!box) return null;
+    const x = Number(box.getAttribute("x")), y = Number(box.getAttribute("y"));
+    return [x + Number(box.getAttribute("width")) / 2, y + Number(box.getAttribute("height")) / 2];
+  }
+  const SEG_STEP = 26; // one box in the pipe drawing (render_svg.CELL)
+  function svgEl(tag, attrs) {
+    const node = document.createElementNS(SVGNS, tag);
+    for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
+    return node;
+  }
   function renderSignal(frames) {
     const f = frames[S.current];
-    const wet = new Set(), dry = new Set(), suspect = new Set(f.suspects || []);
-    const feeder = feeders();
-    for (const [k, water] of f.answers || []) {
-      if (!water) { dry.add(String(k)); continue; }
+    const suspect = new Set(f.suspects || []), wet = new Set(), feeder = feeders();
+    const answers = f.answers || [];
+    for (const [k, water] of answers) {
       // Water reached k, so it reached every segment between S and k (FR-016).
-      for (let j = k; j; j = feeder.get(j) || 0) wet.add(String(j));
+      if (water) for (let j = k; j; j = feeder.get(j) || 0) wet.add(j);
     }
-    const last = f.action && f.action.tool === "probe" ? f.action.args[0] : null;
+    const found = suspect.size === 1;
     document.querySelectorAll(".seg").forEach((box) => {
-      const k = box.dataset.seg;
-      box.classList.toggle("wet", wet.has(k));
-      box.classList.toggle("dry", dry.has(k));
-      box.classList.toggle("suspect", !wet.has(k) && !dry.has(k) && suspect.has(Number(k)));
-      box.classList.toggle("last", k === last);
+      const k = Number(box.dataset.seg);
+      box.classList.toggle("suspect", suspect.has(k) && !found);
+      box.classList.toggle("found", found && suspect.has(k));
+    });
+    // The water line: along each run from what feeds it, as far as the segments are wet.
+    const water = $("water");
+    water.replaceChildren();
+    for (const r of S.dungeon.runs || []) {
+      // Each run comes in one box left of its first segment (the drawn inlet).
+      if (r.from !== "S" && !wet.has(r.from)) continue;
+      const first = centreOf(r.first);
+      const start = [first[0] - SEG_STEP, first[1]];
+      const points = [start];
+      for (let k = r.first; k <= r.last && wet.has(k); k++) points.push(centreOf(k));
+      if (points.length > 1) water.append(svgEl("polyline", { class: "water", points: points.map((p) => p.join(",")).join(" ") }));
+    }
+    // The probes: a dot where water was found, a cross where it was not; the latest one larger.
+    const marks = $("probes");
+    marks.replaceChildren();
+    answers.forEach(([k, isWet], i) => {
+      const c = centreOf(k);
+      if (!c) return;
+      const r = i === answers.length - 1 ? 6 : 4.5;
+      if (isWet) marks.append(svgEl("circle", { class: "probe-wet", cx: c[0], cy: c[1], r }));
+      else marks.append(svgEl("path", { class: "probe-dry", d: `M${c[0] - r} ${c[1] - r}L${c[0] + r} ${c[1] + r}M${c[0] + r} ${c[1] - r}L${c[0] - r} ${c[1] + r}` }));
     });
     const ring = $("broken");
     if (ring) ring.classList.toggle("hide", $("fog").checked);

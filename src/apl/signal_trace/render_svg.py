@@ -1,61 +1,85 @@
 """A pipe as SVG, for the viewer and `apl signal show --html` (specs/009 research R13).
 
-Each run is a row of segment boxes (wrapped at `PER_ROW`), labelled with what feeds it. Boxes
-carry `data-seg`, so the viewer's page can mark them wet, dry, suspect or cleared.
+Drawn as in the problem mock-up: each run snakes `PER_ROW` segments a row (left to right, then
+back), with a grey pipe line through the segment centres. Runs are stacked one under another, and
+each starts at an inlet left of its first segment, labelled "S" or "from 18", so no line crosses
+the board. Boxes carry `data-seg`, and
+the page draws the water, the probe marks and the suspects from the frames (`#water`, `#probes`).
 """
 
 from apl.signal_trace.model import Pipe
 
-CELL = 30  # a box
-GAP = 4
-PER_ROW = 16
-LABEL = 64  # the "18 →" column
-MARGIN = 16
+CELL = 26  # a box
+PER_ROW = 8
+LABEL = 64  # the column for "S" and "from 18"
+MARGIN = 14
+BLOCK_GAP = 14  # between runs
 
 
 def layout(pipe: Pipe) -> dict[int, tuple[int, int]]:
-    """Each segment's box position (x, y), and the rows it takes."""
-    places, row = {}, 0
+    """Each segment's box position (x, y): runs stacked, each snaking PER_ROW a row."""
+    places: dict[int, tuple[int, int]] = {}
+    top = MARGIN
     for run in pipe.runs:
-        for i, k in enumerate(range(run.first, run.last + 1)):
-            if i and i % PER_ROW == 0:
-                row += 1
-            places[k] = (MARGIN + LABEL + (i % PER_ROW) * (CELL + GAP), MARGIN + row * (CELL + GAP))
-        row += 1
+        segments = range(run.first, run.last + 1)
+        for i, k in enumerate(segments):
+            row, col = divmod(i, PER_ROW)
+            col = col if row % 2 == 0 else PER_ROW - 1 - col
+            places[k] = (MARGIN + LABEL + col * CELL, top + row * CELL)
+        rows = -(-len(segments) // PER_ROW)
+        top += rows * CELL + BLOCK_GAP
     return places
 
 
+def _centre(place: tuple[int, int]) -> tuple[int, int]:
+    return place[0] + CELL // 2, place[1] + CELL // 2
+
+
+def inlet(places: dict[int, tuple[int, int]], first: int) -> tuple[int, int]:
+    """Where a run's pipe comes in: one box left of its first segment."""
+    x, y = _centre(places[first])
+    return x - CELL, y
+
+
 def svg(pipe: Pipe, animated: bool = False) -> str:
-    """The boxes, run labels and a ring on the broken segment (`class="broken"`). `animated`
-    adds an id to the ring, so the page can hide it under "Agent's view"."""
+    """The boxes, the pipe line, run labels and a ring on the broken segment (`class="broken"`).
+    `animated` adds an id to the ring (hidden under "Agent's view") and the empty groups the page
+    fills: `#water` and `#probes`."""
     places = layout(pipe)
-    width = 2 * MARGIN + LABEL + PER_ROW * (CELL + GAP)
-    height = 2 * MARGIN + max(y for _, y in places.values()) - MARGIN + CELL
+    sx, sy = inlet(places, 1)
+    width = 2 * MARGIN + LABEL + PER_ROW * CELL
+    height = max(y for _, y in places.values()) + CELL + MARGIN
     out = [
         f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" role="img" '
         'aria-label="Signal trace pipe">'
     ]
-    for run in pipe.runs:
-        x, y = places[run.first]
-        source = "S" if run.feeder == 0 else str(run.feeder)
-        out.append(
-            f'<text class="label" x="{x - 8}" y="{y + CELL // 2 + 4}" text-anchor="end">'
-            f"{source} →</text>"
-        )
     for k, (x, y) in sorted(places.items()):
         out.append(
-            f'<rect class="seg" data-seg="{k}" x="{x}" y="{y}" width="{CELL}" height="{CELL}" '
-            'rx="4"/>'
+            f'<rect class="seg" data-seg="{k}" x="{x + 1}" y="{y + 1}" width="{CELL - 2}" '
+            f'height="{CELL - 2}" rx="3"/>'
         )
-        out.append(
-            f'<text class="seg-label" x="{x + CELL // 2}" y="{y + CELL // 2 + 4}" '
-            f'text-anchor="middle">{k}</text>'
-        )
+    for run in pipe.runs:
+        ix, iy = inlet(places, run.first)
+        points = [(ix, iy), *(_centre(places[k]) for k in range(run.first, run.last + 1))]
+        line = " ".join(f"{x},{y}" for x, y in points)
+        out.append(f'<polyline class="pipe" points="{line}"/>')
+        if run.feeder:
+            out.append(f'<circle class="inlet" cx="{ix}" cy="{iy}" r="3"/>')
+            out.append(
+                f'<text class="label" x="{ix - 6}" y="{iy + 4}" '
+                f'text-anchor="end">from {run.feeder}</text>'
+            )
+    out.append(f'<circle class="source-dot" cx="{sx}" cy="{sy}" r="3"/>')
+    out.append(f'<text class="label source" x="{sx - 6}" y="{sy + 5}" text-anchor="end">S</text>')
+    for k, (x, y) in sorted(places.items()):
+        out.append(f'<text class="seg-label" x="{x + 3}" y="{y + 9}">{k}</text>')
+    if animated:
+        out.append('<g id="water"></g><g id="probes"></g>')
     bx, by = places[pipe.broken]
     ident = ' id="broken"' if animated else ""
     out.append(
-        f'<rect class="broken"{ident} x="{bx - 3}" y="{by - 3}" width="{CELL + 6}" '
-        f'height="{CELL + 6}" rx="6"/>'
+        f'<rect class="broken"{ident} x="{bx - 1}" y="{by - 1}" width="{CELL + 2}" '
+        f'height="{CELL + 2}" rx="4"/>'
     )
     out.append("</svg>")
     return "\n".join(out)
@@ -63,8 +87,11 @@ def svg(pipe: Pipe, animated: bool = False) -> str:
 
 def html(pipe: Pipe) -> str:
     style = (
-        ".seg{fill:#fff;stroke:#c9c6bf}.seg-label{font:11px monospace;fill:#1f2328}"
-        ".broken{fill:none;stroke:#dc2626;stroke-width:2.5}.label{font:12px monospace;fill:#6b7280}"
+        ".seg{fill:#fff;stroke:#e5e3de}.pipe{fill:none;stroke:#6b7280;stroke-width:3;"
+        "stroke-opacity:.45;stroke-linejoin:round}.seg-label{font:7px monospace;fill:#9ca3af}"
+        ".broken{fill:none;stroke:#dc2626;stroke-width:2;stroke-dasharray:3 2}"
+        ".label{font:12px monospace;fill:#6b7280}.source{font-weight:700;fill:#1f2328}"
+        ".source-dot{fill:#0891b2}.inlet{fill:#6b7280}"
     )
     name = pipe.level.name if pipe.level else "custom"
     return (

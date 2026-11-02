@@ -185,14 +185,15 @@ continue` and `apl report` through the run record.
 ## R13. Viewer
 
 **Decision**: `GET /api/signal?level=&seed=` returns the pipe (segments, runs, broken, budget,
-reference, `reference_is_optimal`, SVG, reference frames). The SVG draws each run as a row of
-segment boxes, wrapped at 16 a row, with an arrow from its feeder; boxes carry `data-seg` so the
-page can mark them. Frames are the signal trace's own shape (data-model.md); the page gets an
-`isSignal()` branch that colours boxes wet, dry, suspect or cleared, draws the water up to the wet
-segments, hides the broken mark under "Agent's view", and shows probes, suspects left, wasted
-probes and the submission in the stats panel. The "Shortest solution" toggle becomes "Reference
-probes" and numbers the reference's probes. Episode start, step, restart and end events keep their
-shape; the start event adds `problem`, `segments` and `broken`.
+reference, `reference_is_optimal`, SVG, reference frames). The SVG follows the problem mock-up: each
+run snakes 8 segments a row with a grey pipe line through the centres, runs are stacked, and each
+starts at an inlet labelled "S" or "from 18" (a line from a far feeder would cross the board). Boxes
+carry `data-seg`, and the page draws on it: the water line along the segments known to be wet, a dot
+for a wet probe and a cross for a dry one, shaded suspects, the last suspect in red, the broken
+segment's ring hidden under "Agent's view", and probes, suspects left, wasted probes and the
+submission in the stats panel. The "Shortest solution" toggle becomes "Reference probes" and numbers
+the reference's probes. Episode start, step, restart and end events keep their shape; the start
+event adds `problem`, `segments` and `broken`.
 
 **Rationale**: the dungeon drawing (positions, trails, doors) has nothing to move here, so the page
 needs its own small branch; the events and the replay mechanism stay as they are.
