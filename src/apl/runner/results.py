@@ -62,6 +62,11 @@ class EpisodeRow:
     traps: int | None = None
     repeated_traps: int | None = None
     walks: int | None = None
+    # specs/011: the workshop's own fields (None on the other problems' rows).
+    stuck: bool | None = None
+    wasted: int | None = None
+    inspected: int | None = None
+    crafted: int | None = None
 
     @classmethod
     def completed(
@@ -102,6 +107,7 @@ class EpisodeRow:
             **_survey(outcome),
             **_signal(outcome),
             **_rune(outcome),
+            **_workshop(outcome),
             attempts=attempts,
         )
 
@@ -160,7 +166,8 @@ class EpisodeRow:
         data = {
             "output_limit_hits": None, "scouts": None, "orchestrator_calls": None,
             "problem": "dungeon", **dict.fromkeys(_SURVEY_FIELDS), "attempts": None,
-            **dict.fromkeys(_SIGNAL_FIELDS), **dict.fromkeys(_RUNE_FIELDS), **data,
+            **dict.fromkeys(_SIGNAL_FIELDS), **dict.fromkeys(_RUNE_FIELDS),
+            **dict.fromkeys(_WORKSHOP_FIELDS), **data,
         }  # fmt: skip
         names = [f.name for f in fields(cls)]
         odd = sorted(set(names) ^ set(data))
@@ -221,6 +228,10 @@ _ROW_TYPES.update(
     traps=int,
     repeated_traps=int,
     walks=int,
+    stuck=bool,
+    wasted=int,
+    inspected=int,
+    crafted=int,
 )
 _SURVEY_FIELDS = (
     "submitted_total", "true_total", "cells_seen", "cells", "parallel_turns",
@@ -228,16 +239,18 @@ _SURVEY_FIELDS = (
 )  # fmt: skip
 _SIGNAL_FIELDS = ("submitted_segment", "broken_segment", "segments", "probes", "wasted_probes")
 _RUNE_FIELDS = ("traps", "repeated_traps", "walks")
+_WORKSHOP_FIELDS = ("stuck", "wasted", "inspected", "crafted")
 _NULLABLE = {
     "success", "end_reason", "steps", "efficiency", "invalid_actions", "budget_hit",
     "token_cap_hit", "output_limit_hits", "input_tokens", "output_tokens", "arch_error", "error",
     "scouts", "orchestrator_calls", *_SURVEY_FIELDS, "attempts", *_SIGNAL_FIELDS,
-    *_RUNE_FIELDS,
+    *_RUNE_FIELDS, *_WORKSHOP_FIELDS,
 }  # fmt: skip
 _ALLOWED: dict[str, set[str]] = {
     "status": {"completed", "error"},
-    # The survey's and the signal trace's "submitted" (specs/005 R7), the rune floor's "goal".
-    "end_reason": {str(r) for r in EndReason} | {"submitted", "goal"},
+    # The survey's and the signal trace's "submitted" (specs/005 R7), the rune floor's and the
+    # workshop's "goal", the workshop's "stuck" (specs/011).
+    "end_reason": {str(r) for r in EndReason} | {"submitted", "goal", "stuck"},
     "seed_set": set(SEED_SETS),
     "problem": set(PROBLEMS),
 }
@@ -262,6 +275,13 @@ def _rune(outcome: object) -> dict[str, Any]:
     if not hasattr(outcome, "repeated_traps"):
         return {}
     return {f: getattr(outcome, f) for f in (*_RUNE_FIELDS, "reference_is_optimal")}
+
+
+def _workshop(outcome: object) -> dict[str, Any]:
+    """The workshop's own row fields from its outcome; none for the other problems'."""
+    if not hasattr(outcome, "crafted"):
+        return {}
+    return {f: getattr(outcome, f) for f in (*_WORKSHOP_FIELDS, "reference_is_optimal")}
 
 
 def _pipe_totals(episode: object) -> dict[str, Any]:

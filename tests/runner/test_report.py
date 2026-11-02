@@ -357,3 +357,55 @@ def test_rune_and_signal_runs_are_not_combined(tmp_path: Path) -> None:
     rune = _write(tmp_path / "run-r", [_rune("react", 1000, 1, 20)], problem="rune")
     with pytest.raises(ValueError, match="different problems"):
         check_compatible([load_run(signal), load_run(rune)])
+
+
+def _workshop(arch: str, seed: int, repeat: int, steps: int | None, **kw: Any) -> dict[str, Any]:
+    stuck = kw.pop("stuck", False)
+    made = steps is not None and not stuck
+    return _row(
+        seed, repeat, steps if steps is not None else 48, arch=arch, level="W2",
+        problem="workshop", success=made,
+        end_reason="goal" if made else "stuck" if stuck else "budget",
+        budget_hit=not made and not stuck, optimal_steps=16, budget=48, stuck=stuck,
+        wasted=kw.pop("wasted", 0), inspected=kw.pop("inspected", 5), crafted=kw.pop("crafted", 5),
+        reference_is_optimal=True, input_tokens=900, output_tokens=100, **kw,
+    )  # fmt: skip
+
+
+def test_the_workshop_report(tmp_path: Path) -> None:  # specs/011 US3 4
+    rows = [
+        _workshop("react", 1000, 1, 9, stuck=True, wasted=1),
+        _workshop("react", 1000, 2, 20, wasted=0),
+        _workshop("react", 1000, 3, 10, stuck=True, wasted=1),
+        _workshop("plan_execute", 1000, 1, 18), _workshop("plan_execute", 1000, 2, 20),
+        _workshop("plan_execute", 1000, 3, 16),
+        _workshop("mapstate", 1000, 1, 16), _workshop("mapstate", 1000, 2, 16),
+        _workshop("mapstate", 1000, 3, 9, stuck=True, wasted=1),
+        _workshop("hybrid", 1000, 1, 16),
+    ]  # fmt: skip
+    path = _write(
+        tmp_path / "run-w", rows, problem="workshop",
+        architectures=["react", "mapstate", "plan_execute", "hybrid"], levels=["W2"], seeds=[1000],
+    )  # fmt: skip
+    text = render([load_run(path)])
+    assert text.startswith("# Report: hybrid, mapstate, plan_execute, react on the workshop\n")
+    assert (
+        "| Arch | Level | Episodes | Success | Stuck | Steps (median) | Wasted (median) "
+        "| Efficiency (median) | Budget hit | Tokens (median) | Latency (median) |"
+    ) in text
+    # react: success 1 of 3, stuck 2 of 3; steps 9, 20, 10 -> 10; wasted 1, 0, 1 -> 1;
+    # efficiency 16/20.
+    assert "| react | W2 | 3 | 33% | 67% | 10 | 1 | 0.80 | 0% | 1,000 | 1.0s |" in text
+    assert "| plan_execute | W2 | 3 | 100% | 0% | 18 | 0 | 0.89 | 0% | 1,000 | 1.0s |" in text
+    assert "| Arch | Level | Success (min–max) | Steps (min–max) |" in text
+    assert "| react | W2 | 0%–100% | 9–20 |" in text
+    lines = text[text.index("## Comparison") :].splitlines()
+    hybrid = next(line for line in lines if line.startswith("| hybrid |"))
+    assert hybrid.endswith("| mapstate |")
+
+
+def test_workshop_and_rune_runs_are_not_combined(tmp_path: Path) -> None:
+    rune = _write(tmp_path / "run-r", [_rune("react", 1000, 1, 20)], problem="rune")
+    workshop = _write(tmp_path / "run-w", [_workshop("react", 1000, 1, 16)], problem="workshop")
+    with pytest.raises(ValueError, match="different problems"):
+        check_compatible([load_run(rune), load_run(workshop)])

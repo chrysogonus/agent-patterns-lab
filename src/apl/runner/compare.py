@@ -30,11 +30,12 @@ REFERENCES = {
     "supervisor": "mapstate",  # A2 split into a navigator and an inventory helper (specs/008)
 }
 
-# Per-problem changes to the references (specs/009, specs/010): A2r plays neither the signal trace
-# nor the rune floor, so A6 is measured against A2 there.
+# Per-problem changes to the references (specs/009–011): A2r plays only the dungeon, so A6 is
+# measured against A2 on the other problems it plays.
 PROBLEM_REFERENCES: dict[str, dict[str, str]] = {
     "signal": {"hybrid": "mapstate"},
     "rune": {"hybrid": "mapstate"},
+    "workshop": {"hybrid": "mapstate"},
 }
 
 _HEADER = (

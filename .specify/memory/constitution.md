@@ -12,10 +12,12 @@ Rationale: any difference in results must come from the architecture alone.
 ### II. Tool-Only World Access
 Architectures MUST perceive and act on a problem only through that problem's tools: the dungeon's
 `look`, `move`, `take` and `use`; the survey field's `look`, `move` and `submit`; the signal
-trace's `look`, `probe` and `submit`; the rune floor's `look` and `move`. They MUST NOT import,
-call or read environment internals, generators, solvers or reference walks. That includes the
-shortest solution, the full map, the reference walk, the true deposit count, the broken segment,
-the reference probes, the rune floor's rule, its trap tiles and its reference path. Plain-code
+trace's `look`, `probe` and `submit`; the rune floor's `look` and `move`; the workshop's `look`,
+`inspect`, `gather` and `craft`. They MUST NOT import, call or read environment internals,
+generators, solvers or reference walks. That includes the shortest solution, the full map, the
+reference walk, the true deposit count, the broken segment, the reference probes, the rune floor's
+rule, its trap tiles and its reference path, and the workshop's recipes (except through
+`inspect`), its reference plan and its stuck check. Plain-code
 nodes (for example A6) are bound by the same rule: they can work only with what earlier tool
 results revealed.
 Rationale: an architecture that peeks is not solving the task being measured.
@@ -69,12 +71,21 @@ Rationale: runs cost money, and dry runs must be safe by default.
   trap sends the agent back to S; it is a result, not an error, and no result states the rule.
   Code computes a reference: the moves on the shortest safe path. The step budget is 4× the
   reference. Levels R0–R3 are defined in plan.md.
+- **Workshop**: workshops are generated from a seed: a goal item, craftable items with one or two
+  recipes each, and raw materials with a stock count each, some scarce. Every workshop is
+  solvable; on levels with conflicts, always taking an item's first-listed recipe gets stuck. The
+  goal and the stock are given free at the start; a recipe is seen only through `inspect`. The
+  episode ends as stuck once the goal can no longer be made from the inventory and the stock.
+  Code computes a reference: the steps of the shortest plan that inspects every craftable item it
+  uses, gathers its raw materials and crafts the goal. The step budget is 3× the reference.
+  Levels W1–W3 are defined in plan.md.
 - **Attempts**: an architecture registered as retrying (A4) may restart the world up to 3
   attempts per episode. A restart puts the world back in its start state and costs no step; every
   tool call of every attempt counts toward the one budget. On the survey field a wrong total, on
-  the signal trace a wrong submitted segment, and on the rune floor a trap ends such an
-  architecture's attempt while attempts are left, with a result that says only that it was wrong
-  (on the rune floor, that it was a trap and where). Every other architecture has one attempt.
+  the signal trace a wrong submitted segment, on the rune floor a trap, and on the workshop getting
+  stuck ends such an architecture's attempt while attempts are left, with a result that says only
+  that it was wrong (on the rune floor, that it was a trap and where; on the workshop, that the goal
+  can no longer be made). Every other architecture has one attempt.
 - A per-run token cap stops an episode that loops.
 - Changing a level definition or the seed split invalidates earlier results for comparison.
 - Stack: Python 3.12, uv, LangGraph 1.2.x, LangChain `init_chat_model`, pytest, ruff, mypy.
@@ -99,4 +110,4 @@ and review MUST check compliance. An unavoidable violation MUST be recorded in t
 Complexity Tracking table with a justification. Results from different problems MUST NOT be
 combined in one comparison.
 
-**Version**: 2.3.0 | **Ratified**: 2026-10-28 | **Last Amended**: 2026-11-02
+**Version**: 2.4.0 | **Ratified**: 2026-10-28 | **Last Amended**: 2026-11-02

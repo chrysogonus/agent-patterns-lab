@@ -1,9 +1,9 @@
 # Plan
 
-> **At a glance.** Four small simulated problems (a dungeon, a survey field, a signal trace and a
-> rune floor), one model, and several hand-built LangGraph architectures, scored by code. M0–M10
-> are built: every architecture in §4 is in; M9 added the signal trace and M10 the rune floor.
-> The [README](README.md) is the short tour. This file holds the design: the worlds (§2–§2d),
+> **At a glance.** Five small simulated problems (a dungeon, a survey field, a signal trace, a rune
+> floor and a workshop), one model, and several hand-built LangGraph architectures, scored by code.
+> M0–M11 are built: every architecture in §4 is in, and M11 added the workshop.
+> The [README](README.md) is the short tour. This file holds the design: the worlds (§2–§2e),
 > the fairness rules (§3), the architectures (§4), the metrics (§5) and the milestones (§7).
 
 ## 1. Goal
@@ -17,10 +17,11 @@ efficiency and cost on exploration tasks that get harder step by step?
 The task is deliberately small and fully simulated, so every result can be scored by code and
 every run is cheap to repeat.
 
-Since M5 the lab has two problems: the dungeon (§2) and the survey field (§2b). Each problem has
-its own tools, levels, seeds and budget rule, and architectures are compared only within a
-problem. The survey field is built so that one property shows: on an open field with no dead
-ends, splitting the work between scouts should pay off, unlike in the M4 dungeons.
+The lab has five problems: the dungeon (§2), the survey field (§2b), the signal trace (§2c), the
+rune floor (§2d) and the workshop (§2e). Each problem has its own tools, levels, seeds and budget
+rule, and architectures are compared only within a problem. Each problem after the dungeon is built
+so that one property shows: splitting the work (survey field), choosing what to look at next
+(signal trace), learning from failure (rune floor) and planning ahead (workshop).
 
 ## 2. Environment
 
@@ -186,6 +187,47 @@ reference. A trap is repeated when an earlier trap sprang on the same cell in th
 
 Seeds: the same numbers as the other problems, keyed by the problem name.
 
+## 2e. Workshop
+
+Built so that planning ahead is what differs (specs/011): steps depend on each other, a scarce raw
+material is needed in two places, and the obvious recipe for one part uses it up.
+
+### World
+
+- A goal item, craftable items made from recipes, and raw materials with a stock count each, some
+  scarce (stock 1). A recipe is a list of inputs, one unit each. Most items have one recipe; a
+  *tempting* item has two, and its first uses the scarce material one level down (frame ← iron bar
+  ← coal), while another branch needs that material too.
+- The goal and the stock are given free at the start; a recipe is seen only by inspecting the
+  item. The episode ends as stuck once the goal can no longer be made from the inventory and the
+  stock.
+
+### Tools
+
+| Tool | Returns |
+| --- | --- |
+| `look()` | The goal, the stock with counts, and the inventory |
+| `inspect(item)` | The item's recipes, or that it is a raw material |
+| `gather(item)` | One unit of a raw material from the stock into the inventory |
+| `craft(item, recipe)` | The item made with recipe 1 or 2 from the inventory |
+
+### Episode
+
+The episode ends when the goal is crafted, stuck, at the budget, or when the architecture stops. It
+is a success when the goal is crafted. Code computes a reference: one inspect of every craftable
+item the shortest plan crafts, plus its gathers and crafts. The step budget is 3× the reference. A
+scarce unit used beyond the reference plan's use counts as wasted.
+
+### Levels
+
+| Level | Craftables | Depth | Conflicts | Purpose |
+| --- | --- | --- | --- | --- |
+| W1 | 3 | 2 | none (one harmless second recipe) | Baseline; every architecture should finish |
+| W2 | 5 | 3 | 1 | The mock-up's lantern: planning saves the coal |
+| W3 | 8 | 4 | 2 | Two conflicts a plan must hold at once |
+
+Seeds: the same numbers as the other problems, keyed by the problem name.
+
 ## 3. Fairness rules
 
 These become the Spec Kit constitution.
@@ -206,13 +248,13 @@ the repository is to learn LangGraph.
 
 | ID | Architecture | What it tests | LangGraph features | Problems |
 | --- | --- | --- | --- | --- |
-| A1 | ReAct | The baseline: memory is the message history only | Tool node, conditional edge, loop limit | dungeon, survey, signal, rune |
-| A2 | Map state | Does explicit memory beat history? The explored map lives in graph state and is rendered each turn | State schema, reducers | dungeon, survey, signal, rune |
+| A1 | ReAct | The baseline: memory is the message history only | Tool node, conditional edge, loop limit | dungeon, survey, signal, rune, workshop |
+| A2 | Map state | Does explicit memory beat history? The explored map lives in graph state and is rendered each turn | State schema, reducers | dungeon, survey, signal, rune, workshop |
 | A2r | Map state with routes (`mapstate_routes`) | Does a planning aid help a small model? A2's map plus the shortest known route to each unexplored exit | Same graph as A2 | dungeon |
-| A3 | Plan-and-execute | Does planning help on L3? Planner sets subgoals, executor runs them, replanner reacts | Multiple nodes, cycles | dungeon, survey, signal, rune |
-| A4 | Reflexion | Does learning from a failed attempt pay for itself? All attempts count toward the budget | Outer retry loop, persistent notes | dungeon, survey, signal, rune |
-| A5 | Supervisor (`supervisor`) | Do subagents help or only add cost? A supervisor hands tasks to a navigator (look, move) and an inventory subagent (take, use) | Subgraphs, handoffs (`Command`) | dungeon |
-| A6 | Hybrid | How much of the work needs a model at all? Code searches the known map, the model picks targets | Plain Python nodes mixed with model nodes | dungeon, signal, rune |
+| A3 | Plan-and-execute | Does planning help on L3? Planner sets subgoals, executor runs them, replanner reacts | Multiple nodes, cycles | dungeon, survey, signal, rune, workshop |
+| A4 | Reflexion | Does learning from a failed attempt pay for itself? All attempts count toward the budget | Outer retry loop, persistent notes | dungeon, survey, signal, rune, workshop |
+| A5 | Supervisor (`supervisor`) | Do subagents help or only add cost? A supervisor hands tasks to a navigator (look, move) and an inventory subagent (take, use) | Subgraphs, handoffs (`Command`); on the workshop a researcher (look, inspect) and a crafter (gather, craft) | dungeon, workshop |
+| A6 | Hybrid | How much of the work needs a model at all? Code searches the known map, the model picks targets | Plain Python nodes mixed with model nodes | dungeon, signal, rune, workshop |
 | A7 | Fan-out once (`fanout`) | Does splitting the exploration help? An orchestrator splits the dungeon once; up to 4 scouts explore on their own maps | `Send`, parallel branches, reducers | dungeon, survey |
 | A8 | Supervisor in rounds (`rounds`) | Does replanning on the merged map help the scouts? Short tasks per round, replanned on what all scouts saw | `Send` in a cycle, shared state | dungeon, survey |
 | A9 | Shared blackboard (`blackboard`) | Can scouts coordinate without a planner? They take turns on one live map and claim frontiers | Round-robin routing over shared state | dungeon, survey |
@@ -272,6 +314,7 @@ Each milestone after M0 is one Spec Kit feature (`/speckit-specify` through
 | M8 | A5 supervisor (`supervisor`) on the dungeon | It can be watched in the viewer and is added to the comparison on the same seeds | ✅ |
 | M9 | The signal trace (§2c), with A1–A4 and A6 on it | Any signal level and seed can be shown and watched in the viewer; signal runs plan, continue and report like the other problems; the dungeon and the survey field are unchanged | ✅ |
 | M10 | The rune floor (§2d), with A1–A4 and A6 on it | Any rune level and seed can be shown and watched in the viewer; rune runs plan, continue and report like the other problems; the other problems are unchanged | ✅ |
+| M11 | The workshop (§2e), with A1–A6 on it | Any workshop level and seed can be shown and watched in the viewer; workshop runs plan, continue and report like the other problems; the other problems are unchanged | ✅ |
 
 Paperclip comes in from M5, when several architectures can be built as parallel tickets.
 
@@ -300,3 +343,5 @@ Decided:
   differs (specs/009). Noisy probes are left for a later level or feature.
 - A fourth problem (since M10): the rune floor, where learning a hidden rule from traps is what
   differs (specs/010); R0, a floor with no rule, is the control where reflecting can only cost.
+- A fifth problem (since M11): the workshop, where planning ahead under a scarce material is what
+  differs (specs/011).

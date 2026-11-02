@@ -356,7 +356,8 @@ def test_an_architecture_that_does_not_play_the_survey_is_refused(
     command = ["run", "--problem", "survey", "--arch", "hybrid", "--level", "S1", "--seeds", "dev"]
     assert main(command) == 2
     err = capsys.readouterr().err
-    assert err == "apl: hybrid does not play the survey problem (it plays: dungeon, rune, signal)\n"
+    plays = "dungeon, rune, signal, workshop"
+    assert err == f"apl: hybrid does not play the survey problem (it plays: {plays})\n"
 
 
 def test_without_a_problem_the_plan_has_no_problem_line(
@@ -428,3 +429,48 @@ def test_an_architecture_that_does_not_play_the_rune_floor_is_refused(
     assert main(command) == 2
     err = capsys.readouterr().err
     assert err == "apl: fanout does not play the rune problem (it plays: dungeon, survey)\n"
+
+
+WORKSHOP = [
+    "run", "--problem", "workshop", "--arch",
+    "react,mapstate,plan_execute,reflexion,supervisor,hybrid",
+    "--level", "all", "--seeds", "dev", "--limit", "1",
+]  # fmt: skip
+
+
+def test_a_workshop_plan(workdir: Path, capsys: pytest.CaptureFixture[str]) -> None:  # specs/011
+    from apl.workshop.prompt import prompt_fingerprint
+
+    assert main(WORKSHOP) == 0
+    out = capsys.readouterr().out
+    lines = out.splitlines()
+    assert lines[1] == (
+        "  architectures  react, mapstate, plan_execute, reflexion, supervisor, hybrid"
+    )
+    assert lines[2] == "  problem        workshop"
+    for line in [
+        "levels         W1, W2, W3",
+        "episodes       18",
+        f"prompt         {prompt_fingerprint()}",
+    ]:
+        assert line in out
+    assert list(workdir.iterdir()) == []
+
+
+def test_an_architecture_that_does_not_play_the_workshop_is_refused(
+    workdir: Path, capsys: pytest.CaptureFixture[str]
+) -> None:  # specs/011 US3 2
+    command = [
+        "run",
+        "--problem",
+        "workshop",
+        "--arch",
+        "fanout",
+        "--level",
+        "W1",
+        "--seeds",
+        "dev",
+    ]
+    assert main(command) == 2
+    err = capsys.readouterr().err
+    assert err == "apl: fanout does not play the workshop problem (it plays: dungeon, survey)\n"

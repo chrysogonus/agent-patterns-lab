@@ -3,13 +3,15 @@
 Each helper is A2's map-state agent offered only its own tools (the navigator look and move, the
 inventory helper take and use) and runs as a subgraph. Both act as one body and share one map;
 the supervisor sees the same map and makes no tool calls, so A5 differs from A2 in the split into
-specialists and the handoffs between them (specs/008 contracts/supervisor.md). Written by the
-agent at the experimenter's request.
+specialists and the handoffs between them (specs/008 contracts/supervisor.md). On the workshop
+the helpers are a researcher (look, inspect) and a crafter (gather, craft) on the workshop log
+(specs/011 contracts/architectures.md). Written by the agent at the experimenter's request.
 """
 
 import json
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Literal, TypedDict, cast
+from typing import Any, Literal, TypedDict
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage
 from langgraph.graph import END, START, StateGraph
@@ -18,17 +20,17 @@ from langgraph.types import Command
 
 from apl.arch.dungeon_map import DungeonMap
 from apl.arch.hybrid import MAX_MISSES
-from apl.arch.mapstate import MAP_INSTRUCTIONS
+from apl.arch.mapstate import MAP_INSTRUCTIONS, WORKSHOP_LOG_INSTRUCTIONS
 from apl.arch.plan_execute import MAX_IDLE, MAX_TURNS
 from apl.arch.scouts import read_answer
+from apl.arch.workshop_log import WorkshopLog
 from apl.kit import Kit
 
-Helper = Literal["navigator", "inventory"]
-Goto = Literal["supervisor", "navigator", "inventory", "__end__"]
+Helper = str  # a helper's name in its problem's team
+Goto = str  # "supervisor", a helper, or "__end__"
 STOP: Literal["__end__"] = "__end__"  # LangGraph's END, typed for Command
 
 TOOLS: dict[Helper, tuple[str, str]] = {"navigator": ("look", "move"), "inventory": ("take", "use")}
-OWNER = {tool: helper for helper, tools in TOOLS.items() for tool in tools}
 CALLED = {"navigator": "the navigator", "inventory": "the inventory helper"}
 
 # The texts explain the setup and the answer format only; no advice on whom to send where (R6).
@@ -57,6 +59,60 @@ INSTRUCTIONS: dict[Helper, str] = {
     "inventory": INVENTORY_INSTRUCTIONS,
 }
 
+# The workshop's team (specs/011 contracts/architectures.md): the same texts with its names.
+WORKSHOP_SUPERVISOR_INSTRUCTIONS = """\
+In this setup you do not call the tools yourself. You direct two helpers who share one inventory \
+and see the same workshop log as you. The researcher can call look and inspect. The crafter can \
+call gather and craft. Hand one task at a time to one helper; it reports back when the task is \
+done or cannot be done. Every tool call of a helper costs a step from the budget. Answer with one \
+JSON object and nothing else:
+{"to": "researcher", "task": "<task>"}, {"to": "crafter", "task": "<task>"}, or {"done": true} \
+to stop."""
+RESEARCHER_INSTRUCTIONS = _HELPER_INSTRUCTIONS.format(
+    own="look and inspect", other="the crafter", others="gather and craft"
+)
+CRAFTER_INSTRUCTIONS = _HELPER_INSTRUCTIONS.format(
+    own="gather and craft", other="the researcher", others="look and inspect"
+)
+
+Memory = DungeonMap | WorkshopLog
+
+
+@dataclass(frozen=True, slots=True)
+class Team:
+    """A problem's supervisor text, helpers, their tools and texts, and the shared memory."""
+
+    supervisor: str
+    tools: dict[Helper, tuple[str, ...]]
+    called: dict[Helper, str]
+    instructions: dict[Helper, str]
+    memory_instructions: str
+    memory: Callable[[str], Memory]  # built from the start view
+
+    @property
+    def owner(self) -> dict[str, Helper]:
+        return {tool: helper for helper, tools in self.tools.items() for tool in tools}
+
+
+TEAMS: dict[str, Team] = {
+    "dungeon": Team(
+        SUPERVISOR_INSTRUCTIONS,
+        dict(TOOLS),
+        dict(CALLED),
+        dict(INSTRUCTIONS),
+        MAP_INSTRUCTIONS,
+        DungeonMap.from_start,
+    ),
+    "workshop": Team(
+        WORKSHOP_SUPERVISOR_INSTRUCTIONS,
+        {"researcher": ("look", "inspect"), "crafter": ("gather", "craft")},
+        {"researcher": "the researcher", "crafter": "the crafter"},
+        {"researcher": RESEARCHER_INSTRUCTIONS, "crafter": CRAFTER_INSTRUCTIONS},
+        WORKSHOP_LOG_INSTRUCTIONS,
+        WorkshopLog.from_start,
+    ),
+}
+
 
 @dataclass(frozen=True, slots=True)
 class Report:
@@ -74,7 +130,7 @@ class SupervisorState(TypedDict):
     # No reducers: each write replaces the value, as in A2 (data-model.md). The helpers'
     # subgraphs use this schema too, so they read and write the parent's keys directly.
     messages: list[BaseMessage]  # the current helper's latest turn only
-    map: DungeonMap
+    map: Memory
     helper: str  # the helper of the current handoff
     task: str
     finished: list[Report]
@@ -88,20 +144,23 @@ class SupervisorState(TypedDict):
     started: bool  # whether a helper has seen the start result
 
 
-def read_handoff(answer: dict[str, Any] | str) -> tuple[Helper, str] | str:
+def read_handoff(
+    answer: dict[str, Any] | str, team: Team = TEAMS["dungeon"]
+) -> tuple[Helper, str] | str:
     """The helper and task of an answer, or why there are none."""
     if isinstance(answer, str):
         return answer
     helper, task = answer.get("to"), answer.get("task")
-    if helper not in TOOLS:
-        return '"to" must be "navigator" or "inventory"'
+    if not isinstance(helper, str) or helper not in team.tools:
+        first, second = team.tools
+        return f'"to" must be "{first}" or "{second}"'
     if not isinstance(task, str) or not task.strip():
         return '"task" must be a non-empty text'
-    return cast(Helper, helper), task.strip()
+    return helper, task.strip()
 
 
-def refusal(tool: str) -> str:
-    return f"Not made: {tool} is {CALLED[OWNER[tool]]}'s tool. It cost no step."
+def refusal(tool: str, team: Team = TEAMS["dungeon"]) -> str:
+    return f"Not made: {tool} is {team.called[team.owner[tool]]}'s tool. It cost no step."
 
 
 def _has_calls(message: BaseMessage) -> bool:
@@ -116,12 +175,13 @@ def _role(name: str) -> Any:
 def _finish(
     state: SupervisorState, status: Literal["done", "unfinished"], report: str, acted: bool
 ) -> dict[str, Any]:
-    done = Report(cast(Helper, state["helper"]), state["task"], status, report)
+    done = Report(state["helper"], state["task"], status, report)
     return {"finished": [*state["finished"], done], "idle": 0 if acted else state["idle"] + 1}
 
 
 def play(kit: Kit) -> None:
-    supervisor_system = SystemMessage(kit.base_prompt + "\n\n" + SUPERVISOR_INSTRUCTIONS)
+    team = TEAMS[kit.problem]
+    supervisor_system = SystemMessage(kit.base_prompt + "\n\n" + team.supervisor)
 
     def supervisor(state: SupervisorState) -> Command[Goto]:
         handoffs = "\n".join(r.render(i) for i, r in enumerate(state["finished"], 1)) or "none"
@@ -138,7 +198,7 @@ def play(kit: Kit) -> None:
         answer = read_answer(str(reply.text))
         if isinstance(answer, dict) and answer.get("done") is True:
             return Command(goto=STOP)
-        handoff = read_handoff(answer)
+        handoff = read_handoff(answer, team)
         if isinstance(handoff, str):
             note = f"Your answer was not used: {handoff}. Answer with one JSON object as described."
             misses = state["misses"] + 1
@@ -158,10 +218,10 @@ def play(kit: Kit) -> None:
         return Command(goto=helper, update=update)
 
     def subgraph(name: Helper) -> CompiledStateGraph[Any, Any, Any, Any]:
-        own = TOOLS[name]
+        own = team.tools[name]
         model = kit.model.bind_tools([t for t in kit.tools if t["function"]["name"] in own])
         system = SystemMessage(
-            kit.base_prompt + "\n\n" + MAP_INSTRUCTIONS + " " + INSTRUCTIONS[name]
+            kit.base_prompt + "\n\n" + team.memory_instructions + " " + team.instructions[name]
         )
 
         def helper(state: SupervisorState) -> dict[str, Any]:
@@ -185,7 +245,7 @@ def play(kit: Kit) -> None:
             assert isinstance(reply, AIMessage)
             calls = [*reply.tool_calls, *reply.invalid_tool_calls]
             # The other helper's tools never reach the dungeon (research R2); the rest do, in order.
-            refused = {c["id"] for c in calls if OWNER.get(c["name"] or "", name) != name}
+            refused = {c["id"] for c in calls if team.owner.get(c["name"] or "", name) != name}
             sent = reply.model_copy(
                 update={
                     "tool_calls": [c for c in reply.tool_calls if c["id"] not in refused],
@@ -198,7 +258,7 @@ def play(kit: Kit) -> None:
             answers: dict[str | None, ToolMessage] = {r.tool_call_id: r for r in results}
             for call in calls:
                 if call["id"] in refused:
-                    text = refusal(call["name"] or "")
+                    text = refusal(call["name"] or "", team)
                     answers[call["id"]] = ToolMessage(
                         text, tool_call_id=call["id"] or "", name=call["name"], status="error"
                     )
@@ -236,14 +296,14 @@ def play(kit: Kit) -> None:
 
     graph = StateGraph(SupervisorState)
     graph.add_node("supervisor", supervisor)
-    for name in TOOLS:
+    for name in team.tools:
         graph.add_node(name, subgraph(name))
         graph.add_conditional_edges(name, after_handoff, ["supervisor", END])
     graph.add_edge(START, "supervisor")
     graph.compile().invoke(
         {
             "messages": [],
-            "map": DungeonMap.from_start(kit.start),
+            "map": team.memory(kit.start),
             "helper": "",
             "task": "",
             "finished": [],

@@ -5,7 +5,8 @@ results and the notes from earlier attempts. After a failed attempt the reflecto
 and the world is restarted; every attempt's steps count toward the one budget (specs/007
 contracts/reflexion.md, constitution 2.1.0). Written by the agent at the experimenter's request,
 as is its signal-trace version on the probe log (specs/009) and its rune-floor version on the walk
-log (specs/010), where a trap ends an attempt and the reply's moves run one at a time.
+log (specs/010), where a trap ends an attempt and the reply's moves run one at a time, and its
+workshop version on the workshop log (specs/011), where getting stuck ends an attempt.
 """
 
 import json
@@ -21,9 +22,11 @@ from apl.arch.mapstate import (
     MAP_INSTRUCTIONS,
     PROBE_LOG_INSTRUCTIONS,
     WALK_LOG_INSTRUCTIONS,
+    WORKSHOP_LOG_INSTRUCTIONS,
 )
 from apl.arch.probe_log import ProbeLog
 from apl.arch.walk_log import WalkLog
+from apl.arch.workshop_log import WorkshopLog
 from apl.kit import Kit
 
 # Actor turns in a row that add no room or cell to the map; then the attempt has failed. A
@@ -40,6 +43,8 @@ Notes you wrote after earlier attempts are shown under "Notes from earlier attem
 
 # Added on the rune floor only, so the other problems' actor prompt stays as it was (specs/010).
 RUNE_ATTEMPT = "On this floor an attempt also fails when a step springs a trap."
+# The same for the workshop only (specs/011).
+WORKSHOP_ATTEMPT = "On this workshop an attempt also fails when the goal can no longer be made."
 
 REFLECTOR_INSTRUCTIONS = """\
 In this setup you do not call the tools yourself. An attempt has just failed. You see why it \
@@ -50,14 +55,15 @@ notes. Answer with the note only."""
 WRONG_TOTAL = "wrong total"
 WRONG_SEGMENT = "wrong segment"  # the signal trace's (specs/009)
 TRAP = "trap"  # the rune floor's (specs/010)
+STUCK = "stuck"  # the workshop's (specs/011)
 # Failures after which the environment has already restarted itself (specs/007 research R3).
-RESTARTED = frozenset({WRONG_TOTAL, WRONG_SEGMENT, TRAP})
+RESTARTED = frozenset({WRONG_TOTAL, WRONG_SEGMENT, TRAP, STUCK})
 
 
 class ReflexionState(TypedDict):
     # No reducers: each write replaces the value, as in A2 (data-model.md).
     messages: list[BaseMessage]  # the actor's latest turn only
-    map: DungeonMap | FieldMap | ProbeLog | WalkLog  # this attempt's
+    map: DungeonMap | FieldMap | ProbeLog | WalkLog | WorkshopLog  # this attempt's
     notes: list[str]
     attempt: int
     stale: int  # actor turns in a row that added nothing to the map
@@ -82,7 +88,10 @@ def _until_submit(message: BaseMessage) -> AIMessage:
     return message.model_copy(update={"tool_calls": kept, "invalid_tool_calls": []})
 
 
-def _size(found: DungeonMap | FieldMap | ProbeLog | WalkLog) -> int:
+def _size(found: DungeonMap | FieldMap | ProbeLog | WalkLog | WorkshopLog) -> int:
+    if isinstance(found, WorkshopLog):
+        # Gathering and crafting move the workshop on as much as inspecting does (specs/011).
+        return found.progress
     if isinstance(found, ProbeLog | WalkLog):
         return found.known  # distinct segments probed (specs/009), cells stepped on (specs/010)
     return len(found.rooms) if isinstance(found, DungeonMap) else len(found.cells)
@@ -99,7 +108,11 @@ def play(kit: Kit) -> None:
     survey = kit.problem == "survey"
     signal = kit.problem == "signal"  # the probe log (specs/009 R11)
     rune = kit.problem == "rune"  # the walk log (specs/010 R12)
-    if rune:
+    workshop = kit.problem == "workshop"  # the workshop log (specs/011 R12)
+    stepwise = rune or workshop  # an attempt can end on a result, not only on a submission
+    if workshop:
+        map_instructions = WORKSHOP_LOG_INSTRUCTIONS
+    elif rune:
         map_instructions = WALK_LOG_INSTRUCTIONS
     elif signal:
         map_instructions = PROBE_LOG_INSTRUCTIONS
@@ -108,18 +121,22 @@ def play(kit: Kit) -> None:
     actor_text = ACTOR_INSTRUCTIONS.format(max_attempts=kit.max_attempts)
     if rune:
         actor_text += " " + RUNE_ATTEMPT
+    if workshop:
+        actor_text += " " + WORKSHOP_ATTEMPT
     actor_system = SystemMessage(kit.base_prompt + "\n\n" + map_instructions + " " + actor_text)
     reflector_system = SystemMessage(kit.base_prompt + "\n\n" + REFLECTOR_INSTRUCTIONS)
 
-    def new_map() -> DungeonMap | FieldMap | ProbeLog | WalkLog:
+    def new_map() -> DungeonMap | FieldMap | ProbeLog | WalkLog | WorkshopLog:
         # A restarted world looks exactly like the start (research R5).
+        if workshop:
+            return WorkshopLog.from_start(kit.start)
         if rune:
             return WalkLog.from_start(kit.start)
         if signal:
             return ProbeLog.from_start(kit.start)
         return FieldMap.from_start(kit.start) if survey else DungeonMap.from_start(kit.start)
 
-    def render(found: DungeonMap | FieldMap | ProbeLog | WalkLog) -> str:
+    def render(found: DungeonMap | FieldMap | ProbeLog | WalkLog | WorkshopLog) -> str:
         return found.render(False) if isinstance(found, DungeonMap) else found.render()
 
     def actor(state: ReflexionState) -> dict[str, Any]:
@@ -151,7 +168,8 @@ def play(kit: Kit) -> None:
         return update
 
     def one_at_a_time(reply: AIMessage) -> tuple[AIMessage, list[ToolMessage]]:
-        """The rune floor's calls, each on its own, up to the first trap that ends the attempt.
+        """The calls, each on its own, up to the first result that ends the attempt (a trap on the
+        rune floor, getting stuck on the workshop).
 
         The calls after it never run and are dropped from the reply, so none is left unanswered
         and no move spills into the next attempt before the reflection (specs/010 contracts)."""
@@ -162,7 +180,7 @@ def play(kit: Kit) -> None:
             single = AIMessage("", **{"tool_calls" if valid else "invalid_tool_calls": [call]})
             results += kit.tool_node({"messages": [single]})["messages"]
             found = json.loads(str(results[-1].content)).get("data")
-            if isinstance(found, dict) and "trap" in found and "attempts_left" in found:
+            if isinstance(found, dict) and "attempts_left" in found:
                 kept = reply.tool_calls[: i + 1]
                 invalid = [] if valid else reply.invalid_tool_calls[: i + 1 - len(kept)]
                 update = {"tool_calls": kept, "invalid_tool_calls": invalid}
@@ -172,7 +190,7 @@ def play(kit: Kit) -> None:
     def act(state: ReflexionState) -> dict[str, Any]:
         reply = _until_submit(state["messages"][-1])
         before = _size(state["map"])
-        if rune:
+        if stepwise:
             reply, results = one_at_a_time(reply)
         else:
             results = kit.tool_node({"messages": [reply]})["messages"]
@@ -185,10 +203,11 @@ def play(kit: Kit) -> None:
             state["map"].apply(call["name"] or "", args, data)
             found = data.get("data")
             wrong = wrong or (isinstance(found, dict) and found.get("correct") is False)
-            wrong = wrong or (isinstance(found, dict) and "attempts_left" in found and rune)
+            ended = isinstance(found, dict) and "attempts_left" in found
+            wrong = wrong or (ended and stepwise)
         stale = 0 if _size(state["map"]) > before else state["stale"] + 1
-        if rune:
-            failure = TRAP if wrong else ""
+        if stepwise:
+            failure = (STUCK if workshop else TRAP) if wrong else ""
         else:
             failure = (WRONG_SEGMENT if signal else WRONG_TOTAL) if wrong else ""
         if not failure and stale >= MAX_STALE:

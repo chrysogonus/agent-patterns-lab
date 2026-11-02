@@ -210,6 +210,40 @@ def _rune_spread_row(arch: str, level: str, rows: Sequence[EpisodeRow]) -> str:
     return f"| {arch} | {level} | {min(success):.0%}–{max(success):.0%} | {span} |"
 
 
+# The workshop's own table (specs/011 contracts/results.md).
+_WORKSHOP_HEADER = (
+    "| Arch | Level | Episodes | Success | Stuck | Steps (median) | Wasted (median) "
+    "| Efficiency (median) | Budget hit | Tokens (median) | Latency (median) |"
+)
+
+
+def _workshop_row(arch: str, level: str, rows: Sequence[EpisodeRow]) -> str:
+    cells = [
+        arch,
+        level,
+        str(len(rows)),
+        _pct(_rate(rows, lambda r: r.success)),
+        _pct(_rate(rows, lambda r: r.stuck)),
+        _count(_median([r.steps for r in rows])),
+        _count(_median([r.wasted for r in rows])),
+        _fixed(_median([r.efficiency for r in rows if r.success]), 2),
+        _pct(_rate(rows, lambda r: r.budget_hit)),
+        _count(_median([_tokens(r) for r in rows])),
+        _fixed(_median([r.latency_s for r in rows]), 1, "s"),
+    ]
+    return "| " + " | ".join(cells) + " |"
+
+
+def _workshop_spread_row(arch: str, level: str, rows: Sequence[EpisodeRow]) -> str:
+    by_repeat: dict[tuple[str, int], list[EpisodeRow]] = defaultdict(list)
+    for row in rows:
+        by_repeat[row.run_id, row.repeat].append(row)
+    success = [_rate(group, lambda r: r.success) for group in by_repeat.values()]
+    steps = [m for g in by_repeat.values() if (m := _median([r.steps for r in g])) is not None]
+    span = f"{_count(min(steps))}–{_count(max(steps))}" if steps else "—"
+    return f"| {arch} | {level} | {min(success):.0%}–{max(success):.0%} | {span} |"
+
+
 def _tokens(row: EpisodeRow) -> int | None:
     if row.input_tokens is None or row.output_tokens is None:
         return None
@@ -281,10 +315,12 @@ def render(runs: Sequence[LoadedRun]) -> str:
     survey = first.problem == "survey"
     signal = first.problem == "signal"  # specs/009
     rune = first.problem == "rune"  # specs/010
+    workshop = first.problem == "workshop"  # specs/011
     where = {
         "survey": " on the survey field",
         "signal": " on the signal trace",
         "rune": " on the rune floor",
+        "workshop": " on the workshop",
     }.get(first.problem, "")
     lines = [f"# Report: {', '.join(archs)}" + where, ""]
     if first.seed_set == "test":
@@ -317,6 +353,12 @@ def render(runs: Sequence[LoadedRun]) -> str:
             _RUNE_HEADER,
             "| --- " * 11 + "|",
             *(_rune_row(arch, level, groups[arch, level]) for arch, level in keys),
+        ]
+    elif workshop:
+        lines += [
+            _WORKSHOP_HEADER,
+            "| --- " * 11 + "|",
+            *(_workshop_row(arch, level, groups[arch, level]) for arch, level in keys),
         ]
     else:
         lines += [
@@ -362,6 +404,15 @@ def render(runs: Sequence[LoadedRun]) -> str:
             "| Arch | Level | Success (min–max) | Traps (min–max) |",
             "| --- | --- | --- | --- |",
             *(_rune_spread_row(arch, level, groups[arch, level]) for arch, level in keys),
+        ]
+    elif workshop and any(r.record.repeats > 1 for r in runs):
+        lines += [
+            "",
+            "## Spread across repeats",
+            "",
+            "| Arch | Level | Success (min–max) | Steps (min–max) |",
+            "| --- | --- | --- | --- |",
+            *(_workshop_spread_row(arch, level, groups[arch, level]) for arch, level in keys),
         ]
     elif any(r.record.repeats > 1 for r in runs):
         lines += [

@@ -8,11 +8,12 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from apl import dungeon, rune, signal_trace, survey
+from apl import dungeon, rune, signal_trace, survey, workshop
 from apl.dungeon.env import MAX_ATTEMPTS as DUNGEON_ATTEMPTS
 from apl.rune.env import MAX_ATTEMPTS as RUNE_ATTEMPTS
 from apl.signal_trace.env import MAX_ATTEMPTS as SIGNAL_ATTEMPTS
 from apl.survey.env import MAX_ATTEMPTS as SURVEY_ATTEMPTS
+from apl.workshop.env import MAX_ATTEMPTS as WORKSHOP_ATTEMPTS
 
 
 @dataclass(frozen=True, slots=True)
@@ -90,6 +91,21 @@ def _rune_fingerprint() -> str:
     return prompt_fingerprint()
 
 
+def _workshop_kit(episode: Any, model: Any) -> Any:
+    from apl.workshop.kit import build_kit
+
+    return build_kit(episode, model)
+
+
+_workshop_kit.__name__ = "build_kit"
+
+
+def _workshop_fingerprint() -> str:
+    from apl.workshop.prompt import prompt_fingerprint
+
+    return prompt_fingerprint()
+
+
 PROBLEMS: dict[str, Problem] = {
     "dungeon": Problem(
         name="dungeon",
@@ -138,6 +154,18 @@ PROBLEMS: dict[str, Problem] = {
         build_kit=_rune_kit,
         prompt_fingerprint=_rune_fingerprint,
         max_attempts=RUNE_ATTEMPTS,
+    ),
+    "workshop": Problem(  # specs/011
+        name="workshop",
+        levels=workshop.LEVELS,
+        dev_seeds=workshop.DEV_SEEDS,
+        test_seeds=workshop.TEST_SEEDS,
+        generate=workshop.generate,
+        reference_steps=lambda world: int(world.reference_steps),
+        start_episode=workshop.start_episode,
+        build_kit=_workshop_kit,
+        prompt_fingerprint=_workshop_fingerprint,
+        max_attempts=WORKSHOP_ATTEMPTS,
     ),
 }
 DEFAULT = "dungeon"

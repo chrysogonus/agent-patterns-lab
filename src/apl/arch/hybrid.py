@@ -3,7 +3,8 @@
 The code nodes work only from the map, which is built from tool results (Constitution II), and
 every call they make is a tool call that costs a step (Constitution III). On the signal trace
 code keeps the suspects and lists the probes that split them best (specs/009); on the rune floor
-code keeps what happened on each tile and offers the moves, without guessing the rule (specs/010).
+code keeps what happened on each tile and offers the moves, without guessing the rule (specs/010);
+in the workshop code offers every action it can take now and never picks a recipe (specs/011).
 Written by the agent at the experimenter's request.
 """
 
@@ -18,6 +19,7 @@ from langgraph.graph import END, START, StateGraph
 from apl.arch.dungeon_map import DungeonMap
 from apl.arch.probe_log import ProbeLog
 from apl.arch.walk_log import WalkLog, cell_name
+from apl.arch.workshop_log import WorkshopLog
 from apl.kit import Kit
 
 # Explains the setup and the answer format only; no advice on which option to pick.
@@ -42,6 +44,12 @@ list of moves. Code carries out the move you choose with one tool call. For each
 says what happened on that tile before: at which step of a walk it was safe or a trap. Answer with \
 the number of one option and nothing else."""
 
+# The workshop's (specs/011 contracts/architectures.md): the setup and the format only.
+WORKSHOP_HYBRID_INSTRUCTIONS = """\
+In this setup you do not call the tools yourself. Every turn you see your workshop log and a \
+numbered list of actions you can take now. Code carries out the action you choose with one tool \
+call. Answer with the number of one option and nothing else."""
+
 DIRECTIONS = ("north", "east", "south", "west")
 TIMES = {1: "once", 2: "twice"}
 
@@ -61,7 +69,7 @@ class Option(NamedTuple):
 
 
 class HybridState(TypedDict):
-    map: DungeonMap | ProbeLog | WalkLog
+    map: DungeonMap | ProbeLog | WalkLog | WorkshopLog
     options: list[Option]
     note: str  # what happened since the model's last answer
     misses: int  # answers in a row that named no option
@@ -144,6 +152,10 @@ def rune_options(log: WalkLog) -> list[Option]:
 
 
 def play(kit: Kit) -> None:
+    if kit.problem == "workshop":  # specs/011: the same graph over a workshop log
+        system = SystemMessage(kit.base_prompt + "\n\n" + WORKSHOP_HYBRID_INSTRUCTIONS)
+        _graph(kit, system, WorkshopLog.from_start(kit.start))
+        return
     if kit.problem == "rune":  # specs/010: the same graph over a walk log
         system = SystemMessage(kit.base_prompt + "\n\n" + RUNE_HYBRID_INSTRUCTIONS)
         _graph(kit, system, WalkLog.from_start(kit.start))
@@ -156,13 +168,17 @@ def play(kit: Kit) -> None:
     _graph(kit, system, DungeonMap.from_start(kit.start))
 
 
-def _graph(kit: Kit, system: SystemMessage, start: DungeonMap | ProbeLog | WalkLog) -> None:
+def _graph(
+    kit: Kit, system: SystemMessage, start: DungeonMap | ProbeLog | WalkLog | WorkshopLog
+) -> None:
     ids = itertools.count(1)
 
     def plan(state: HybridState) -> dict[str, list[Option]]:
         found = state["map"]
         if isinstance(found, WalkLog):
             return {"options": rune_options(found)}
+        if isinstance(found, WorkshopLog):
+            return {"options": [Option(text, [call]) for text, call in found.options()]}
         return {"options": signal_options(found) if isinstance(found, ProbeLog) else options(found)}
 
     def choose(state: HybridState) -> dict[str, object]:

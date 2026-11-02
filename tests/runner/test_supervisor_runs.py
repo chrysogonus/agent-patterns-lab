@@ -93,7 +93,7 @@ def test_a_survey_run_of_a5_is_refused(
     ]
     assert main(args) != 0
     captured = capsys.readouterr()
-    assert "supervisor does not play the survey problem (it plays: dungeon)" in (
+    assert "supervisor does not play the survey problem (it plays: dungeon, workshop)" in (
         captured.out + captured.err
     )
     assert list(tmp_path.iterdir()) == []

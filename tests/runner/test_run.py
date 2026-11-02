@@ -420,3 +420,37 @@ def test_a_rune_run_gives_every_architecture_the_same_conditions(tmp_path: Path)
     assert kits["react"].base_prompt == kits["mapstate"].base_prompt
     assert kits["react"].start == kits["mapstate"].start
     assert kits["react"].problem == kits["mapstate"].problem == "rune"
+
+
+def test_a_workshop_run_gives_every_architecture_the_same_conditions(tmp_path: Path) -> None:
+    from typing import Any
+
+    from apl.kit import Kit
+    from apl.runner import registry
+    from apl.workshop import generate
+    from apl.workshop.prompt import prompt_fingerprint
+
+    kits: dict[str, Kit] = {}
+
+    def seen(name: str) -> Any:
+        def play(kit: Kit) -> None:
+            kits[name] = kit
+            registry.load(name)(kit)
+
+        return play
+
+    archs = {name: seen(name) for name in ("react", "mapstate")}
+    spec = RunSpec.build(list(archs), ["W1"], "dev", only=[1000], problem="workshop")
+    outcome = execute(
+        spec, Settings(), model_factory=scripted_factory(text_answer()), architectures=archs,
+        results_dir=tmp_path,
+    )  # fmt: skip
+    record = _record(outcome)
+    assert record.problem == "workshop"
+    assert record.settings["prompt_fingerprint"] == prompt_fingerprint()
+    w = generate("W1", 1000)
+    assert {(r.budget, r.optimal_steps) for r in _rows(outcome)} == {(w.budget, w.reference)}
+    assert kits["react"].tools == kits["mapstate"].tools
+    assert kits["react"].base_prompt == kits["mapstate"].base_prompt
+    assert kits["react"].start == kits["mapstate"].start
+    assert kits["react"].problem == kits["mapstate"].problem == "workshop"

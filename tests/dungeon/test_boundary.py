@@ -16,8 +16,8 @@ ARCH_DIR = Path(__file__).resolve().parents[2] / "src" / "apl" / "arch"
 ALLOWED = {
     "apl.kit", "apl.dungeon.tools", "apl.dungeon.results", "apl.survey.tools",
     "apl.survey.results", "apl.signal_trace.tools", "apl.signal_trace.results",
-    "apl.rune.tools", "apl.rune.results", "apl.arch",
-}  # fmt: skip  # each problem's tools and results (constitution 2.3.0, specs/005, /009, /010)
+    "apl.rune.tools", "apl.rune.results", "apl.workshop.tools", "apl.workshop.results", "apl.arch",
+}  # fmt: skip  # each problem's tools and results (constitution 2.4.0, specs/005, /009–/011)
 # They must use kit.model, never create a model of their own (Constitution I, research R15).
 MODEL_MODULES = (
     "openai",
@@ -252,4 +252,20 @@ def test_the_rune_floor_internals_are_forbidden_too(tmp_path: Path) -> None:  # 
         "peek.py: apl.rune.generator.generate",
         "peek.py: apl.rune.model.Floor",
         "peek.py: apl.rune.rules",
+    ]
+
+
+def test_the_workshop_internals_are_forbidden_too(tmp_path: Path) -> None:  # specs/011 US4
+    (tmp_path / "ok.py").write_text(
+        "from apl.workshop.tools import AgentTools\nfrom apl.workshop.results import ToolResult\n"
+    )
+    (tmp_path / "peek.py").write_text(
+        "from apl.workshop.generator import generate\nimport apl.workshop.env\n"
+        "from apl.workshop import plans\nfrom apl.workshop.model import Workshop\n"
+    )
+    assert _forbidden(tmp_path) == [
+        "peek.py: apl.workshop.env",
+        "peek.py: apl.workshop.generator.generate",
+        "peek.py: apl.workshop.model.Workshop",
+        "peek.py: apl.workshop.plans",
     ]

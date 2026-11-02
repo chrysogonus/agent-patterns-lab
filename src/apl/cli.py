@@ -91,6 +91,22 @@ def _rune_show(args: argparse.Namespace) -> int:
     return 0
 
 
+def _workshop_show(args: argparse.Namespace) -> int:
+    from apl.workshop import generate as generate_workshop
+    from apl.workshop.render_svg import html
+    from apl.workshop.render_text import render_text as render_workshop
+
+    try:
+        workshop = generate_workshop(args.level, args.seed)
+        if args.html:
+            Path(args.html).write_text(html(workshop), encoding="utf-8")
+    except (OSError, ValueError) as error:
+        print(f"apl: {error}", file=sys.stderr)
+        return 2
+    print(render_workshop(workshop, route=args.route == "reference"), end="")
+    return 0
+
+
 def _csv(text: str) -> list[str]:
     return [part.strip() for part in text.split(",") if part.strip()]
 
@@ -339,6 +355,13 @@ def main(argv: list[str] | None = None) -> int:
     floor_show.add_argument("--seed", required=True, type=int)
     floor_show.add_argument("--route", choices=["reference"], help="list the reference path")
     floor_show.add_argument("--html", metavar="OUT", help="also write a picture")
+    workshop = commands.add_parser("workshop", help="inspect generated workshops")
+    workshop_commands = workshop.add_subparsers(dest="workshop_command")
+    tree_show = workshop_commands.add_parser("show", help="print a workshop as text")
+    tree_show.add_argument("--level", required=True, choices=["W1", "W2", "W3"])
+    tree_show.add_argument("--seed", required=True, type=int)
+    tree_show.add_argument("--route", choices=["reference"], help="list the reference plan")
+    tree_show.add_argument("--html", metavar="OUT", help="also write a picture")
     run = commands.add_parser("run", help="plan a run, or play it with --execute")
     run.add_argument(
         "--problem", default="dungeon", choices=list(PROBLEMS), help="default: dungeon"
@@ -369,6 +392,8 @@ def main(argv: list[str] | None = None) -> int:
         return _signal_show(args)
     if args.command == "rune" and args.rune_command == "show":
         return _rune_show(args)
+    if args.command == "workshop" and args.workshop_command == "show":
+        return _workshop_show(args)
     if args.command == "run":
         return _run(args)
     if args.command == "report":
@@ -377,6 +402,8 @@ def main(argv: list[str] | None = None) -> int:
         return _continue(args)
     if args.command == "serve":
         return _serve(args)
-    groups = {"dungeon": dungeon, "survey": survey, "signal": signal, "rune": rune}
+    groups = {
+        "dungeon": dungeon, "survey": survey, "signal": signal, "rune": rune, "workshop": workshop,
+    }  # fmt: skip
     groups.get(args.command, parser).print_help()
     return 2
