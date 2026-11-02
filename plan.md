@@ -1,9 +1,9 @@
 # Plan
 
-> **At a glance.** Five small simulated problems (a dungeon, a survey field, a signal trace, a rune
-> floor and a workshop), one model, and several hand-built LangGraph architectures, scored by code.
-> M0–M11 are built: every architecture in §4 is in, and M11 added the workshop.
-> The [README](README.md) is the short tour. This file holds the design: the worlds (§2–§2e),
+> **At a glance.** Six small simulated problems (a dungeon, a survey field, a signal trace, a rune
+> floor, a workshop and a warehouse), one model, and several hand-built LangGraph architectures,
+> scored by code. M0–M12 are built: every architecture in §4 is in, and M12 added the warehouse.
+> The [README](README.md) is the short tour. This file holds the design: the worlds (§2–§2f),
 > the fairness rules (§3), the architectures (§4), the metrics (§5) and the milestones (§7).
 
 ## 1. Goal
@@ -17,11 +17,12 @@ efficiency and cost on exploration tasks that get harder step by step?
 The task is deliberately small and fully simulated, so every result can be scored by code and
 every run is cheap to repeat.
 
-The lab has five problems: the dungeon (§2), the survey field (§2b), the signal trace (§2c), the
-rune floor (§2d) and the workshop (§2e). Each problem has its own tools, levels, seeds and budget
-rule, and architectures are compared only within a problem. Each problem after the dungeon is built
-so that one property shows: splitting the work (survey field), choosing what to look at next
-(signal trace), learning from failure (rune floor) and planning ahead (workshop).
+The lab has six problems: the dungeon (§2), the survey field (§2b), the signal trace (§2c), the
+rune floor (§2d), the workshop (§2e) and the warehouse (§2f). Each problem has its own tools,
+levels, seeds and budget rule, and architectures are compared only within a problem. Each problem
+after the dungeon is built so that one property shows: splitting the work (survey field), choosing
+what to look at next (signal trace), learning from failure (rune floor), planning ahead (workshop)
+and adapting a split of the work (warehouse).
 
 ## 2. Environment
 
@@ -228,6 +229,49 @@ scarce unit used beyond the reference plan's use counts as wasted.
 
 Seeds: the same numbers as the other problems, keyed by the problem name.
 
+## 2f. Warehouse
+
+Built so that adapting a split of the work is what differs (specs/012): the packages are spread
+unevenly and found only by looking, so a split decided before anyone has looked leaves a robot
+idle.
+
+### World
+
+- Rows of shelves with aisles between them, a cross corridor at each end, a dock S in the west
+  corridor where robots start and a drop zone D in the east corridor, both off the aisles. Cells are
+  named as on the survey field.
+- Packages stand on aisle cells. The floor plan and the number of packages are given free at the
+  start; a robot sees the packages of the corridors it stands in.
+- A robot carries one package at a time and delivers it by dropping it on D. Up to 4 robots (for
+  the orchestrators); they share cells and never block each other.
+
+### Tools
+
+| Tool | Returns |
+| --- | --- |
+| `look()` | The robot's cell, the corridors it stands in and the packages it sees there, what it carries, whether it is on D, and the packages delivered |
+| `move(direction)` | The same view after one step, or an error (shelf, edge of the floor, unknown direction) |
+| `pick()` | That the robot now carries the package on its cell, or an error (no package, already carrying) |
+| `drop()` | That the carried package is delivered, or an error (not on D, carrying nothing) |
+
+### Episode
+
+The episode ends when every package is delivered, when the step budget is used up, or when the
+architecture stops. It is a success when every package is delivered. Code computes a reference: the
+steps of a single robot that clears the aisles north to south, carrying each package to D as soon
+as it sees it (a reference, not an optimum). The step budget is 3× the reference, shared by all
+robots, so more robots buy no steps; their gain shows in parallel turns.
+
+### Levels
+
+| Level | Floor | Packages | Spread | Purpose |
+| --- | --- | --- | --- | --- |
+| P1 | 9 columns, 3 aisles | 3 | one per aisle | Baseline; every architecture should finish |
+| P2 | 9 columns, 3 aisles | 3 | a shuffle of 0, 1, 2 | The mock-up: a blind split leaves a robot idle |
+| P3 | 11 columns, 5 aisles | 6 | a shuffle of 3, 1, 1, 1, 0 or 3, 2, 1, 0, 0 | More to reassign |
+
+Seeds: the same numbers as the other problems, keyed by the problem name.
+
 ## 3. Fairness rules
 
 These become the Spec Kit constitution.
@@ -248,16 +292,16 @@ the repository is to learn LangGraph.
 
 | ID | Architecture | What it tests | LangGraph features | Problems |
 | --- | --- | --- | --- | --- |
-| A1 | ReAct | The baseline: memory is the message history only | Tool node, conditional edge, loop limit | dungeon, survey, signal, rune, workshop |
-| A2 | Map state | Does explicit memory beat history? The explored map lives in graph state and is rendered each turn | State schema, reducers | dungeon, survey, signal, rune, workshop |
+| A1 | ReAct | The baseline: memory is the message history only | Tool node, conditional edge, loop limit | dungeon, survey, signal, rune, workshop, warehouse |
+| A2 | Map state | Does explicit memory beat history? The explored map lives in graph state and is rendered each turn | State schema, reducers | dungeon, survey, signal, rune, workshop, warehouse |
 | A2r | Map state with routes (`mapstate_routes`) | Does a planning aid help a small model? A2's map plus the shortest known route to each unexplored exit | Same graph as A2 | dungeon |
 | A3 | Plan-and-execute | Does committing to a plan help? Planner sets subgoals, executor runs them in order, replanner is asked only when a subgoal cannot be done or finished, or the plan is used up | Multiple nodes, cycles | dungeon, survey, signal, rune, workshop |
 | A4 | Reflexion | Does learning from a failed attempt pay for itself? All attempts count toward the budget. On the rune floor the walk log is kept across attempts, so A4 has A2's full walk history and differs in the notes and its retry controls. On the dungeon an attempt fails only by giving up or going stale, and the report notes that those results measure reflection together with these stall restarts | Outer retry loop, persistent notes | dungeon, survey, signal, rune, workshop |
 | A5 | Supervisor (`supervisor`) | Do subagents help or only add cost? A supervisor hands tasks to a navigator (look, move) and an inventory subagent (take, use) | Subgraphs, handoffs (`Command`); on the workshop a researcher (look, inspect) and a crafter (gather, craft) | dungeon, workshop |
 | A6 | Hybrid | How much of the work needs a model at all? Code searches the known map, the model picks targets | Plain Python nodes mixed with model nodes | dungeon, signal, rune, workshop |
-| A7 | Fan-out once (`fanout`) | Does splitting the exploration help? An orchestrator splits the dungeon once; up to 4 scouts explore on their own maps | `Send`, parallel branches, reducers | dungeon, survey |
-| A8 | Supervisor in rounds (`rounds`) | Does replanning on the merged map help the scouts? Short tasks per round, replanned on what all scouts saw | `Send` in a cycle, shared state | dungeon, survey |
-| A9 | Shared blackboard (`blackboard`) | Can scouts coordinate without a planner? They take turns on one live map and claim frontiers | Round-robin routing over shared state | dungeon, survey |
+| A7 | Fan-out once (`fanout`) | Does splitting the exploration help? An orchestrator splits the dungeon once; up to 4 scouts explore on their own maps | `Send`, parallel branches, reducers | dungeon, survey, warehouse |
+| A8 | Supervisor in rounds (`rounds`) | Does replanning on the merged map help the scouts? Short tasks per round, replanned on what all scouts saw | `Send` in a cycle, shared state | dungeon, survey, warehouse |
+| A9 | Shared blackboard (`blackboard`) | Can scouts coordinate without a planner? They take turns on one live map and claim frontiers | Round-robin routing over shared state | dungeon, survey, warehouse |
 
 A7–A9 put up to 4 scouts in one episode. Each scout has its own position and inventory; doors,
 items left in rooms and the step budget are shared, and every scout's tool calls count toward the
@@ -315,6 +359,7 @@ Each milestone after M0 is one Spec Kit feature (`/speckit-specify` through
 | M9 | The signal trace (§2c), with A1–A4 and A6 on it | Any signal level and seed can be shown and watched in the viewer; signal runs plan, continue and report like the other problems; the dungeon and the survey field are unchanged | ✅ |
 | M10 | The rune floor (§2d), with A1–A4 and A6 on it | Any rune level and seed can be shown and watched in the viewer; rune runs plan, continue and report like the other problems; the other problems are unchanged | ✅ |
 | M11 | The workshop (§2e), with A1–A6 on it | Any workshop level and seed can be shown and watched in the viewer; workshop runs plan, continue and report like the other problems; the other problems are unchanged | ✅ |
+| M12 | The warehouse (§2f), with A1, A2 and A7–A9 on it | Any warehouse level and seed can be shown and watched in the viewer; warehouse runs plan, continue and report like the other problems; the other problems are unchanged | ✅ |
 
 Paperclip comes in from M5, when several architectures can be built as parallel tickets.
 
@@ -345,3 +390,5 @@ Decided:
   differs (specs/010); R0, a floor with no rule, is the control where reflecting can only cost.
 - A fifth problem (since M11): the workshop, where planning ahead under a scarce material is what
   differs (specs/011).
+- A sixth problem (since M12): the warehouse, where adapting a split of the work to packages found
+  along the way is what differs (specs/012). The combination vault is the one mock-up board left.

@@ -16,7 +16,7 @@ def test_options_list_the_problems_and_who_plays_them(tmp_path: Path) -> None:
     archs = {name: registry.load(name) for name in ("react", "hybrid", "fanout")}
     data = _body(_viewer(tmp_path, architectures=archs).options())
     assert data["levels"] == ["L1", "L2", "L3"]  # the dungeon's fields stay as they were
-    assert set(data["problems"]) == {"dungeon", "survey", "signal", "rune", "workshop"}
+    assert set(data["problems"]) == {"dungeon", "survey", "signal", "rune", "workshop", "warehouse"}
     survey = data["problems"]["survey"]
     assert survey["levels"] == ["S1", "S2", "S3"] and survey["test_seeds"] == [2000, 2019]
     assert survey["architectures"] == ["fanout", "react"]

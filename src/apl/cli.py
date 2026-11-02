@@ -107,6 +107,22 @@ def _workshop_show(args: argparse.Namespace) -> int:
     return 0
 
 
+def _warehouse_show(args: argparse.Namespace) -> int:
+    from apl.warehouse import generate as generate_warehouse
+    from apl.warehouse.render_svg import html
+    from apl.warehouse.render_text import render_text as render_warehouse
+
+    try:
+        floor = generate_warehouse(args.level, args.seed)
+        if args.html:
+            Path(args.html).write_text(html(floor), encoding="utf-8")
+    except (OSError, ValueError) as error:
+        print(f"apl: {error}", file=sys.stderr)
+        return 2
+    print(render_warehouse(floor, route=args.route == "reference"), end="")
+    return 0
+
+
 def _csv(text: str) -> list[str]:
     return [part.strip() for part in text.split(",") if part.strip()]
 
@@ -362,6 +378,13 @@ def main(argv: list[str] | None = None) -> int:
     tree_show.add_argument("--seed", required=True, type=int)
     tree_show.add_argument("--route", choices=["reference"], help="list the reference plan")
     tree_show.add_argument("--html", metavar="OUT", help="also write a picture")
+    warehouse = commands.add_parser("warehouse", help="inspect generated warehouses")
+    warehouse_commands = warehouse.add_subparsers(dest="warehouse_command")
+    hall_show = warehouse_commands.add_parser("show", help="print a warehouse as a text map")
+    hall_show.add_argument("--level", required=True, choices=["P1", "P2", "P3"])
+    hall_show.add_argument("--seed", required=True, type=int)
+    hall_show.add_argument("--route", choices=["reference"], help="list the reference's calls")
+    hall_show.add_argument("--html", metavar="OUT", help="also write a picture")
     run = commands.add_parser("run", help="plan a run, or play it with --execute")
     run.add_argument(
         "--problem", default="dungeon", choices=list(PROBLEMS), help="default: dungeon"
@@ -394,6 +417,8 @@ def main(argv: list[str] | None = None) -> int:
         return _rune_show(args)
     if args.command == "workshop" and args.workshop_command == "show":
         return _workshop_show(args)
+    if args.command == "warehouse" and args.warehouse_command == "show":
+        return _warehouse_show(args)
     if args.command == "run":
         return _run(args)
     if args.command == "report":
@@ -404,6 +429,7 @@ def main(argv: list[str] | None = None) -> int:
         return _serve(args)
     groups = {
         "dungeon": dungeon, "survey": survey, "signal": signal, "rune": rune, "workshop": workshop,
+        "warehouse": warehouse,
     }  # fmt: skip
     groups.get(args.command, parser).print_help()
     return 2

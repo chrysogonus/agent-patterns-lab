@@ -8,11 +8,12 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from apl import dungeon, rune, signal_trace, survey, workshop
+from apl import dungeon, rune, signal_trace, survey, warehouse, workshop
 from apl.dungeon.env import MAX_ATTEMPTS as DUNGEON_ATTEMPTS
 from apl.rune.env import MAX_ATTEMPTS as RUNE_ATTEMPTS
 from apl.signal_trace.env import MAX_ATTEMPTS as SIGNAL_ATTEMPTS
 from apl.survey.env import MAX_ATTEMPTS as SURVEY_ATTEMPTS
+from apl.warehouse.env import MAX_ATTEMPTS as WAREHOUSE_ATTEMPTS
 from apl.workshop.env import MAX_ATTEMPTS as WORKSHOP_ATTEMPTS
 
 
@@ -106,6 +107,21 @@ def _workshop_fingerprint() -> str:
     return prompt_fingerprint()
 
 
+def _warehouse_kit(episode: Any, model: Any) -> Any:
+    from apl.warehouse.kit import build_kit
+
+    return build_kit(episode, model)
+
+
+_warehouse_kit.__name__ = "build_kit"
+
+
+def _warehouse_fingerprint() -> str:
+    from apl.warehouse.prompt import prompt_fingerprint
+
+    return prompt_fingerprint()
+
+
 PROBLEMS: dict[str, Problem] = {
     "dungeon": Problem(
         name="dungeon",
@@ -166,6 +182,18 @@ PROBLEMS: dict[str, Problem] = {
         build_kit=_workshop_kit,
         prompt_fingerprint=_workshop_fingerprint,
         max_attempts=WORKSHOP_ATTEMPTS,
+    ),
+    "warehouse": Problem(  # specs/012
+        name="warehouse",
+        levels=warehouse.LEVELS,
+        dev_seeds=warehouse.DEV_SEEDS,
+        test_seeds=warehouse.TEST_SEEDS,
+        generate=warehouse.generate,
+        reference_steps=lambda world: int(world.reference_steps),
+        start_episode=warehouse.start_episode,
+        build_kit=_warehouse_kit,
+        prompt_fingerprint=_warehouse_fingerprint,
+        max_attempts=WAREHOUSE_ATTEMPTS,
     ),
 }
 DEFAULT = "dungeon"

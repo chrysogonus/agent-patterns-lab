@@ -88,6 +88,7 @@ def test_row_key_order_matches_the_contract() -> None:
         "submitted_segment", "broken_segment", "segments", "probes", "wasted_probes",  # specs/009
         "traps", "repeated_traps", "walks",  # specs/010
         "stuck", "wasted", "inspected", "crafted",  # specs/011
+        "delivered", "packages", "idle_robot_turns",  # specs/012
     ]  # fmt: skip
 
 

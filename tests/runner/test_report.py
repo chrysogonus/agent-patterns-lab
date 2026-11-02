@@ -423,3 +423,58 @@ def test_a4_elsewhere_has_no_stall_restart_label(tmp_path: Path) -> None:
     rows = [_survey("reflexion", 1000, 1, 15, attempts=2)]
     run = _write(tmp_path / "a4", rows, architectures=["reflexion"], problem="survey")
     assert "stall restart" not in render([load_run(run)])
+
+
+def _warehouse(arch: str, seed: int, repeat: int, steps: int | None, **kw: Any) -> dict[str, Any]:
+    done = steps is not None
+    return _row(
+        seed, repeat, steps if done else 126, arch=arch, level="P2", problem="warehouse",
+        success=done, end_reason="delivered" if done else "budget", budget_hit=not done,
+        optimal_steps=42, budget=126, delivered=kw.pop("delivered", 3 if done else 1),
+        packages=3, parallel_turns=kw.pop("turns"), idle_robot_turns=kw.pop("idle", 0),
+        scouts=kw.pop("robots", 1), reference_is_optimal=False, input_tokens=900,
+        output_tokens=100, **kw,
+    )  # fmt: skip
+
+
+def test_the_warehouse_report(tmp_path: Path) -> None:  # specs/012 US3 4
+    rows = [
+        _warehouse("mapstate", 1000, 1, 42, turns=42),
+        _warehouse("mapstate", 1000, 2, 60, turns=60),
+        _warehouse("mapstate", 1000, 3, None, turns=126),
+        _warehouse("fanout", 1000, 1, 39, turns=22, idle=27, robots=3),
+        _warehouse("fanout", 1000, 2, 45, turns=25, idle=30, robots=3),
+        _warehouse("fanout", 1000, 3, 40, turns=24, idle=21, robots=3),
+    ]  # fmt: skip
+    path = _write(
+        tmp_path / "run-p", rows, problem="warehouse", architectures=["mapstate", "fanout"],
+        levels=["P2"], seeds=[1000],
+    )  # fmt: skip
+    text = render([load_run(path)])
+    assert text.startswith("# Report: fanout, mapstate on the warehouse\n")
+    assert (
+        "| Arch | Level | Episodes | Success | Delivered (median) | Steps (median) "
+        "| Efficiency (median) | Turns (median) | Idle (median) | Robots (median) | Budget hit "
+        "| Tokens (median) | Latency (median) |"
+    ) in text
+    # mapstate: 2 of 3; delivered 3, 3, 1 -> 3; steps 42, 60, 126 -> 60; efficiency 1.00 and
+    # 0.70 -> 0.85; turns 60; idle 0; robots 1; budget hit 1 of 3.
+    assert "| mapstate | P2 | 3 | 67% | 3 | 60 | 0.85 | 60 | 0 | 1 | 33% | 1,000 | 1.0s |" in text
+    # fanout: steps 39, 45, 40 -> 40; efficiency 42/39, 42/45, 42/40 -> 1.05; turns 24; idle 27.
+    assert "| fanout | P2 | 3 | 100% | 3 | 40 | 1.05 | 24 | 27 | 3 | 0% | 1,000 | 1.0s |" in text
+    assert "| Arch | Level | Success (min–max) | Turns (min–max) |" in text
+    assert "| mapstate | P2 | 0%–100% | 42–126 |" in text
+    assert "## Attempts" not in text
+    lines = text[text.index("## Comparison") :].splitlines()
+    assert any("| Δ success |" in line and "| Turns |" in line for line in lines)
+    fanout = next(line for line in lines if line.startswith("| fanout |"))
+    assert fanout.endswith("| mapstate |") and "| −36 |" in fanout  # turns 24 against 60
+
+
+def test_warehouse_and_survey_runs_are_not_combined(tmp_path: Path) -> None:
+    survey = _write(tmp_path / "run-s", [_survey("react", 1000, 1, 15)], problem="survey")
+    hall = _write(
+        tmp_path / "run-p", [_warehouse("react", 1000, 1, 42, turns=42)], problem="warehouse"
+    )
+    with pytest.raises(ValueError, match="different problems"):
+        render([load_run(survey), load_run(hall)])

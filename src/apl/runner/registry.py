@@ -23,13 +23,13 @@ ARCHITECTURES: dict[str, str] = {
 # Which problems each architecture plays (specs/005 research R15).
 _BOTH = frozenset({"dungeon", "survey"})
 SUPPORTS: dict[str, frozenset[str]] = {
-    "react": _BOTH | {"signal", "rune", "workshop"},  # specs/009, specs/010, specs/011
-    "mapstate": _BOTH | {"signal", "rune", "workshop"},
+    "react": _BOTH | {"signal", "rune", "workshop", "warehouse"},  # specs/009–012
+    "mapstate": _BOTH | {"signal", "rune", "workshop", "warehouse"},
     "mapstate_routes": frozenset({"dungeon"}),
     "hybrid": frozenset({"dungeon", "signal", "rune", "workshop"}),  # specs/009–011
-    "fanout": _BOTH,
-    "rounds": _BOTH,
-    "blackboard": _BOTH,
+    "fanout": _BOTH | {"warehouse"},  # specs/012
+    "rounds": _BOTH | {"warehouse"},
+    "blackboard": _BOTH | {"warehouse"},
     "plan_execute": _BOTH | {"signal", "rune", "workshop"},
     "reflexion": _BOTH | {"signal", "rune", "workshop"},
     # Its helpers are per problem: the dungeon's (specs/008) and the workshop's (specs/011).

@@ -3,9 +3,10 @@
 Besides this module, architectures may import only each problem's tools and results:
 `apl.dungeon.tools`, `apl.dungeon.results`, `apl.survey.tools`, `apl.survey.results`,
 `apl.signal_trace.tools`, `apl.signal_trace.results`, `apl.rune.tools`, `apl.rune.results`,
-`apl.workshop.tools` and `apl.workshop.results`. The dungeon's kit is built here; the survey
-field's in `apl.survey.kit` (specs/005), the signal trace's in `apl.signal_trace.kit` (specs/009),
-the rune floor's in `apl.rune.kit` (specs/010) and the workshop's in `apl.workshop.kit` (specs/011).
+`apl.workshop.tools`, `apl.workshop.results`, `apl.warehouse.tools` and `apl.warehouse.results`.
+The dungeon's kit is built here; the survey field's in `apl.survey.kit` (specs/005), the signal
+trace's in `apl.signal_trace.kit` (specs/009), the rune floor's in `apl.rune.kit` (specs/010), the
+workshop's in `apl.workshop.kit` (specs/011) and the warehouse's in `apl.warehouse.kit` (specs/012).
 """
 
 import copy

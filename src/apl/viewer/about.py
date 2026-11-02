@@ -66,6 +66,7 @@ TOOLS = {
     "signal": "look, probe, submit",
     "rune": "look, move",
     "workshop": "look, inspect, gather, craft",
+    "warehouse": "look, move, pick, drop",
 }
 
 MEMORY = {
@@ -77,6 +78,8 @@ MEMORY = {
     "rune": "a walk log: the floor, the agent's cell, and every walk from the start with how it "
     "ended",
     "workshop": "a workshop log: the goal, the stock, the inventory and every recipe inspected",
+    "warehouse": "a floor map: the floor plan, the corridors seen, the packages seen and where, "
+    "what the robot carries, and the packages delivered",
 }
 
 ENDS = {
@@ -85,6 +88,7 @@ ENDS = {
     "signal": "a segment is submitted or the step budget runs out",
     "rune": "the goal is reached or the step budget runs out",
     "workshop": "the goal is crafted, the goal can no longer be made, or the step budget runs out",
+    "warehouse": "every package is delivered or the step budget runs out",
 }
 
 FAILS = {  # A4: what ends an attempt, besides giving up or going stale
@@ -399,6 +403,8 @@ def _scouts(arch: str, problem: str) -> About:
     ]
     if survey:
         facts.append(("Who submits", who))
+    if problem == "warehouse":
+        facts.append(("Who delivers", "every robot, one package at a time"))
     return About(summary, 460, height, tuple(nodes), tuple(edges), facts=tuple(facts))
 
 

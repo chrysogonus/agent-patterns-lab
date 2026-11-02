@@ -44,6 +44,12 @@ from apl.survey.render_svg import MARGIN as FIELD_MARGIN
 from apl.survey.render_svg import svg as field_svg
 from apl.viewer.about import about
 from apl.viewer.events import EpisodeSession, ViewerCallbacks
+from apl.warehouse import Floor as WarehouseFloor
+from apl.warehouse.frames import reference_frames as reference_delivery
+from apl.warehouse.frames import snapshot as warehouse_snapshot
+from apl.warehouse.render_svg import CELL as HALL_CELL
+from apl.warehouse.render_svg import MARGIN as HALL_MARGIN
+from apl.warehouse.render_svg import svg as warehouse_svg
 from apl.workshop import Workshop
 from apl.workshop.frames import reference_frames as reference_plan
 from apl.workshop.frames import snapshot as workshop_snapshot
@@ -53,7 +59,7 @@ Response = tuple[int, str, bytes]
 LOCAL_PROVIDERS = ("ollama:", "vllm:")  # no cost, so no --execute needed (research R8)
 MODELS = ("vllm:qwen3.5-9b", "openai:gpt-6-luna")  # the page's model switch, besides APL_MODEL
 # Checked before any file access, so an id can never point outside results/viewer/.
-EPISODE_ID = re.compile(r"\d{8}-\d{6}-[a-z0-9_]+-(?:[LSTW][1-3]|R[0-3])-\d+(-\d+)?")
+EPISODE_ID = re.compile(r"\d{8}-\d{6}-[a-z0-9_]+-(?:[LSTWP][1-3]|R[0-3])-\d+(-\d+)?")
 
 
 def json_response(status: int, data: object) -> Response:
@@ -241,6 +247,28 @@ class Viewer:
         }
         return json_response(200, data)
 
+    def warehouse(self, level: str, seed: str) -> Response:
+        """A warehouse for the page (specs/012 contracts/viewer.md); test seeds are refused."""
+        found = parse_warehouse(level, seed)
+        if not isinstance(found, WarehouseFloor):
+            return found
+        data: dict[str, Any] = {
+            "problem": "warehouse",
+            "level": level,
+            "seed": found.seed,
+            "columns": found.columns,
+            "rows": found.rows,
+            "packages": len(found.packages),
+            "budget": found.budget,
+            "optimal_steps": found.reference_steps,
+            "reference_is_optimal": found.reference_is_optimal,
+            "cell": HALL_CELL,
+            "margin": HALL_MARGIN,
+            "svg": warehouse_svg(found, animated=True),
+            "solution": reference_delivery(found),
+        }
+        return json_response(200, data)
+
     # ---------- episodes ----------
 
     def _play(self, arch: str) -> Play:
@@ -266,7 +294,7 @@ class Viewer:
             return error(400, f"seed must be a whole number ≥ 0, got {seed!r}")
         parsers = {
             "survey": parse_field, "signal": parse_pipe, "rune": parse_floor,
-            "workshop": parse_workshop,
+            "workshop": parse_workshop, "warehouse": parse_warehouse,
         }  # fmt: skip
         parse = parsers.get(problem, parse_dungeon)
         world = parse(str(level), str(seed))
@@ -320,6 +348,7 @@ class Viewer:
         signal = problem == "signal"  # specs/009
         rune = problem == "rune"  # specs/010
         workshop = problem == "workshop"  # specs/011
+        warehouse = problem == "warehouse"  # specs/012
 
         def frame_of(episode: Any, index: int, action: Any, result: Any) -> dict[str, Any]:
             if survey:
@@ -330,13 +359,15 @@ class Viewer:
                 return rune_snapshot(episode, index, action, result)
             if workshop:
                 return workshop_snapshot(episode, index, action, result)
+            if warehouse:
+                return warehouse_snapshot(episode, index, action, result)
             return snapshot(episode, index, action, result).to_dict()
 
         def on_episode(episode: Any) -> None:
             session.episode = episode
             if signal:
                 world = episode.pipe
-            elif rune:
+            elif rune or warehouse:
                 world = episode.floor
             elif workshop:
                 world = episode.workshop
@@ -363,6 +394,7 @@ class Viewer:
                     ),
                     **(_rune_start(world) if rune else {}),
                     **(_workshop_start(world) if workshop else {}),
+                    **(_warehouse_start(world) if warehouse else {}),
                     # A retrying architecture's cap; other events stay as they were (specs/007).
                     **({"attempts": episode.max_attempts} if episode.max_attempts > 1 else {}),
                 },
@@ -424,7 +456,11 @@ class Viewer:
                 "row": row,
                 "error": trouble,
                 "arch": key.arch,
-                **({"problem": problem} if survey or signal or rune or workshop else {}),
+                **(
+                    {"problem": problem}
+                    if survey or signal or rune or workshop or warehouse
+                    else {}
+                ),
                 "level": key.level,
                 "seed": key.seed,
                 "settings": record,
@@ -539,6 +575,22 @@ def parse_workshop(level: str, seed: str) -> Workshop | Response:
     """The workshop for a request, or the error response; test seeds are refused."""
     found: Workshop | Response = _parse_world("workshop", level, seed)
     return found
+
+
+def parse_warehouse(level: str, seed: str) -> WarehouseFloor | Response:
+    """The warehouse for a request, or the error response; test seeds are refused."""
+    found: WarehouseFloor | Response = _parse_world("warehouse", level, seed)
+    return found
+
+
+def _warehouse_start(floor: WarehouseFloor) -> dict[str, Any]:
+    """What a warehouse episode's start event adds (specs/012 contracts/viewer.md)."""
+    return {
+        "problem": "warehouse",
+        "packages": len(floor.packages),
+        "columns": floor.columns,
+        "rows": floor.rows,
+    }
 
 
 def _workshop_start(workshop: Workshop) -> dict[str, Any]:

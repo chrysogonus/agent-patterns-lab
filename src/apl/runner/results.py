@@ -67,6 +67,11 @@ class EpisodeRow:
     wasted: int | None = None
     inspected: int | None = None
     crafted: int | None = None
+    # specs/012: the warehouse's own fields (None on the other problems' rows); it shares
+    # `parallel_turns`, `scouts` and `reference_is_optimal`.
+    delivered: int | None = None
+    packages: int | None = None
+    idle_robot_turns: int | None = None
 
     @classmethod
     def completed(
@@ -108,6 +113,7 @@ class EpisodeRow:
             **_signal(outcome),
             **_rune(outcome),
             **_workshop(outcome),
+            **_warehouse(outcome),
             attempts=attempts,
         )
 
@@ -167,7 +173,7 @@ class EpisodeRow:
             "output_limit_hits": None, "scouts": None, "orchestrator_calls": None,
             "problem": "dungeon", **dict.fromkeys(_SURVEY_FIELDS), "attempts": None,
             **dict.fromkeys(_SIGNAL_FIELDS), **dict.fromkeys(_RUNE_FIELDS),
-            **dict.fromkeys(_WORKSHOP_FIELDS), **data,
+            **dict.fromkeys(_WORKSHOP_FIELDS), **dict.fromkeys(_WAREHOUSE_FIELDS), **data,
         }  # fmt: skip
         names = [f.name for f in fields(cls)]
         odd = sorted(set(names) ^ set(data))
@@ -232,6 +238,9 @@ _ROW_TYPES.update(
     wasted=int,
     inspected=int,
     crafted=int,
+    delivered=int,
+    packages=int,
+    idle_robot_turns=int,
 )
 _SURVEY_FIELDS = (
     "submitted_total", "true_total", "cells_seen", "cells", "parallel_turns",
@@ -240,17 +249,18 @@ _SURVEY_FIELDS = (
 _SIGNAL_FIELDS = ("submitted_segment", "broken_segment", "segments", "probes", "wasted_probes")
 _RUNE_FIELDS = ("traps", "repeated_traps", "walks")
 _WORKSHOP_FIELDS = ("stuck", "wasted", "inspected", "crafted")
+_WAREHOUSE_FIELDS = ("delivered", "packages", "idle_robot_turns")
 _NULLABLE = {
     "success", "end_reason", "steps", "efficiency", "invalid_actions", "budget_hit",
     "token_cap_hit", "output_limit_hits", "input_tokens", "output_tokens", "arch_error", "error",
     "scouts", "orchestrator_calls", *_SURVEY_FIELDS, "attempts", *_SIGNAL_FIELDS,
-    *_RUNE_FIELDS, *_WORKSHOP_FIELDS,
+    *_RUNE_FIELDS, *_WORKSHOP_FIELDS, *_WAREHOUSE_FIELDS,
 }  # fmt: skip
 _ALLOWED: dict[str, set[str]] = {
     "status": {"completed", "error"},
     # The survey's and the signal trace's "submitted" (specs/005 R7), the rune floor's and the
-    # workshop's "goal", the workshop's "stuck" (specs/011).
-    "end_reason": {str(r) for r in EndReason} | {"submitted", "goal", "stuck"},
+    # workshop's "goal", the workshop's "stuck" (specs/011), the warehouse's "delivered" (012).
+    "end_reason": {str(r) for r in EndReason} | {"submitted", "goal", "stuck", "delivered"},
     "seed_set": set(SEED_SETS),
     "problem": set(PROBLEMS),
 }
@@ -282,6 +292,14 @@ def _workshop(outcome: object) -> dict[str, Any]:
     if not hasattr(outcome, "crafted"):
         return {}
     return {f: getattr(outcome, f) for f in (*_WORKSHOP_FIELDS, "reference_is_optimal")}
+
+
+def _warehouse(outcome: object) -> dict[str, Any]:
+    """The warehouse's own row fields from its outcome; none for the other problems'."""
+    if not hasattr(outcome, "idle_robot_turns"):
+        return {}
+    shared = ("parallel_turns", "reference_is_optimal")
+    return {f: getattr(outcome, f) for f in (*_WAREHOUSE_FIELDS, *shared)}
 
 
 def _pipe_totals(episode: object) -> dict[str, Any]:

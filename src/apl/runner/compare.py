@@ -59,6 +59,12 @@ _SURVEY_HEADER = (
 )
 
 
+# On the warehouse the same columns, with success in place of right totals (specs/012).
+_WAREHOUSE_HEADER = _SURVEY_HEADER.replace("| Right |", "| Success |").replace(
+    "| Δ right |", "| Δ success |"
+)
+
+
 def _row(
     arch: str,
     rows: Sequence[EpisodeRow],
@@ -129,9 +135,11 @@ def render_comparison(runs: Sequence[LoadedRun], completed: Sequence[EpisodeRow]
         f"Seeds {seeds}, {repeats} repeat{plural}. Differences are against the reference "
         "architecture in the last column.",
     ]
-    survey = first.problem == "survey"
+    survey = first.problem in ("survey", "warehouse")  # both add parallel turns
     references = REFERENCES | PROBLEM_REFERENCES.get(first.problem, {})
     header, columns = (_SURVEY_HEADER, 13) if survey else (_HEADER, 11)
+    if first.problem == "warehouse":
+        header = _WAREHOUSE_HEADER
     for level in sorted({level for level, _ in groups}):
         lines += ["", f"### {level}", "", header, "| --- " * columns + "|"]
         for arch in order:

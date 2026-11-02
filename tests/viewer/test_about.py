@@ -121,6 +121,9 @@ def test_the_cards_carry_each_games_specifics() -> None:
     survey = about("fanout", "survey")
     assert survey is not None and "collect" in {n.id for n in survey.nodes}
     assert "Who submits" in dict(survey.facts)
+    hall = about("rounds", "warehouse")
+    assert hall is not None and "Who delivers" in dict(hall.facts)
+    assert "floor map" in _facts("mapstate", "warehouse")
 
 
 def test_unknown_architectures_have_no_card() -> None:

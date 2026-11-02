@@ -396,7 +396,10 @@ def test_an_architecture_that_does_not_play_the_signal_trace_is_refused(
     command = ["run", "--problem", "signal", "--arch", "fanout", "--level", "T1", "--seeds", "dev"]
     assert main(command) == 2
     err = capsys.readouterr().err
-    assert err == "apl: fanout does not play the signal problem (it plays: dungeon, survey)\n"
+    assert (
+        err
+        == "apl: fanout does not play the signal problem (it plays: dungeon, survey, warehouse)\n"
+    )
 
 
 RUNE = [
@@ -428,7 +431,9 @@ def test_an_architecture_that_does_not_play_the_rune_floor_is_refused(
     command = ["run", "--problem", "rune", "--arch", "fanout", "--level", "R1", "--seeds", "dev"]
     assert main(command) == 2
     err = capsys.readouterr().err
-    assert err == "apl: fanout does not play the rune problem (it plays: dungeon, survey)\n"
+    assert (
+        err == "apl: fanout does not play the rune problem (it plays: dungeon, survey, warehouse)\n"
+    )
 
 
 WORKSHOP = [
@@ -473,4 +478,7 @@ def test_an_architecture_that_does_not_play_the_workshop_is_refused(
     ]
     assert main(command) == 2
     err = capsys.readouterr().err
-    assert err == "apl: fanout does not play the workshop problem (it plays: dungeon, survey)\n"
+    assert (
+        err
+        == "apl: fanout does not play the workshop problem (it plays: dungeon, survey, warehouse)\n"
+    )

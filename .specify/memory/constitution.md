@@ -13,11 +13,12 @@ Rationale: any difference in results must come from the architecture alone.
 Architectures MUST perceive and act on a problem only through that problem's tools: the dungeon's
 `look`, `move`, `take` and `use`; the survey field's `look`, `move` and `submit`; the signal
 trace's `look`, `probe` and `submit`; the rune floor's `look` and `move`; the workshop's `look`,
-`inspect`, `gather` and `craft`. They MUST NOT import, call or read environment internals,
+`inspect`, `gather` and `craft`; the warehouse's `look`, `move`, `pick` and `drop`. They MUST NOT import, call or read environment internals,
 generators, solvers or reference walks. That includes the shortest solution, the full map, the
 reference walk, the true deposit count, the broken segment, the reference probes, the rune floor's
-rule, its trap tiles and its reference path, and the workshop's recipes (except through
-`inspect`), its reference plan and its stuck check. Plain-code
+rule, its trap tiles and its reference path, the workshop's recipes (except through
+`inspect`), its reference plan and its stuck check, and the warehouse's package positions (except
+through its robots' views) and its reference walk. Plain-code
 nodes (for example A6) are bound by the same rule: they can work only with what earlier tool
 results revealed.
 Rationale: an architecture that peeks is not solving the task being measured.
@@ -79,6 +80,14 @@ Rationale: runs cost money, and dry runs must be safe by default.
   Code computes a reference: the steps of the shortest plan that inspects every craftable item it
   uses, gathers its raw materials and crafts the goal. The step budget is 3× the reference.
   Levels W1–W3 are defined in plan.md.
+- **Warehouse**: floors are generated from a seed: rows of shelves with aisles between them, a
+  cross corridor at each end, a dock where robots start and a drop zone D. Packages stand on aisle
+  cells, every one reachable. The floor plan and the number of packages are given free at the
+  start; a robot sees the packages of the corridor it stands in. A robot carries one package at a
+  time and delivers it by dropping it on D. Code computes a reference: the steps of a single robot
+  that walks the aisles in a fixed order and carries each package to D as soon as it sees it,
+  marked as a reference, not an optimum. The step budget is 3× the reference, shared by all robots.
+  Levels P1–P3 are defined in plan.md.
 - **Attempts**: an architecture registered as retrying (A4) may restart the world up to 3
   attempts per episode. A restart puts the world back in its start state and costs no step; every
   tool call of every attempt counts toward the one budget. On the survey field a wrong total, on
@@ -110,4 +119,4 @@ and review MUST check compliance. An unavoidable violation MUST be recorded in t
 Complexity Tracking table with a justification. Results from different problems MUST NOT be
 combined in one comparison.
 
-**Version**: 2.4.0 | **Ratified**: 2026-10-28 | **Last Amended**: 2026-11-02
+**Version**: 2.5.0 | **Ratified**: 2026-10-28 | **Last Amended**: 2026-11-03

@@ -19,7 +19,8 @@ from langgraph.types import Send
 
 from apl.arch.dungeon_map import DungeonMap
 from apl.arch.field_map import FieldMap
-from apl.arch.mapstate import FIELD_MAP_INSTRUCTIONS, MAP_INSTRUCTIONS
+from apl.arch.floor_map import FloorMap
+from apl.arch.mapstate import FIELD_MAP_INSTRUCTIONS, FLOOR_MAP_INSTRUCTIONS, MAP_INSTRUCTIONS
 from apl.kit import Kit, ToolNode
 
 # Explains the task line and the other scouts; no advice on how to explore.
@@ -34,15 +35,25 @@ You are one of several scouts on the same field; each has its own position. The 
 with "Your task:" says what to do. When the task is done or cannot be done, answer without a \
 tool call and say briefly what you found."""
 
+# The same for the warehouse's robots (specs/012 contracts/architectures.md).
+ROBOT_INSTRUCTIONS = """\
+You are one of several robots in the same warehouse; each has its own cell and carries its own \
+package. The line starting with "Your task:" says what to do. When the task is done or cannot be \
+done, answer without a tool call and say briefly what you found."""
+
 # Nothing is required after the direction: some models run two text parts together in one reply.
 _CLAIM = re.compile(r"^claim: (\S+) (north|east|south|west)", re.MULTILINE)
 # A blackboard scout whose reply has only a claim keeps its turn; this many in a row end it.
 MAX_CLAIMS = 3
+# A robot claims a package or an aisle (specs/012); the other problems keep `_CLAIM`.
+_ROBOT_CLAIM = re.compile(r"^claim: (package \d+|aisle \d+)", re.MULTILINE)
 
 
 @dataclass
-class SharedMap[MapT: (DungeonMap, FieldMap)]:
-    """One map of what all its scouts saw, plus each scout's room and inventory (research R8)."""
+class SharedMap[MapT: (DungeonMap, FieldMap, FloorMap)]:
+    """One map of what all its scouts saw, plus each scout's room and inventory (research R8).
+
+    In the warehouse the inventory is the package a robot carries, if any (specs/012)."""
 
     map: MapT
     start: str  # the start room's label (or start cell's name), where new scouts appear
@@ -52,8 +63,13 @@ class SharedMap[MapT: (DungeonMap, FieldMap)]:
 
     @classmethod
     def from_start(cls, start_json: str, scout: int) -> "SharedMap[Any]":
-        """A dungeon map for a room view, a field map for a cell view (specs/005)."""
-        if "cell" in json.loads(start_json)["data"]:
+        """A dungeon map for a room view, a field map for a cell view (specs/005), a floor map
+        for a warehouse start view (specs/012)."""
+        data = json.loads(start_json)["data"]
+        if "floor" in data and "packages" in data:
+            plan = FloorMap.from_start(start_json)
+            return SharedMap(plan, plan.current, {scout: plan.current}, {scout: ()})
+        if "cell" in data:
             cells = FieldMap.from_start(start_json)
             return SharedMap(cells, cells.current, {scout: cells.current}, {scout: ()})
         found = DungeonMap.from_start(start_json)
@@ -64,6 +80,16 @@ class SharedMap[MapT: (DungeonMap, FieldMap)]:
 
     def apply(self, scout: int, name: str, args: Any, result: Any) -> None:
         """One tool call of one scout, seen from that scout (DungeonMap.apply's rules)."""
+        if isinstance(self.map, FloorMap):
+            held = self.inventories[scout]
+            self.map.current, self.map.carrying = self.positions[scout], held[0] if held else None
+            self.map.apply(name, args, result)
+            carried = self.map.carrying
+            self.positions[scout], self.inventories[scout] = (
+                self.map.current,
+                ((carried,) if carried else ()),
+            )
+            return
         if isinstance(self.map, FieldMap):
             self.map.current = self.positions[scout]
             self.map.apply(name, args, result)
@@ -75,6 +101,8 @@ class SharedMap[MapT: (DungeonMap, FieldMap)]:
 
     def render(self, viewer: int | None) -> str:
         """The map as `viewer` sees it, or as the orchestrator sees it (None)."""
+        if isinstance(self.map, FloorMap):
+            return self._render_floor(self.map, viewer)
         if isinstance(self.map, FieldMap):
             return self._render_field(self.map, viewer)
         current, inventory = self.map.current, self.map.inventory
@@ -115,6 +143,27 @@ class SharedMap[MapT: (DungeonMap, FieldMap)]:
             lines.append("Claims: " + "; ".join(claimed) + ".")
         return "\n".join(lines)
 
+    def _render_floor(self, plan: FloorMap, viewer: int | None) -> str:
+        current, carrying = plan.current, plan.carrying
+        others = {n: c for n, c in self.positions.items() if n != viewer}
+        if viewer is not None:
+            held = self.inventories[viewer]
+            plan.current, plan.carrying = self.positions[viewer], held[0] if held else None
+        lines = plan.render(others, here=viewer is not None).split("\n")
+        plan.current, plan.carrying = current, carrying
+        listed = [
+            f"robot {n} is in {c} carrying {', '.join(self.inventories[n]) or 'nothing'}"
+            for n, c in sorted(others.items())
+        ]
+        if viewer is None:
+            lines.insert(2, "Robots: " + "; ".join(listed) + ".")
+        elif listed:
+            lines.insert(2, "Other robots: " + "; ".join(listed) + ".")
+        if self.claims:
+            claimed = (f"robot {n} → {target}" for n, (target, _) in sorted(self.claims.items()))
+            lines.append("Claims: " + "; ".join(claimed) + ".")
+        return "\n".join(lines)
+
 
 @dataclass
 class ScoutState:
@@ -150,12 +199,15 @@ class ScoutTurn(TypedDict):
 
 
 def scout_messages(kit: Kit, scout: ScoutState) -> list[BaseMessage]:
+    body = "scout"
     if kit.problem == "survey":
         instructions = f"{FIELD_MAP_INSTRUCTIONS} {FIELD_SCOUT_INSTRUCTIONS}"
+    elif kit.problem == "warehouse":  # specs/012
+        instructions, body = f"{FLOOR_MAP_INSTRUCTIONS} {ROBOT_INSTRUCTIONS}", "robot"
     else:
         instructions = f"{MAP_INSTRUCTIONS} {SCOUT_INSTRUCTIONS}"
     system = SystemMessage(f"{kit.base_prompt}\n\n{instructions}")
-    task = f"You are scout {scout.number}. Your task: {scout.task}"
+    task = f"You are {body} {scout.number}. Your task: {scout.task}"
     if not scout.started:
         task += "\n\n" + scout.start
     return [
@@ -203,13 +255,14 @@ def act(state: ScoutGraph) -> dict[str, Any]:
     """Applies the turn's tool calls in scout order, all of one scout's before the next."""
     by_number = {s.number: s for s in state["scouts"]}
     applied = 0
+    robots = state["board"] is not None and isinstance(state["board"].map, FloorMap)
     for number, reply in sorted(state["replies"], key=lambda r: r[0]):
         scout = by_number[number]
         scout.started = True
         scout.turns += 1
-        match = _CLAIM.search(str(reply.text))
+        match = (_ROBOT_CLAIM if robots else _CLAIM).search(str(reply.text))
         if match and state["board"] is not None:
-            state["board"].claims[number] = (match[1], match[2])
+            state["board"].claims[number] = (match[1], "" if robots else match[2])
         calls = [*reply.tool_calls, *reply.invalid_tool_calls]
         # On the blackboard (the scout is shown the board itself) a claim alone is not an answer.
         if not calls and match and scout.view is state["board"] and scout.claims + 1 < MAX_CLAIMS:

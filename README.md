@@ -12,8 +12,8 @@ there is no LLM judge.
 An orchestrator (first card on the right) gives four scouts short tasks. Each colored line is
 one scout's trail, and the triangles are ore deposits. The scouts found all 15.</sub>
 
-> **Status:** M11 built: a fifth problem, the workshop, alongside the dungeon, the survey field, the
-> signal trace and the rune floor; every architecture in the plan is in. First
+> **Status:** M12 built: a sixth problem, the warehouse, alongside the dungeon, the survey field,
+> the signal trace, the rune floor and the workshop; every architecture in the plan is in. First
 > results (M4, dungeon only, a first look): [`docs/findings/m4-first-comparison.md`](docs/findings/m4-first-comparison.md).
 
 ---
@@ -23,7 +23,7 @@ one scout's trail, and the triangles are ore deposits. The scouts found all 15.<
 ```mermaid
 flowchart LR
     model["One model<br/>for every architecture"] --> arch["Architecture<br/>a LangGraph graph<br/><b>the one thing that changes</b>"]
-    arch <-->|"tools only:<br/>look · move · probe · …"| world["World<br/>dungeon, survey field, signal trace,<br/>rune floor or workshop"]
+    arch <-->|"tools only:<br/>look · move · probe · …"| world["World<br/>dungeon, survey field, signal trace,<br/>rune floor, workshop or warehouse"]
     seed(["seed"]) --> world
     world --> score["Score by code<br/>success · steps vs. best<br/>tokens · time"]
 ```
@@ -46,6 +46,7 @@ uv run apl survey show --level S2 --seed 1000                     # a survey fie
 uv run apl signal show --level T3 --seed 1000 --route reference   # a signal trace pipe
 uv run apl rune show --level R1 --seed 1000 --route reference     # a rune floor
 uv run apl workshop show --level W2 --seed 1000 --route reference # a workshop
+uv run apl warehouse show --level P2 --seed 1000 --route reference # a warehouse
 uv run apl serve                                                  # the viewer: http://127.0.0.1:8765/
 ```
 
@@ -174,6 +175,30 @@ pay off.
 **Success** means crafting the goal. An episode ends **stuck** once the goal can no longer be made,
 and the report counts the scarce units **wasted** on items the reference plan does not use them for.
 
+### 6. The warehouse: adapt the split
+
+Robots find hidden packages in the aisles of a known floor and carry them to a drop zone D, one at a
+time. A robot sees the packages of the corridor it stands in, and the packages are spread unevenly,
+so a split of the work decided before anyone has looked often leaves a robot idle in an empty aisle.
+This is where an orchestrator that replans each round (A8) should beat one that splits once (A7),
+and where robots claiming work on a shared board (A9) need no orchestrator but act one at a time.
+
+| Tool | What it does |
+| --- | --- |
+| `look()` | The robot's cell, the corridors it stands in and the packages it sees, what it carries, and the packages delivered (the floor plan and the package count are free at the start) |
+| `move(direction)` | One step north, east, south or west |
+| `pick()` | Pick up the package on the robot's cell |
+| `drop()` | Drop the carried package on D, which delivers it |
+
+| Level | Floor | Packages per aisle | Step budget |
+| --- | --- | --- | --- |
+| P1 | 9 columns, 3 aisles | 1, 1, 1 | 3× the reference |
+| P2 | 9 columns, 3 aisles | 0, 1, 2 in some order | 3× the reference |
+| P3 | 11 columns, 5 aisles | 6 packages, one aisle crowded, one or two empty | 3× the reference |
+
+**Success** means every package delivered. The budget is shared by all robots, so more robots buy
+no steps; the report shows their gain in **parallel turns** and their waste in **idle robot-turns**.
+
 ---
 
 ## The architectures
@@ -181,18 +206,18 @@ and the report counts the scarce units **wasted** on items the reference plan do
 Each one is a `StateGraph` written by hand in [`src/apl/arch/`](src/apl/arch/). The ID column
 is used in the docs, and the name column is what you pass to `--arch`.
 
-| ID | Name | Idea in one line | Dungeon | Survey | Signal | Rune | Workshop |
-| --- | --- | --- | :---: | :---: | :---: | :---: | :---: |
-| A1 | `react` | The model calls tools in a loop and remembers only through its message history | ✓ | ✓ | ✓ | ✓ | ✓ |
-| A2 | `mapstate` | The explored map lives in graph state and is shown to the model every turn (on the signal trace: a probe log; on the rune floor: a walk log; in the workshop: a workshop log) | ✓ | ✓ | ✓ | ✓ | ✓ |
-| A2r | `mapstate_routes` | A2, plus the shortest known route to each unexplored exit | ✓ | | | | |
-| A3 | `plan_execute` | A planner writes subgoals, A2's agent carries them out in order, a replanner steps in only when a subgoal fails or the plan runs out | ✓ | ✓ | ✓ | ✓ | ✓ |
-| A4 | `reflexion` | A2 that tries again: after a failed attempt (on the rune floor: a trap, with the walk log kept) it writes a note, the world restarts, all steps count | ✓ | ✓ | ✓ | ✓ | ✓ |
-| A5 | `supervisor` | A supervisor hands tasks to a navigator (look, move) and an inventory helper (take, use), each a subgraph on A2's map (on the workshop: a researcher and a crafter) | ✓ | | | | ✓ |
-| A6 | `hybrid` | Code keeps the map and walks the routes; the model only picks where to go (on the signal trace: code lists the probes that split the suspects best; on the rune floor: code lists the moves with what happened on each tile before; in the workshop: code lists the actions it can take now) | ✓ | | ✓ | ✓ | ✓ |
-| A7 | `fanout` | An orchestrator sends out up to 4 scouts once; each explores alone | ✓ | ✓ | | | |
-| A8 | `rounds` | An orchestrator gives scouts short tasks and replans on the map they all saw | ✓ | ✓ | | | |
-| A9 | `blackboard` | No planner: scouts take turns on one shared map and claim unexplored exits | ✓ | ✓ | | | |
+| ID | Name | Idea in one line | Dungeon | Survey | Signal | Rune | Workshop | Warehouse |
+| --- | --- | --- | :---: | :---: | :---: | :---: | :---: | :---: |
+| A1 | `react` | The model calls tools in a loop and remembers only through its message history | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| A2 | `mapstate` | The explored map lives in graph state and is shown to the model every turn (on the signal trace: a probe log; on the rune floor: a walk log; in the workshop: a workshop log; in the warehouse: a floor map) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| A2r | `mapstate_routes` | A2, plus the shortest known route to each unexplored exit | ✓ | | | | | |
+| A3 | `plan_execute` | A planner writes subgoals, A2's agent carries them out in order, a replanner steps in only when a subgoal fails or the plan runs out | ✓ | ✓ | ✓ | ✓ | ✓ | |
+| A4 | `reflexion` | A2 that tries again: after a failed attempt (on the rune floor: a trap, with the walk log kept) it writes a note, the world restarts, all steps count | ✓ | ✓ | ✓ | ✓ | ✓ | |
+| A5 | `supervisor` | A supervisor hands tasks to a navigator (look, move) and an inventory helper (take, use), each a subgraph on A2's map (on the workshop: a researcher and a crafter) | ✓ | | | | ✓ | |
+| A6 | `hybrid` | Code keeps the map and walks the routes; the model only picks where to go (on the signal trace: code lists the probes that split the suspects best; on the rune floor: code lists the moves with what happened on each tile before; in the workshop: code lists the actions it can take now) | ✓ | | ✓ | ✓ | ✓ | |
+| A7 | `fanout` | An orchestrator sends out up to 4 scouts once; each explores alone (in the warehouse the scouts are robots) | ✓ | ✓ | | | | ✓ |
+| A8 | `rounds` | An orchestrator gives scouts short tasks and replans on the map they all saw | ✓ | ✓ | | | | ✓ |
+| A9 | `blackboard` | No planner: scouts take turns on one shared map and claim unexplored exits (in the warehouse: packages or aisles) | ✓ | ✓ | | | | ✓ |
 
 ### One agent: where the memory lives
 
@@ -288,6 +313,7 @@ uv run apl run --problem survey --arch react,fanout --level all --seeds dev --li
 uv run apl run --problem signal --arch react,hybrid --level all --seeds dev --limit 1
 uv run apl run --problem rune --arch react,reflexion --level all --seeds dev --limit 1
 uv run apl run --problem workshop --arch react,plan_execute --level all --seeds dev --limit 1
+uv run apl run --problem warehouse --arch mapstate,fanout,rounds --level all --seeds dev --limit 1
 uv run apl continue results/<run-id> [--execute]                         # finish a cut-off run
 uv run apl report results/<run-id>                                       # rebuild the report
 ```
@@ -399,6 +425,7 @@ The full rules are in [`.specify/memory/constitution.md`](.specify/memory/consti
 | ✅ | M9 | The signal trace; A1–A4 and A6 play it |
 | ✅ | M10 | The rune floor; A1–A4 and A6 play it |
 | ✅ | M11 | The workshop; A1–A6 play it |
+| ✅ | M12 | The warehouse; A1, A2 and A7–A9 play it |
 
 The full design is in [`plan.md`](plan.md).
 
@@ -411,12 +438,13 @@ The full design is in [`plan.md`](plan.md).
 
 ```text
 src/apl/
-├── problems.py   the problems by name: dungeon, survey, signal, rune, workshop
+├── problems.py   the problems by name: dungeon, survey, signal, rune, workshop, warehouse
 ├── dungeon/      generator, environment, tools, solver, text map, HTML view
 ├── survey/       the survey field: generator, reference walk, environment, tools, pictures
 ├── signal_trace/ the signal trace: generator, reference strategy, environment, tools, pictures
 ├── rune/         the rune floor: generator, rules and reference search, environment, tools, pictures
 ├── workshop/     the workshop: generator, plans and stuck check, environment, tools, pictures
+├── warehouse/    the warehouse: generator, reference and scripted splits, environment, tools, pictures
 ├── arch/         one module per architecture, each with play(kit), written by hand
 ├── kit.py        what an architecture gets per episode: model, tools, prompt
 ├── runner/       run matrix, results, report, model providers
@@ -437,7 +465,8 @@ Useful contracts:
 [the survey tools](specs/005-survey-field/contracts/survey-tools.md),
 [the signal trace tools](specs/009-signal-trace/contracts/signal-tools.md),
 [the rune floor tools](specs/010-rune-floor/contracts/rune-tools.md),
-[the workshop tools](specs/011-workshop/contracts/workshop-tools.md).
+[the workshop tools](specs/011-workshop/contracts/workshop-tools.md),
+[the warehouse tools](specs/012-warehouse/contracts/warehouse-tools.md).
 
 </details>
 
