@@ -16,7 +16,7 @@ def test_options_list_the_problems_and_who_plays_them(tmp_path: Path) -> None:
     archs = {name: registry.load(name) for name in ("react", "hybrid", "fanout")}
     data = _body(_viewer(tmp_path, architectures=archs).options())
     assert data["levels"] == ["L1", "L2", "L3"]  # the dungeon's fields stay as they were
-    assert set(data["problems"]) == {"dungeon", "survey", "signal"}
+    assert set(data["problems"]) == {"dungeon", "survey", "signal", "rune"}
     survey = data["problems"]["survey"]
     assert survey["levels"] == ["S1", "S2", "S3"] and survey["test_seeds"] == [2000, 2019]
     assert survey["architectures"] == ["fanout", "react"]
@@ -42,7 +42,7 @@ def test_an_architecture_that_does_not_play_the_survey_is_refused(tmp_path: Path
     assert status == 400
     assert (
         json.loads(body)["error"]
-        == "hybrid does not play the survey problem (it plays: dungeon, signal)"
+        == "hybrid does not play the survey problem (it plays: dungeon, rune, signal)"
     )
     status, _, _ = viewer.start_episode(
         {"problem": "chess", "arch": "hybrid", "level": "S1", "seed": 1}

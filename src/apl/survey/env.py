@@ -108,7 +108,8 @@ def _total(raw: object) -> int | None:
         return None
     if isinstance(raw, int):
         return raw if raw >= 0 else None
-    if isinstance(raw, str) and raw.isascii() and raw.isdigit():
+    # At most 6 digits: a longer string is no count of deposits, and int() refuses very long ones.
+    if isinstance(raw, str) and raw.isascii() and raw.isdigit() and len(raw) <= 6:
         return int(raw)
     return None
 

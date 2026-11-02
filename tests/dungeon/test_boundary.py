@@ -15,8 +15,9 @@ ARCH_DIR = Path(__file__).resolve().parents[2] / "src" / "apl" / "arch"
 # Architectures may import from apl only these (and each other, inside apl.arch).
 ALLOWED = {
     "apl.kit", "apl.dungeon.tools", "apl.dungeon.results", "apl.survey.tools",
-    "apl.survey.results", "apl.signal_trace.tools", "apl.signal_trace.results", "apl.arch",
-}  # fmt: skip  # each problem's tools and results (constitution 2.2.0, specs/005, specs/009)
+    "apl.survey.results", "apl.signal_trace.tools", "apl.signal_trace.results",
+    "apl.rune.tools", "apl.rune.results", "apl.arch",
+}  # fmt: skip  # each problem's tools and results (constitution 2.3.0, specs/005, /009, /010)
 # They must use kit.model, never create a model of their own (Constitution I, research R15).
 MODEL_MODULES = (
     "openai",
@@ -235,4 +236,20 @@ def test_the_signal_trace_internals_are_forbidden_too(tmp_path: Path) -> None:  
         "peek.py: apl.signal_trace.generator.generate",
         "peek.py: apl.signal_trace.model.Pipe",
         "peek.py: apl.signal_trace.strategy",
+    ]
+
+
+def test_the_rune_floor_internals_are_forbidden_too(tmp_path: Path) -> None:  # specs/010 US4
+    (tmp_path / "ok.py").write_text(
+        "from apl.rune.tools import AgentTools\nfrom apl.rune.results import ToolResult\n"
+    )
+    (tmp_path / "peek.py").write_text(
+        "from apl.rune.generator import generate\nimport apl.rune.env\n"
+        "from apl.rune import rules\nfrom apl.rune.model import Floor\n"
+    )
+    assert _forbidden(tmp_path) == [
+        "peek.py: apl.rune.env",
+        "peek.py: apl.rune.generator.generate",
+        "peek.py: apl.rune.model.Floor",
+        "peek.py: apl.rune.rules",
     ]

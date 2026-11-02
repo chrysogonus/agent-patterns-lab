@@ -83,6 +83,24 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
 .broken { fill: none; stroke: var(--red); stroke-width: 2; stroke-dasharray: 3 2; }
 .broken.hide, #ref-marks.hide { display: none; }
 .ref-mark { fill: var(--solution); font-size: 10px; font-weight: 700; font-family: ui-monospace, monospace; }
+/* the rune floor (specs/010), drawn as in the problem mock-up: soft colored tiles, the current walk
+   bold, earlier walks faded, a cross where each trap sprang */
+.tile { stroke: var(--card); stroke-width: 1; }
+.tile.red { fill: var(--red); fill-opacity: 0.42; }
+.tile.blue { fill: var(--blue); fill-opacity: 0.42; }
+.tile.green { fill: var(--green); fill-opacity: 0.42; }
+.tile.yellow { fill: var(--yellow); fill-opacity: 0.42; }
+.tile.start, .tile.goal { fill: var(--floor); stroke: var(--line); stroke-width: 1; }
+.mark { fill: var(--ink); font-size: 14px; font-weight: 600; font-family: ui-monospace, monospace; }
+.axis { fill: var(--muted); font-size: 11px; font-family: ui-monospace, monospace; }
+.rule { fill: var(--ink); font-size: 9px; font-family: ui-monospace, monospace; }
+.reference { fill: none; stroke: var(--solution); stroke-width: 2; stroke-dasharray: 5 4; stroke-linejoin: round; }
+.truth-traps { fill: none; stroke: var(--muted); stroke-width: 1.5; stroke-opacity: 0.6; }
+.walk-now { fill: none; stroke: var(--trail); stroke-width: 4; stroke-linejoin: round; stroke-linecap: round; }
+.walk-past { fill: none; stroke: var(--ink); stroke-width: 2.5; stroke-opacity: 0.25; stroke-linejoin: round; stroke-linecap: round; }
+.trap-mark { fill: none; stroke: var(--red); stroke-width: 2.4; stroke-linecap: round; }
+.rune-agent { fill: var(--agent); }
+.rule.hide, .reference.hide, .truth-traps.hide { display: none; }
 #slider { flex: 1 1 160px; }
 #stats { display: grid; grid-template-columns: max-content 1fr; gap: 2px 12px; margin-top: 8px; }
 #stats dt { color: var(--muted); }
@@ -172,7 +190,8 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
   const problemOf = () => $("problem").value || "dungeon";
   const isSurvey = () => !!S.dungeon && S.dungeon.problem === "survey";
   const isSignal = () => !!S.dungeon && S.dungeon.problem === "signal";
-  const PATHS = { survey: "/api/survey", signal: "/api/signal" };
+  const isRune = () => !!S.dungeon && S.dungeon.problem === "rune";
+  const PATHS = { survey: "/api/survey", signal: "/api/signal", rune: "/api/rune" };
 
   /* ---------- the world: a dungeon or a survey field (specs/005) ---------- */
   async function loadDungeon(level, seed, problem = problemOf()) {
@@ -180,12 +199,18 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
     const { ok, data } = await api(`${path}?level=${encodeURIComponent(level)}&seed=${encodeURIComponent(seed)}`);
     if (!ok) { message(data.error); return false; }
     data.problem = data.problem || "dungeon";
+    // The rune floor outlines its reference path from the start (specs/010 US1/AC1); the shared
+    // toggle goes back to what it was when another problem is shown.
+    const was = S.dungeon ? S.dungeon.problem : null;
+    if (data.problem === "rune" && was !== "rune") { S.keptSolution = $("solution").checked; $("solution").checked = true; }
+    if (data.problem !== "rune" && was === "rune") $("solution").checked = !!S.keptSolution;
     S.dungeon = data;
     if ($("problem").value !== data.problem) { $("problem").value = data.problem; fillProblem(); }
-    const labels = { survey: "Reference walk", signal: "Reference probes" };
+    const labels = { survey: "Reference walk", signal: "Reference probes", rune: "Reference path" };
     $("solution-label").textContent = labels[data.problem] || "Shortest solution";
     $("map").innerHTML = data.svg;
     if (data.problem === "signal") referenceMarks(data.solution);
+    else if (data.problem === "rune") { /* the SVG brings its own reference path */ }
     else {
       const line = document.createElementNS(SVGNS, "polyline");
       line.id = "solution-line";
@@ -206,6 +231,12 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
     if (line) line.classList.toggle("show", $("solution").checked);
     const marks = $("ref-marks");
     if (marks) marks.classList.toggle("hide", !$("solution").checked);
+    // The rune floor's truth: the rule and R0's traps hide under "Agent's view"; the reference
+    // path shows when asked for and the truth is shown (specs/010 contracts/viewer.md).
+    const fog = $("fog").checked;
+    for (const id of ["rule", "truth-traps"]) { const x = $(id); if (x && isRune()) x.classList.toggle("hide", fog); }
+    const path = $("reference");
+    if (path && isRune()) path.classList.toggle("hide", fog || !$("solution").checked);
     render(S.current);
   }
   // The reference's probes, numbered in order on their boxes (specs/009 contracts/viewer.md).
@@ -289,6 +320,43 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
     if (ring) ring.classList.toggle("hide", $("fog").checked);
   }
 
+  // A tile's centre, from the drawn floor (cells are named like "C3").
+  function tileCentre(name) {
+    const tile = $("map").querySelector(`.tile[data-cell="${name}"]`);
+    if (!tile) return null;
+    const x = Number(tile.getAttribute("x")), y = Number(tile.getAttribute("y"));
+    return [x + Number(tile.getAttribute("width")) / 2, y + Number(tile.getAttribute("height")) / 2];
+  }
+  function cross(c, r, cls) {
+    return svgEl("path", { class: cls, d: `M${c[0] - r} ${c[1] - r}L${c[0] + r} ${c[1] + r}M${c[0] + r} ${c[1] - r}L${c[0] - r} ${c[1] + r}` });
+  }
+  function renderRune(frames) {
+    const f = frames[S.current], d = S.dungeon;
+    const line = (cells, cls) => {
+      const points = [d.start, ...cells].map(tileCentre).filter(Boolean);
+      return points.length > 1 ? svgEl("polyline", { class: cls, points: points.map((p) => p.join(",")).join(" ") }) : null;
+    };
+    const trails = $("trails");
+    trails.replaceChildren();
+    for (const w of f.walks || []) {
+      // An earlier walk, faded, up to the trap's tile where it ended there.
+      const past = line([...w.cells, ...(w.ending === "trap" ? [w.at] : [])], "walk-past");
+      if (past) trails.append(past);
+    }
+    const now = line([...(f.walk || []), ...(f.end_reason === "goal" ? [d.goal] : [])], "walk-now");
+    if (now) trails.append(now);
+    const traps = $("traps");
+    traps.replaceChildren();
+    (f.traps || []).forEach((t, i) => {
+      const c = tileCentre(t.cell);
+      if (c) traps.append(cross(c, i === f.traps.length - 1 ? 8 : 6, "trap-mark"));
+    });
+    const agent = $("agent");
+    agent.replaceChildren();
+    const at = tileCentre(f.end_reason === "goal" ? d.goal : f.position);
+    if (at) agent.append(svgEl("circle", { class: "rune-agent", cx: at[0], cy: at[1], r: 7 }));
+  }
+
   /* ---------- drawing one step (as the M1 player does) ---------- */
   function render(n, ms = 250) {
     if (!S.dungeon) return;
@@ -296,8 +364,8 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
     if (S.start && (S.start.problem || "dungeon") !== S.dungeon.problem) return;
     const frames = S.frames.length ? S.frames : [S.dungeon.solution[0]];
     S.current = Math.max(0, Math.min(frames.length - 1, n));
-    if (isSignal()) {
-      renderSignal(frames);
+    if (isSignal() || isRune()) {
+      if (isSignal()) renderSignal(frames); else renderRune(frames);
       $("slider").max = String(frames.length - 1);
       $("slider").value = String(S.current);
       stats();
@@ -386,7 +454,8 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
     const f = S.frames[S.current];
     const steps = Math.max(0, ...S.frames.slice(0, S.current + 1).map((g) => g.counted || 0));
     const best = isSurvey() || isSignal() ? "reference" : "optimal";
-    rows.push([isSignal() ? "Pipe" : isSurvey() ? "Field" : "Dungeon", `${d.level} seed ${d.seed}`]);
+    const world = isRune() ? "Floor" : isSignal() ? "Pipe" : isSurvey() ? "Field" : "Dungeon";
+    rows.push([world, `${d.level} seed ${d.seed}`]);
     if (S.attempts) rows.push(["Attempt", `${(f && f.attempt) || 1} / ${S.attempts}`]);
     rows.push(["Steps", S.episode ? `${steps} / ${d.budget} (${best} ${d.optimal_steps})` : `budget ${d.budget}, ${best} ${d.optimal_steps}`]);
     if (isSurvey()) {
@@ -402,6 +471,13 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
       if (!$("fog").checked) rows.push(["Broken", String(d.broken)]);
       if (f.submitted !== null && f.submitted !== undefined) rows.push(["Submitted", `${f.submitted} — ${f.submitted === d.broken ? "right" : "wrong"}`]);
     }
+    if (isRune() && f) {
+      rows.push(["Walk", String(f.walk_number)]);
+      rows.push(["Traps", f.repeated ? `${f.traps_count} (${f.repeated} repeated)` : String(f.traps_count)]);
+      if (!$("fog").checked) rows.push(["Rule", d.rule]);
+      if (f.end_reason === "goal") rows.push(["Result", "Reached G"]);
+      else if (f.end_reason === "budget") rows.push(["Result", "Out of budget"]);
+    }
     if (S.episode) {
       const turns = [...S.turns.values()];
       const tokens = turns.reduce((sum, t) => sum + (t.usage ? t.usage.input_tokens + t.usage.output_tokens : 0), 0);
@@ -412,7 +488,7 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
       rows.push(["Time", `${seconds.toFixed(1)} s`]);
       if (f && f.action) rows.push(["Step", `${f.action.tool} ${f.action.args.join(" ")} → ${f.ok ? "ok" : f.error}`]);
       const keys = (inventory) => inventory.length ? inventory.map((c) => `${c} key`).join(", ") : "empty";
-      if (isSurvey() || isSignal()) { /* no inventories on the field or the pipe */ }
+      if (isSurvey() || isSignal() || isRune()) { /* no inventories off the dungeon */ }
       else if (f && f.scouts) rows.push(["Inventories", f.scouts.map((s, i) => `scout ${i}: ${keys(s.inventory)}`).join(" · ")]);
       else if (f) rows.push(["Inventory", keys(f.inventory)]);
       if (S.end) {
@@ -429,6 +505,7 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
     for (const [k, v] of rows) {
       const dd = el("dd", v);
       if (k === "Submitted") dd.className = v.endsWith("right") ? "right" : "wrong";
+      if (k === "Result") dd.className = v === "Reached G" ? "right" : "wrong";
       dl.append(el("dt", k), dd);
     }
   }
@@ -544,6 +621,7 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
     node.append(el("h3", "Episode over"));
     let total = r && r.problem === "survey" ? ` — submitted ${r.submitted_total ?? "nothing"}, true ${r.true_total}${r.success ? ", right" : ""}` : "";
     if (r && r.problem === "signal") total = ` — submitted ${r.submitted_segment ?? "nothing"}, broken ${r.broken_segment}${r.success ? ", right" : ""}`;
+    if (r && r.problem === "rune") total = ` — ${r.traps ?? 0} trap${r.traps === 1 ? "" : "s"}, ${r.repeated_traps ?? 0} repeated`;
     const best = r && (r.problem === "survey" || r.problem === "signal") ? "reference" : "optimal";
     node.append(el("div", !r ? `Error: ${data.error}` : r.status === "error" ? `Infrastructure error: ${r.error}` :
       `${r.end_reason}${r.success ? ` in ${r.steps} steps (${best} ${r.optimal_steps})` : ""}${total}${r.arch_error ? ` — ${r.arch_error}` : ""}`));

@@ -302,3 +302,58 @@ def test_signal_and_survey_runs_are_not_combined(tmp_path: Path) -> None:
     signal = _write(tmp_path / "run-t", [_signal("react", 1000, 1, 22)], problem="signal")
     with pytest.raises(ValueError, match="different problems"):
         check_compatible([load_run(survey), load_run(signal)])
+
+
+def _rune(arch: str, seed: int, repeat: int, steps: int | None, **kw: Any) -> dict[str, Any]:
+    reached = steps is not None
+    return _row(
+        seed, repeat, steps if reached else 40, arch=arch, level="R1", problem="rune",
+        success=reached, end_reason="goal" if reached else "budget", budget_hit=not reached,
+        optimal_steps=10, budget=40, traps=kw.pop("traps", 0),
+        repeated_traps=kw.pop("repeated", 0), walks=kw.pop("walks", 1),
+        reference_is_optimal=True, input_tokens=900, output_tokens=100, **kw,
+    )  # fmt: skip
+
+
+def test_the_rune_report(tmp_path: Path) -> None:  # specs/010 US3 4
+    rows = [
+        _rune("react", 1000, 1, 20, traps=2, repeated=1, walks=3),
+        _rune("react", 1000, 2, None, traps=6, repeated=4, walks=7),
+        _rune("react", 1000, 3, 25, traps=3, repeated=1, walks=4),
+        _rune("reflexion", 1000, 1, 14, traps=1, walks=2),
+        _rune("reflexion", 1000, 2, 14, traps=1, walks=2),
+        _rune("reflexion", 1000, 3, 10),
+        _rune("mapstate", 1000, 1, 16, traps=1, walks=2),
+        _rune("mapstate", 1000, 2, 16, traps=1, walks=2),
+        _rune("mapstate", 1000, 3, None, traps=5, repeated=2, walks=6),
+        _rune("hybrid", 1000, 1, 12, traps=1, walks=2),
+    ]  # fmt: skip
+    path = _write(
+        tmp_path / "run-r", rows, problem="rune",
+        architectures=["react", "mapstate", "reflexion", "hybrid"], levels=["R1"], seeds=[1000],
+    )  # fmt: skip
+    text = render([load_run(path)])
+    assert text.startswith("# Report: hybrid, mapstate, react, reflexion on the rune floor\n")
+    assert (
+        "| Arch | Level | Episodes | Success | Steps (median) | Traps (median) "
+        "| Repeated (median) | Efficiency (median) | Budget hit | Tokens (median) "
+        "| Latency (median) |"
+    ) in text
+    # react: success 2 of 3; steps 20, 40, 25 -> 25; traps 2, 6, 3 -> 3; repeated 1, 4, 1 -> 1;
+    # efficiency 10/20, 10/25 -> 0.45.
+    assert "| react | R1 | 3 | 67% | 25 | 3 | 1 | 0.45 | 33% | 1,000 | 1.0s |" in text
+    assert "| reflexion | R1 | 3 | 100% | 14 | 1 | 0 | 0.71 | 0% | 1,000 | 1.0s |" in text
+    assert "| Arch | Level | Success (min–max) | Traps (min–max) |" in text
+    assert "| react | R1 | 0%–100% | 2–6 |" in text
+    # The comparison: the dungeon's columns; on the rune floor A6's reference is A2.
+    assert "| Δ success | Δ efficiency | Reference |" in text
+    lines = text[text.index("## Comparison") :].splitlines()
+    hybrid = next(line for line in lines if line.startswith("| hybrid |"))
+    assert hybrid.endswith("| mapstate |")
+
+
+def test_rune_and_signal_runs_are_not_combined(tmp_path: Path) -> None:
+    signal = _write(tmp_path / "run-t", [_signal("react", 1000, 1, 22)], problem="signal")
+    rune = _write(tmp_path / "run-r", [_rune("react", 1000, 1, 20)], problem="rune")
+    with pytest.raises(ValueError, match="different problems"):
+        check_compatible([load_run(signal), load_run(rune)])

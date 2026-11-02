@@ -8,8 +8,9 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from apl import dungeon, signal_trace, survey
+from apl import dungeon, rune, signal_trace, survey
 from apl.dungeon.env import MAX_ATTEMPTS as DUNGEON_ATTEMPTS
+from apl.rune.env import MAX_ATTEMPTS as RUNE_ATTEMPTS
 from apl.signal_trace.env import MAX_ATTEMPTS as SIGNAL_ATTEMPTS
 from apl.survey.env import MAX_ATTEMPTS as SURVEY_ATTEMPTS
 
@@ -74,6 +75,21 @@ def _signal_fingerprint() -> str:
     return prompt_fingerprint()
 
 
+def _rune_kit(episode: Any, model: Any) -> Any:
+    from apl.rune.kit import build_kit
+
+    return build_kit(episode, model)
+
+
+_rune_kit.__name__ = "build_kit"
+
+
+def _rune_fingerprint() -> str:
+    from apl.rune.prompt import prompt_fingerprint
+
+    return prompt_fingerprint()
+
+
 PROBLEMS: dict[str, Problem] = {
     "dungeon": Problem(
         name="dungeon",
@@ -110,6 +126,18 @@ PROBLEMS: dict[str, Problem] = {
         build_kit=_signal_kit,
         prompt_fingerprint=_signal_fingerprint,
         max_attempts=SIGNAL_ATTEMPTS,
+    ),
+    "rune": Problem(  # specs/010
+        name="rune",
+        levels=rune.LEVELS,
+        dev_seeds=rune.DEV_SEEDS,
+        test_seeds=rune.TEST_SEEDS,
+        generate=rune.generate,
+        reference_steps=lambda world: int(world.reference_steps),
+        start_episode=rune.start_episode,
+        build_kit=_rune_kit,
+        prompt_fingerprint=_rune_fingerprint,
+        max_attempts=RUNE_ATTEMPTS,
     ),
 }
 DEFAULT = "dungeon"

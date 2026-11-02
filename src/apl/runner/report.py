@@ -176,6 +176,40 @@ def _signal_spread_row(arch: str, level: str, rows: Sequence[EpisodeRow]) -> str
     return f"| {arch} | {level} | {min(right):.0%}–{max(right):.0%} | {span} |"
 
 
+# The rune floor's own table (specs/010 contracts/results.md).
+_RUNE_HEADER = (
+    "| Arch | Level | Episodes | Success | Steps (median) | Traps (median) | Repeated (median) "
+    "| Efficiency (median) | Budget hit | Tokens (median) | Latency (median) |"
+)
+
+
+def _rune_row(arch: str, level: str, rows: Sequence[EpisodeRow]) -> str:
+    cells = [
+        arch,
+        level,
+        str(len(rows)),
+        _pct(_rate(rows, lambda r: r.success)),
+        _count(_median([r.steps for r in rows])),
+        _count(_median([r.traps for r in rows])),
+        _count(_median([r.repeated_traps for r in rows])),
+        _fixed(_median([r.efficiency for r in rows if r.success]), 2),
+        _pct(_rate(rows, lambda r: r.budget_hit)),
+        _count(_median([_tokens(r) for r in rows])),
+        _fixed(_median([r.latency_s for r in rows]), 1, "s"),
+    ]
+    return "| " + " | ".join(cells) + " |"
+
+
+def _rune_spread_row(arch: str, level: str, rows: Sequence[EpisodeRow]) -> str:
+    by_repeat: dict[tuple[str, int], list[EpisodeRow]] = defaultdict(list)
+    for row in rows:
+        by_repeat[row.run_id, row.repeat].append(row)
+    success = [_rate(group, lambda r: r.success) for group in by_repeat.values()]
+    traps = [m for g in by_repeat.values() if (m := _median([r.traps for r in g])) is not None]
+    span = f"{_count(min(traps))}–{_count(max(traps))}" if traps else "—"
+    return f"| {arch} | {level} | {min(success):.0%}–{max(success):.0%} | {span} |"
+
+
 def _tokens(row: EpisodeRow) -> int | None:
     if row.input_tokens is None or row.output_tokens is None:
         return None
@@ -246,7 +280,12 @@ def render(runs: Sequence[LoadedRun]) -> str:
     )
     survey = first.problem == "survey"
     signal = first.problem == "signal"  # specs/009
-    where = " on the survey field" if survey else " on the signal trace" if signal else ""
+    rune = first.problem == "rune"  # specs/010
+    where = {
+        "survey": " on the survey field",
+        "signal": " on the signal trace",
+        "rune": " on the rune floor",
+    }.get(first.problem, "")
     lines = [f"# Report: {', '.join(archs)}" + where, ""]
     if first.seed_set == "test":
         lines.append("> Result on test seeds.")
@@ -272,6 +311,12 @@ def render(runs: Sequence[LoadedRun]) -> str:
             _SIGNAL_HEADER,
             "| --- " * 10 + "|",
             *(_signal_row(arch, level, groups[arch, level]) for arch, level in keys),
+        ]
+    elif rune:
+        lines += [
+            _RUNE_HEADER,
+            "| --- " * 11 + "|",
+            *(_rune_row(arch, level, groups[arch, level]) for arch, level in keys),
         ]
     else:
         lines += [
@@ -308,6 +353,15 @@ def render(runs: Sequence[LoadedRun]) -> str:
             "| Arch | Level | Right (min–max) | Probes (min–max) |",
             "| --- | --- | --- | --- |",
             *(_signal_spread_row(arch, level, groups[arch, level]) for arch, level in keys),
+        ]
+    elif rune and any(r.record.repeats > 1 for r in runs):
+        lines += [
+            "",
+            "## Spread across repeats",
+            "",
+            "| Arch | Level | Success (min–max) | Traps (min–max) |",
+            "| --- | --- | --- | --- |",
+            *(_rune_spread_row(arch, level, groups[arch, level]) for arch, level in keys),
         ]
     elif any(r.record.repeats > 1 for r in runs):
         lines += [

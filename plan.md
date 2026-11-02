@@ -1,9 +1,9 @@
 # Plan
 
-> **At a glance.** Three small simulated problems (a dungeon, a survey field and a signal trace),
-> one model, and several hand-built LangGraph architectures, scored by code. M0–M9 are built: every
-> architecture in §4 is in, and M9 added the signal trace.
-> The [README](README.md) is the short tour. This file holds the design: the worlds (§2, §2b, §2c),
+> **At a glance.** Four small simulated problems (a dungeon, a survey field, a signal trace and a
+> rune floor), one model, and several hand-built LangGraph architectures, scored by code. M0–M10
+> are built: every architecture in §4 is in; M9 added the signal trace and M10 the rune floor.
+> The [README](README.md) is the short tour. This file holds the design: the worlds (§2–§2d),
 > the fairness rules (§3), the architectures (§4), the metrics (§5) and the milestones (§7).
 
 ## 1. Goal
@@ -145,6 +145,47 @@ implied counts as wasted.
 
 Seeds: the same numbers as the other problems, keyed by the problem name.
 
+## 2d. Rune floor
+
+Built so that learning a rule from failures is what differs (specs/010): the whole floor is
+visible, only the rule deciding which steps are safe is hidden, and the only way to learn it is to
+be trapped by it.
+
+### World
+
+- A rectangle of cells named as on the survey field (`A1` is the north-west corner). The start S
+  is the west edge's middle cell, the goal G the east edge's middle cell; every other cell is red,
+  blue, green or yellow. The floor is given free at the start.
+- A *walk* is the cells stepped on since the agent last stood on S. A hidden rule judges each step
+  with the walk so far. A forbidden step is a trap: the agent is back on S and a new walk starts.
+  Stepping onto S starts a new walk without a trap; stepping onto G always ends the episode.
+- Every floor has a safe path, and the straight row from S to G is never safe.
+
+### Tools
+
+| Tool | Returns |
+| --- | --- |
+| `look()` | The floor again: its size, every tile's color, the start, the goal and the agent's cell |
+| `move(direction)` | The tile moved onto and its color, a trap (where, and that the agent is back on S), the goal reached, or an error (off the floor, unknown direction) |
+
+### Episode
+
+The episode ends at the goal, when the step budget is used up, or when the architecture stops. It
+is a success when the goal is reached. Code computes a reference: the moves on the shortest safe
+path, found by a search over (cell, rule state), so it is the optimum. The step budget is 4× the
+reference. A trap is repeated when an earlier trap sprang on the same cell in the same rule state.
+
+### Levels
+
+| Level | Floor | Rule | Purpose |
+| --- | --- | --- | --- |
+| R0 | 7×5 | none: a fixed set of trap cells | Control: nothing to learn beyond "not that cell" |
+| R1 | 7×5 | a cycle of 3 colors over the walk (e.g. red, blue, green) | Baseline rule; one walk of three safe steps shows it |
+| R2 | 9×7 | a cycle of 4 that doubles a color (e.g. red, red, blue, green) | Takes more than one trap to pin down |
+| R3 | 9×7 | one color allowed on odd rows, another on even rows | The obvious guess, a color order, is wrong |
+
+Seeds: the same numbers as the other problems, keyed by the problem name.
+
 ## 3. Fairness rules
 
 These become the Spec Kit constitution.
@@ -165,13 +206,13 @@ the repository is to learn LangGraph.
 
 | ID | Architecture | What it tests | LangGraph features | Problems |
 | --- | --- | --- | --- | --- |
-| A1 | ReAct | The baseline: memory is the message history only | Tool node, conditional edge, loop limit | dungeon, survey, signal |
-| A2 | Map state | Does explicit memory beat history? The explored map lives in graph state and is rendered each turn | State schema, reducers | dungeon, survey, signal |
+| A1 | ReAct | The baseline: memory is the message history only | Tool node, conditional edge, loop limit | dungeon, survey, signal, rune |
+| A2 | Map state | Does explicit memory beat history? The explored map lives in graph state and is rendered each turn | State schema, reducers | dungeon, survey, signal, rune |
 | A2r | Map state with routes (`mapstate_routes`) | Does a planning aid help a small model? A2's map plus the shortest known route to each unexplored exit | Same graph as A2 | dungeon |
-| A3 | Plan-and-execute | Does planning help on L3? Planner sets subgoals, executor runs them, replanner reacts | Multiple nodes, cycles | dungeon, survey, signal |
-| A4 | Reflexion | Does learning from a failed attempt pay for itself? All attempts count toward the budget | Outer retry loop, persistent notes | dungeon, survey, signal |
+| A3 | Plan-and-execute | Does planning help on L3? Planner sets subgoals, executor runs them, replanner reacts | Multiple nodes, cycles | dungeon, survey, signal, rune |
+| A4 | Reflexion | Does learning from a failed attempt pay for itself? All attempts count toward the budget | Outer retry loop, persistent notes | dungeon, survey, signal, rune |
 | A5 | Supervisor (`supervisor`) | Do subagents help or only add cost? A supervisor hands tasks to a navigator (look, move) and an inventory subagent (take, use) | Subgraphs, handoffs (`Command`) | dungeon |
-| A6 | Hybrid | How much of the work needs a model at all? Code searches the known map, the model picks targets | Plain Python nodes mixed with model nodes | dungeon, signal |
+| A6 | Hybrid | How much of the work needs a model at all? Code searches the known map, the model picks targets | Plain Python nodes mixed with model nodes | dungeon, signal, rune |
 | A7 | Fan-out once (`fanout`) | Does splitting the exploration help? An orchestrator splits the dungeon once; up to 4 scouts explore on their own maps | `Send`, parallel branches, reducers | dungeon, survey |
 | A8 | Supervisor in rounds (`rounds`) | Does replanning on the merged map help the scouts? Short tasks per round, replanned on what all scouts saw | `Send` in a cycle, shared state | dungeon, survey |
 | A9 | Shared blackboard (`blackboard`) | Can scouts coordinate without a planner? They take turns on one live map and claim frontiers | Round-robin routing over shared state | dungeon, survey |
@@ -230,6 +271,7 @@ Each milestone after M0 is one Spec Kit feature (`/speckit-specify` through
 | M7 | A4 Reflexion (`reflexion`) on both problems, with up to 3 attempts per episode (constitution 2.1.0) | It can be watched in the viewer and is added to the comparison on the same seeds | ✅ |
 | M8 | A5 supervisor (`supervisor`) on the dungeon | It can be watched in the viewer and is added to the comparison on the same seeds | ✅ |
 | M9 | The signal trace (§2c), with A1–A4 and A6 on it | Any signal level and seed can be shown and watched in the viewer; signal runs plan, continue and report like the other problems; the dungeon and the survey field are unchanged | ✅ |
+| M10 | The rune floor (§2d), with A1–A4 and A6 on it | Any rune level and seed can be shown and watched in the viewer; rune runs plan, continue and report like the other problems; the other problems are unchanged | ✅ |
 
 Paperclip comes in from M5, when several architectures can be built as parallel tickets.
 
@@ -256,3 +298,5 @@ Decided:
   vault, workshop, warehouse robots, rune floor), one per later feature.
 - A third problem (since M9): the signal trace, where the choice of the next probe is all that
   differs (specs/009). Noisy probes are left for a later level or feature.
+- A fourth problem (since M10): the rune floor, where learning a hidden rule from traps is what
+  differs (specs/010); R0, a floor with no rule, is the control where reflecting can only cost.

@@ -48,11 +48,11 @@ def test_walls_inside_the_field() -> None:
 
 def test_submit_accepts_whole_numbers_only() -> None:
     episode = start_episode(_open_field())
-    for raw in (-1, "about 12", 1.5, True, None, "-3", ""):
+    for raw in (-1, "about 12", 1.5, True, None, "-3", "", "9" * 5000):
         result = episode.submit(raw)
         assert not result.ok and result.error is not None
         assert str(result.error.code) == "invalid_total"
-    assert episode.end_reason is None and episode.steps == 7
+    assert episode.end_reason is None and episode.steps == 8
     assert episode.submit("6").ok
     assert str(episode.end_reason) == "submitted" and episode.outcome().submitted_total == 6
 

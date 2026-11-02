@@ -2,8 +2,9 @@
 
 The code nodes work only from the map, which is built from tool results (Constitution II), and
 every call they make is a tool call that costs a step (Constitution III). On the signal trace
-code keeps the suspects and lists the probes that split them best (specs/009). Written by the agent
-at the experimenter's request.
+code keeps the suspects and lists the probes that split them best (specs/009); on the rune floor
+code keeps what happened on each tile and offers the moves, without guessing the rule (specs/010).
+Written by the agent at the experimenter's request.
 """
 
 import itertools
@@ -16,6 +17,7 @@ from langgraph.graph import END, START, StateGraph
 
 from apl.arch.dungeon_map import DungeonMap
 from apl.arch.probe_log import ProbeLog
+from apl.arch.walk_log import WalkLog, cell_name
 from apl.kit import Kit
 
 # Explains the setup and the answer format only; no advice on which option to pick.
@@ -33,6 +35,16 @@ list of options. Code carries out the option you choose with one tool call. For 
 option says how many segments could still be the broken one after each answer. Answer with the \
 number of one option and nothing else."""
 
+# The rune floor's (specs/010 contracts/architectures.md): the setup and the format only.
+RUNE_HYBRID_INSTRUCTIONS = """\
+In this setup you do not call the tools yourself. Every turn you see your walk log and a numbered \
+list of moves. Code carries out the move you choose with one tool call. For each move, the option \
+says what happened on that tile before: at which step of a walk it was safe or a trap. Answer with \
+the number of one option and nothing else."""
+
+DIRECTIONS = ("north", "east", "south", "west")
+TIMES = {1: "once", 2: "twice"}
+
 # Probes listed per turn, and the suspects left from which submissions are offered (R11).
 SIGNAL_PROBES = 8
 SIGNAL_SUBMITS = 4
@@ -49,7 +61,7 @@ class Option(NamedTuple):
 
 
 class HybridState(TypedDict):
-    map: DungeonMap | ProbeLog
+    map: DungeonMap | ProbeLog | WalkLog
     options: list[Option]
     note: str  # what happened since the model's last answer
     misses: int  # answers in a row that named no option
@@ -102,7 +114,40 @@ def signal_options(log: ProbeLog) -> list[Option]:
     return found
 
 
+def rune_options(log: WalkLog) -> list[Option]:
+    """Every move that stays on the floor, with what happened on that tile before."""
+    found = []
+    step = len(log.walks[-1].steps) + 1  # the walk step the move would be
+    for direction in DIRECTIONS:
+        cell = log.neighbor(direction)
+        if cell is None:
+            continue
+        call: list[Call] = [("move", {"direction": direction})]
+        if cell == log.start:
+            found.append(Option(f"move {direction} to the start", call))
+            continue
+        if cell == log.goal:
+            found.append(Option(f"move {direction} to the goal", call))
+            continue
+        counts: dict[tuple[int, str], int] = {}
+        for pair in log.record(cell):
+            counts[pair] = counts.get(pair, 0) + 1
+        said = "; ".join(
+            f"{what} at walk step {at} ({TIMES.get(n, f'{n} times')})"
+            for (at, what), n in sorted(
+                counts.items(), key=lambda kv: (kv[0][0], kv[0][1] == "trap")
+            )
+        )
+        head = f"move {direction} to {cell_name(cell)} ({log.color(cell)}), walk step {step}"
+        found.append(Option(f"{head}: {said or 'never stepped on'}", call))
+    return found
+
+
 def play(kit: Kit) -> None:
+    if kit.problem == "rune":  # specs/010: the same graph over a walk log
+        system = SystemMessage(kit.base_prompt + "\n\n" + RUNE_HYBRID_INSTRUCTIONS)
+        _graph(kit, system, WalkLog.from_start(kit.start))
+        return
     if kit.problem == "signal":  # specs/009: the same graph over a probe log
         system = SystemMessage(kit.base_prompt + "\n\n" + SIGNAL_HYBRID_INSTRUCTIONS)
         _graph(kit, system, ProbeLog.from_start(kit.start))
@@ -111,11 +156,13 @@ def play(kit: Kit) -> None:
     _graph(kit, system, DungeonMap.from_start(kit.start))
 
 
-def _graph(kit: Kit, system: SystemMessage, start: DungeonMap | ProbeLog) -> None:
+def _graph(kit: Kit, system: SystemMessage, start: DungeonMap | ProbeLog | WalkLog) -> None:
     ids = itertools.count(1)
 
     def plan(state: HybridState) -> dict[str, list[Option]]:
         found = state["map"]
+        if isinstance(found, WalkLog):
+            return {"options": rune_options(found)}
         return {"options": signal_options(found) if isinstance(found, ProbeLog) else options(found)}
 
     def choose(state: HybridState) -> dict[str, object]:

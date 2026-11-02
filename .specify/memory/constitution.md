@@ -12,9 +12,10 @@ Rationale: any difference in results must come from the architecture alone.
 ### II. Tool-Only World Access
 Architectures MUST perceive and act on a problem only through that problem's tools: the dungeon's
 `look`, `move`, `take` and `use`; the survey field's `look`, `move` and `submit`; the signal
-trace's `look`, `probe` and `submit`. They MUST NOT import, call or read environment internals,
-generators, solvers or reference walks. That includes the shortest solution, the full map, the
-reference walk, the true deposit count, the broken segment and the reference probes. Plain-code
+trace's `look`, `probe` and `submit`; the rune floor's `look` and `move`. They MUST NOT import,
+call or read environment internals, generators, solvers or reference walks. That includes the
+shortest solution, the full map, the reference walk, the true deposit count, the broken segment,
+the reference probes, the rune floor's rule, its trap tiles and its reference path. Plain-code
 nodes (for example A6) are bound by the same rule: they can work only with what earlier tool
 results revealed.
 Rationale: an architecture that peeks is not solving the task being measured.
@@ -62,12 +63,18 @@ Rationale: runs cost money, and dry runs must be safe by default.
   reference, not an optimum. The step budget is the larger of 3× the reference and a full
   probe-by-probe scan (every segment but one probed, plus one submission). Levels T1–T3 are
   defined in plan.md.
+- **Rune floor**: floors of colored tiles are generated from a seed, with a start S, a goal G and
+  a hidden rule that decides which steps are safe. Every floor has a safe path from S to G, and the
+  shortest route that ignores the rule springs a trap. The colors are given free at the start. A
+  trap sends the agent back to S; it is a result, not an error, and no result states the rule.
+  Code computes a reference: the moves on the shortest safe path. The step budget is 4× the
+  reference. Levels R0–R3 are defined in plan.md.
 - **Attempts**: an architecture registered as retrying (A4) may restart the world up to 3
   attempts per episode. A restart puts the world back in its start state and costs no step; every
-  tool call of every attempt counts toward the one budget. On the survey field a wrong total, and
-  on the signal trace a wrong submitted segment, ends such an architecture's attempt while attempts
-  are left, with a result that says only that it was wrong. Every other architecture has one
-  attempt.
+  tool call of every attempt counts toward the one budget. On the survey field a wrong total, on
+  the signal trace a wrong submitted segment, and on the rune floor a trap ends such an
+  architecture's attempt while attempts are left, with a result that says only that it was wrong
+  (on the rune floor, that it was a trap and where). Every other architecture has one attempt.
 - A per-run token cap stops an episode that loops.
 - Changing a level definition or the seed split invalidates earlier results for comparison.
 - Stack: Python 3.12, uv, LangGraph 1.2.x, LangChain `init_chat_model`, pytest, ruff, mypy.
@@ -92,4 +99,4 @@ and review MUST check compliance. An unavoidable violation MUST be recorded in t
 Complexity Tracking table with a justification. Results from different problems MUST NOT be
 combined in one comparison.
 
-**Version**: 2.2.0 | **Ratified**: 2026-10-28 | **Last Amended**: 2026-11-02
+**Version**: 2.3.0 | **Ratified**: 2026-10-28 | **Last Amended**: 2026-11-02

@@ -75,6 +75,22 @@ def _signal_show(args: argparse.Namespace) -> int:
     return 0
 
 
+def _rune_show(args: argparse.Namespace) -> int:
+    from apl.rune import generate as generate_floor
+    from apl.rune.render_svg import html
+    from apl.rune.render_text import render_text as render_floor
+
+    try:
+        floor = generate_floor(args.level, args.seed)
+        if args.html:
+            Path(args.html).write_text(html(floor), encoding="utf-8")
+    except (OSError, ValueError) as error:
+        print(f"apl: {error}", file=sys.stderr)
+        return 2
+    print(render_floor(floor, route=args.route == "reference"), end="")
+    return 0
+
+
 def _csv(text: str) -> list[str]:
     return [part.strip() for part in text.split(",") if part.strip()]
 
@@ -316,6 +332,13 @@ def main(argv: list[str] | None = None) -> int:
     pipe_show.add_argument("--seed", required=True, type=int)
     pipe_show.add_argument("--route", choices=["reference"], help="list the reference probes")
     pipe_show.add_argument("--html", metavar="OUT", help="also write a picture")
+    rune = commands.add_parser("rune", help="inspect generated rune floors")
+    rune_commands = rune.add_subparsers(dest="rune_command")
+    floor_show = rune_commands.add_parser("show", help="print a rune floor as text")
+    floor_show.add_argument("--level", required=True, choices=["R0", "R1", "R2", "R3"])
+    floor_show.add_argument("--seed", required=True, type=int)
+    floor_show.add_argument("--route", choices=["reference"], help="list the reference path")
+    floor_show.add_argument("--html", metavar="OUT", help="also write a picture")
     run = commands.add_parser("run", help="plan a run, or play it with --execute")
     run.add_argument(
         "--problem", default="dungeon", choices=list(PROBLEMS), help="default: dungeon"
@@ -344,6 +367,8 @@ def main(argv: list[str] | None = None) -> int:
         return _survey_show(args)
     if args.command == "signal" and args.signal_command == "show":
         return _signal_show(args)
+    if args.command == "rune" and args.rune_command == "show":
+        return _rune_show(args)
     if args.command == "run":
         return _run(args)
     if args.command == "report":
@@ -352,5 +377,6 @@ def main(argv: list[str] | None = None) -> int:
         return _continue(args)
     if args.command == "serve":
         return _serve(args)
-    {"dungeon": dungeon, "survey": survey, "signal": signal}.get(args.command, parser).print_help()
+    groups = {"dungeon": dungeon, "survey": survey, "signal": signal, "rune": rune}
+    groups.get(args.command, parser).print_help()
     return 2

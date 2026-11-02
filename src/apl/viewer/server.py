@@ -30,6 +30,8 @@ class Handler(BaseHTTPRequestHandler):
             self._send(self.viewer.survey(query.get("level", ""), query.get("seed", "")))
         elif url.path == "/api/signal":
             self._send(self.viewer.signal(query.get("level", ""), query.get("seed", "")))
+        elif url.path == "/api/rune":
+            self._send(self.viewer.rune(query.get("level", ""), query.get("seed", "")))
         elif url.path == "/api/episodes":
             self._send(self.viewer.list_episodes())
         elif match := EVENTS.fullmatch(url.path):

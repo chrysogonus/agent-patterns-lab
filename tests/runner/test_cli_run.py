@@ -356,7 +356,7 @@ def test_an_architecture_that_does_not_play_the_survey_is_refused(
     command = ["run", "--problem", "survey", "--arch", "hybrid", "--level", "S1", "--seeds", "dev"]
     assert main(command) == 2
     err = capsys.readouterr().err
-    assert err == "apl: hybrid does not play the survey problem (it plays: dungeon, signal)\n"
+    assert err == "apl: hybrid does not play the survey problem (it plays: dungeon, rune, signal)\n"
 
 
 def test_without_a_problem_the_plan_has_no_problem_line(
@@ -396,3 +396,35 @@ def test_an_architecture_that_does_not_play_the_signal_trace_is_refused(
     assert main(command) == 2
     err = capsys.readouterr().err
     assert err == "apl: fanout does not play the signal problem (it plays: dungeon, survey)\n"
+
+
+RUNE = [
+    "run", "--problem", "rune", "--arch", "react,mapstate,plan_execute,reflexion,hybrid",
+    "--level", "all", "--seeds", "dev", "--limit", "1",
+]  # fmt: skip
+
+
+def test_a_rune_plan(workdir: Path, capsys: pytest.CaptureFixture[str]) -> None:  # specs/010 US3 1
+    from apl.rune.prompt import prompt_fingerprint
+
+    assert main(RUNE) == 0
+    out = capsys.readouterr().out
+    lines = out.splitlines()
+    assert lines[1] == "  architectures  react, mapstate, plan_execute, reflexion, hybrid"
+    assert lines[2] == "  problem        rune"
+    for line in [
+        "levels         R0, R1, R2, R3",
+        "episodes       20",
+        f"prompt         {prompt_fingerprint()}",
+    ]:
+        assert line in out
+    assert list(workdir.iterdir()) == []
+
+
+def test_an_architecture_that_does_not_play_the_rune_floor_is_refused(
+    workdir: Path, capsys: pytest.CaptureFixture[str]
+) -> None:  # specs/010 US3 2
+    command = ["run", "--problem", "rune", "--arch", "fanout", "--level", "R1", "--seeds", "dev"]
+    assert main(command) == 2
+    err = capsys.readouterr().err
+    assert err == "apl: fanout does not play the rune problem (it plays: dungeon, survey)\n"

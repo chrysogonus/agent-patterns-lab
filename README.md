@@ -12,8 +12,8 @@ there is no LLM judge.
 An orchestrator (first card on the right) gives four scouts short tasks. Each colored line is
 one scout's trail, and the triangles are ore deposits. The scouts found all 15.</sub>
 
-> **Status:** M9 built: a third problem, the signal trace, alongside the dungeon and the survey
-> field; every architecture in the plan is in. First
+> **Status:** M10 built: a fourth problem, the rune floor, alongside the dungeon, the survey field
+> and the signal trace; every architecture in the plan is in. First
 > results (M4, dungeon only, a first look): [`docs/findings/m4-first-comparison.md`](docs/findings/m4-first-comparison.md).
 
 ---
@@ -23,7 +23,7 @@ one scout's trail, and the triangles are ore deposits. The scouts found all 15.<
 ```mermaid
 flowchart LR
     model["One model<br/>for every architecture"] --> arch["Architecture<br/>a LangGraph graph<br/><b>the one thing that changes</b>"]
-    arch <-->|"tools only:<br/>look · move · probe · …"| world["World<br/>dungeon, survey field<br/>or signal trace"]
+    arch <-->|"tools only:<br/>look · move · probe · …"| world["World<br/>dungeon, survey field,<br/>signal trace or rune floor"]
     seed(["seed"]) --> world
     world --> score["Score by code<br/>success · steps vs. best<br/>tokens · time"]
 ```
@@ -44,6 +44,7 @@ uv sync
 uv run apl dungeon show --level L3 --seed 1000 --route solution   # a dungeon and its shortest route
 uv run apl survey show --level S2 --seed 1000                     # a survey field
 uv run apl signal show --level T3 --seed 1000 --route reference   # a signal trace pipe
+uv run apl rune show --level R1 --seed 1000 --route reference     # a rune floor
 uv run apl serve                                                  # the viewer: http://127.0.0.1:8765/
 ```
 
@@ -52,7 +53,7 @@ In the viewer, pick a problem, level and seed, and press **Generate** to see the
 
 ---
 
-## The three problems
+## The four problems
 
 Architectures are compared only within a problem, never across problems.
 
@@ -123,6 +124,30 @@ segment needs about N probes; one that halves the suspects each time needs about
 **Success** means naming the broken segment. The report also counts **wasted probes**: probes
 whose answer earlier answers already implied.
 
+### 4. The rune floor: learn the hidden rule
+
+Cross a floor of colored tiles from S to G. Every tile's color is given at the start; a hidden
+rule decides which steps are safe (for example: the tiles stepped on since S must go red, blue,
+green, then repeat). A step the rule forbids is a trap and sends the agent back to S, and all
+walks share one step budget. The only way to learn the rule is to be trapped by it, so this is
+where learning from failure (A4 Reflexion) should pay off, and where an agent that keeps no
+lesson walks into the same trap again.
+
+| Tool | What it does |
+| --- | --- |
+| `look()` | The floor again (it is also given free at the start) |
+| `move(direction)` | Step onto the next tile: safe, a trap (back to S), or the goal |
+
+| Level | Floor | Hidden rule | Step budget |
+| --- | --- | --- | --- |
+| R0 | 7×5 | none: a fixed set of trap tiles (the control, nothing to learn) | 4× the shortest safe path |
+| R1 | 7×5 | a cycle of 3 colors | 4× the shortest safe path |
+| R2 | 9×7 | a cycle of 4 that doubles a color | 4× the shortest safe path |
+| R3 | 9×7 | one color on odd rows, another on even rows | 4× the shortest safe path |
+
+**Success** means reaching G. The report also counts **traps** and **repeated traps**: the same
+tile sprung again in the same situation under the rule.
+
 ---
 
 ## The architectures
@@ -130,18 +155,18 @@ whose answer earlier answers already implied.
 Each one is a `StateGraph` written by hand in [`src/apl/arch/`](src/apl/arch/). The ID column
 is used in the docs, and the name column is what you pass to `--arch`.
 
-| ID | Name | Idea in one line | Dungeon | Survey | Signal |
-| --- | --- | --- | :---: | :---: | :---: |
-| A1 | `react` | The model calls tools in a loop and remembers only through its message history | ✓ | ✓ | ✓ |
-| A2 | `mapstate` | The explored map lives in graph state and is shown to the model every turn (on the signal trace: a probe log) | ✓ | ✓ | ✓ |
-| A2r | `mapstate_routes` | A2, plus the shortest known route to each unexplored exit | ✓ | | |
-| A3 | `plan_execute` | A planner writes subgoals, A2's agent carries them out, a replanner reacts to each report | ✓ | ✓ | ✓ |
-| A4 | `reflexion` | A2 that tries again: after a failed attempt it writes a note, the world restarts, all steps count | ✓ | ✓ | ✓ |
-| A5 | `supervisor` | A supervisor hands tasks to a navigator (look, move) and an inventory helper (take, use), each a subgraph on A2's map | ✓ | | |
-| A6 | `hybrid` | Code keeps the map and walks the routes; the model only picks where to go (on the signal trace: code lists the probes that split the suspects best) | ✓ | | ✓ |
-| A7 | `fanout` | An orchestrator sends out up to 4 scouts once; each explores alone | ✓ | ✓ | |
-| A8 | `rounds` | An orchestrator gives scouts short tasks and replans on the map they all saw | ✓ | ✓ | |
-| A9 | `blackboard` | No planner: scouts take turns on one shared map and claim unexplored exits | ✓ | ✓ | |
+| ID | Name | Idea in one line | Dungeon | Survey | Signal | Rune |
+| --- | --- | --- | :---: | :---: | :---: | :---: |
+| A1 | `react` | The model calls tools in a loop and remembers only through its message history | ✓ | ✓ | ✓ | ✓ |
+| A2 | `mapstate` | The explored map lives in graph state and is shown to the model every turn (on the signal trace: a probe log; on the rune floor: a walk log) | ✓ | ✓ | ✓ | ✓ |
+| A2r | `mapstate_routes` | A2, plus the shortest known route to each unexplored exit | ✓ | | | |
+| A3 | `plan_execute` | A planner writes subgoals, A2's agent carries them out, a replanner reacts to each report | ✓ | ✓ | ✓ | ✓ |
+| A4 | `reflexion` | A2 that tries again: after a failed attempt (on the rune floor: a trap) it writes a note, the world restarts, all steps count | ✓ | ✓ | ✓ | ✓ |
+| A5 | `supervisor` | A supervisor hands tasks to a navigator (look, move) and an inventory helper (take, use), each a subgraph on A2's map | ✓ | | | |
+| A6 | `hybrid` | Code keeps the map and walks the routes; the model only picks where to go (on the signal trace: code lists the probes that split the suspects best; on the rune floor: code lists the moves with what happened on each tile before) | ✓ | | ✓ | ✓ |
+| A7 | `fanout` | An orchestrator sends out up to 4 scouts once; each explores alone | ✓ | ✓ | | |
+| A8 | `rounds` | An orchestrator gives scouts short tasks and replans on the map they all saw | ✓ | ✓ | | |
+| A9 | `blackboard` | No planner: scouts take turns on one shared map and claim unexplored exits | ✓ | ✓ | | |
 
 ### One agent: where the memory lives
 
@@ -235,6 +260,7 @@ uv run apl run --arch react --level all --seeds dev --limit 2            # plan 
 uv run apl run --arch react --level all --seeds dev --limit 2 --execute  # play it
 uv run apl run --problem survey --arch react,fanout --level all --seeds dev --limit 1
 uv run apl run --problem signal --arch react,hybrid --level all --seeds dev --limit 1
+uv run apl run --problem rune --arch react,reflexion --level all --seeds dev --limit 1
 uv run apl continue results/<run-id> [--execute]                         # finish a cut-off run
 uv run apl report results/<run-id>                                       # rebuild the report
 ```
@@ -341,6 +367,7 @@ The full rules are in [`.specify/memory/constitution.md`](.specify/memory/consti
 | ✅ | M7 | A4 Reflexion on both problems; attempts and restarts in both problems |
 | ✅ | M8 | A5 supervisor on the dungeon |
 | ✅ | M9 | The signal trace; A1–A4 and A6 play it |
+| ✅ | M10 | The rune floor; A1–A4 and A6 play it |
 
 The full design is in [`plan.md`](plan.md).
 
@@ -353,10 +380,11 @@ The full design is in [`plan.md`](plan.md).
 
 ```text
 src/apl/
-├── problems.py   the problems by name: dungeon, survey, signal
+├── problems.py   the problems by name: dungeon, survey, signal, rune
 ├── dungeon/      generator, environment, tools, solver, text map, HTML view
 ├── survey/       the survey field: generator, reference walk, environment, tools, pictures
 ├── signal_trace/ the signal trace: generator, reference strategy, environment, tools, pictures
+├── rune/         the rune floor: generator, rules and reference search, environment, tools, pictures
 ├── arch/         one module per architecture, each with play(kit), written by hand
 ├── kit.py        what an architecture gets per episode: model, tools, prompt
 ├── runner/       run matrix, results, report, model providers
@@ -375,7 +403,8 @@ Useful contracts:
 [the CLI](specs/001-dungeon-environment/contracts/cli.md),
 [the viewer API](specs/003-viewer-mapstate/contracts/viewer-api.md),
 [the survey tools](specs/005-survey-field/contracts/survey-tools.md),
-[the signal trace tools](specs/009-signal-trace/contracts/signal-tools.md).
+[the signal trace tools](specs/009-signal-trace/contracts/signal-tools.md),
+[the rune floor tools](specs/010-rune-floor/contracts/rune-tools.md).
 
 </details>
 
