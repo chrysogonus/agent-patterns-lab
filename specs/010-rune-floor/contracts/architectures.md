@@ -69,11 +69,16 @@ record lists each (outcome, walk step) pair in order of walk step, safe before t
 
 Both take the walk log and its instructions on `rune`. On `rune` only, A4's actor instructions
 end with one more sentence, so the other problems' prompts stay as they were: `On this floor an
-attempt also fails when a step springs a trap.` (`RUNE_ATTEMPT`). A4's failure reason after a trap with
+attempt also fails when a step springs a trap, and your walk log is not cleared: it keeps the walks
+of earlier attempts.` (`RUNE_ATTEMPT`). A4's failure reason after a trap with
 attempts left is `trap`, detected from `attempts_left` in a trap result; `RESTARTED` gains it, so
-the `restart` node skips `kit.restart()`. Its staleness counter (`_size`) uses `known`. A4's walk
-log starts empty each attempt (as its map does elsewhere); the reflector sees the failed attempt's
-log and writes a note.
+the `restart` node skips `kit.restart()`. Its staleness counter (`_size`) uses `known_since(first_walk)`:
+the distinct cells of this attempt's walks. A4's walk log is kept across attempts (changed on
+2026-11-02: it used to start empty, so A4 saw less of its traps than A2, whose log keeps every
+walk; now both keep the full walk history, and A4 differs in the notes and its retry controls:
+moves after a trap do not run, and giving up or going stale restarts the attempt). On a restart after any other
+failure, `WalkLog.restart()` ends the open walk as `attempt restarted` and puts the agent on the
+start. The reflector's instructions end with `RUNE_REFLECT`; it sees the log and writes a note.
 
 A trap's attempt ending is known only from its result, so `_until_submit` cannot cut the reply in
 advance. On `rune`, A4's `act` node therefore runs the reply's calls one at a time (each as a

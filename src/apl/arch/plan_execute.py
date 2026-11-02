@@ -1,5 +1,8 @@
-"""A3 plan-and-execute: a planner writes subgoals, an executor works through them one at a time,
-and a replanner reacts to each report.
+"""A3 plan-and-execute: a planner writes subgoals, an executor works through them in order, and a
+replanner is asked again only when a subgoal cannot be done or finished, or the plan is used up.
+
+A3 commits to its plan: a done subgoal hands straight over to the next, which is what sets it apart
+from A5's supervisor, who decides after every task.
 
 The executor is A2's map-state agent with a subgoal line; the planner and replanner see the same
 map and make no tool calls, so A3 differs from A2 in planning alone (specs/006
@@ -40,34 +43,40 @@ MAX_IDLE = 3  # subgoals in a row without a tool call; then A3 stops
 # The planning texts explain the setup and the answer format only; no advice on what to plan.
 PLANNER_INSTRUCTIONS = """\
 In this setup you do not call the tools yourself. You write a plan: a short ordered list of \
-subgoals. An executor carries them out one at a time with the tools, sees the same map as you \
-(the map's "you" is the executor), and reports back after each subgoal. Every tool call of the \
-executor costs a step from the budget. Answer with one JSON object and nothing else:
+subgoals. An executor carries them out in order with the tools and sees the same map as you (the \
+map's "you" is the executor). You are asked again only when a subgoal cannot be done or finished, \
+or the plan is used up. Every tool call of the executor costs a step from the budget. Answer with \
+one JSON object and nothing else:
 {"plan": ["<subgoal>", ...]} with 1 to 8 subgoals."""
 
 REPLANNER_INSTRUCTIONS = """\
 In this setup you do not call the tools yourself. You keep a plan up to date: a short ordered \
-list of subgoals. An executor carries them out one at a time with the tools, sees the same map as \
-you (the map's "you" is the executor), and reports back after each subgoal. Every tool call of \
-the executor costs a step from the budget. After each subgoal you see its report, the map and the \
-plan so far. Answer with one JSON object and nothing else:
+list of subgoals. An executor carries them out in order with the tools and sees the same map as \
+you (the map's "you" is the executor). You are asked again only when a subgoal cannot be done or \
+finished, or the plan is used up; then you see the reports so far, the map and the plan still to \
+do. Every tool call of the executor costs a step from the budget. Answer with one JSON object and \
+nothing else:
 {"plan": ["<subgoal>", ...]} with the 1 to 8 subgoals still to do, or {"done": true} to stop."""
 
 # Explains the subgoal line, as the scouts' text explains their task line (research R2).
 EXECUTOR_INSTRUCTIONS = """\
 The line starting with "Your subgoal:" says what to do now; it is one step of a longer plan. \
 When the subgoal is done or cannot be done, answer without a tool call and say briefly what you \
-did and found."""
+did and found. If it cannot be done, start that answer with "Cannot:"."""
+
+CANNOT = "cannot:"  # the start of a report on a subgoal that cannot be done, in any case
 
 
 @dataclass(frozen=True, slots=True)
 class Outcome:
     subgoal: str
-    status: Literal["done", "unfinished"]
+    status: Literal["done", "cannot", "unfinished"]
     report: str  # the executor's last reply text
 
     def render(self, number: int) -> str:
-        how = "done" if self.status == "done" else f"unfinished after {MAX_TURNS} turns"
+        how = {"done": "done", "cannot": "could not be done"}.get(
+            self.status, f"unfinished after {MAX_TURNS} turns"
+        )
         return f"{number}. {self.subgoal}: {how}: {self.report}"
 
 
@@ -114,7 +123,9 @@ def _miss(state: PlanState, why: str) -> dict[str, Any]:
     return {"misses": state["misses"] + 1, "note": note}
 
 
-def _finish(state: PlanState, status: Literal["done", "unfinished"], report: str) -> dict[str, Any]:
+def _finish(
+    state: PlanState, status: Literal["done", "cannot", "unfinished"], report: str
+) -> dict[str, Any]:
     outcome = Outcome(state["plan"][0], status, report)
     return {"finished": [*state["finished"], outcome], "plan": state["plan"][1:]}
 
@@ -169,8 +180,16 @@ def play(kit: Kit) -> None:
         if _has_calls(reply):
             return {"messages": [reply], "turns": state["turns"] + 1, "started": True}
         idle = 0 if state["acted"] else state["idle"] + 1
-        report = _finish(state, "done", str(reply.text))
-        return {"messages": [reply], "started": True, "idle": idle, **report}
+        said = str(reply.text).strip()
+        if said.lower().startswith(CANNOT):
+            report = _finish(state, "cannot", said[len(CANNOT) :].strip())
+        else:
+            report = _finish(state, "done", said)
+        update = {"messages": [reply], "started": True, "idle": idle, **report}
+        if report["finished"][-1].status == "done" and report["plan"]:
+            # The next subgoal starts without its predecessor's turn and without replanning.
+            update |= {"messages": [], "turns": 0, "acted": False, "subgoal": state["subgoal"] + 1}
+        return update
 
     def act(state: PlanState) -> dict[str, Any]:
         reply = state["messages"][-1]
@@ -228,9 +247,12 @@ def play(kit: Kit) -> None:
         return edge
 
     def after_executor(state: PlanState) -> str:
-        if _has_calls(state["messages"][-1]):
+        if state["messages"] and _has_calls(state["messages"][-1]):
             return "act"
-        return END if state["idle"] >= MAX_IDLE else "replanner"
+        if state["idle"] >= MAX_IDLE:
+            return END
+        ahead = state["finished"][-1].status == "done" and state["plan"]
+        return "executor" if ahead else "replanner"
 
     def after_act(state: PlanState) -> str:
         return "replanner" if state["turns"] >= MAX_TURNS else "executor"
@@ -242,7 +264,7 @@ def play(kit: Kit) -> None:
     graph.add_node("replanner", replanner)
     graph.add_edge(START, "planner")
     graph.add_conditional_edges("planner", after_planning("planner"), ["planner", "executor", END])
-    graph.add_conditional_edges("executor", after_executor, ["act", "replanner", END])
+    graph.add_conditional_edges("executor", after_executor, ["act", "executor", "replanner", END])
     graph.add_conditional_edges("act", after_act, ["executor", "replanner"])
     graph.add_conditional_edges(
         "replanner", after_planning("replanner"), ["replanner", "executor", END]

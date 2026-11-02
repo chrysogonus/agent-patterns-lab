@@ -409,3 +409,17 @@ def test_workshop_and_rune_runs_are_not_combined(tmp_path: Path) -> None:
     workshop = _write(tmp_path / "run-w", [_workshop("react", 1000, 1, 16)], problem="workshop")
     with pytest.raises(ValueError, match="different problems"):
         check_compatible([load_run(rune), load_run(workshop)])
+
+
+def test_a4_on_the_dungeon_is_labelled_a_stall_restart(tmp_path: Path) -> None:
+    rows = [_row(1000, 1, 10, arch="reflexion", attempts=2)]
+    report = render([load_run(_write(tmp_path / "a4", rows, architectures=["reflexion"]))])
+    assert "results measure reflection together with these stall restarts" in report
+    plain = render([load_run(_write(tmp_path / "a1", [_row(1000, 1, 10)]))])
+    assert "stall restart" not in plain
+
+
+def test_a4_elsewhere_has_no_stall_restart_label(tmp_path: Path) -> None:
+    rows = [_survey("reflexion", 1000, 1, 15, attempts=2)]
+    run = _write(tmp_path / "a4", rows, architectures=["reflexion"], problem="survey")
+    assert "stall restart" not in render([load_run(run)])

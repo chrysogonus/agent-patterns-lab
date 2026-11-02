@@ -109,3 +109,35 @@ def test_walking_into_the_edge_goes_stale() -> None:
     result = play("reflexion", "R1", 1000, strategy)
     assert result.row.attempts == 3 and not result.row.success
     assert result.row.steps == 3 * MAX_STALE
+
+
+def test_the_walk_log_is_kept_after_a_trap() -> None:
+    trap_after = _straight_row_trap("R1", 1000)
+
+    def actor(messages: list[BaseMessage]) -> AIMessage:
+        if "Attempt 1 of 3." in text(messages):
+            return tool_calls(*[("move", {"direction": "east"})] * trap_after)
+        return AIMessage("Done.")
+
+    seen: list[list[BaseMessage]] = []
+    strategy = by_system({REFLECTOR_INSTRUCTIONS: lambda m: AIMessage(NOTE)}, actor)
+    play("reflexion", "R1", 1000, recording(strategy, seen))
+    second = next(m for m in seen if "Attempt 2 of 3." in text(m))
+    assert "1. B3" in str(second[-1].content) and "→ trap at" in str(second[-1].content)
+
+
+def test_cells_count_as_new_once_per_attempt() -> None:
+    trap_after = _straight_row_trap("R1", 1000)
+    assert trap_after > 1  # B3 is safe, so attempts 2 and 3 can step on it again
+
+    def actor(messages: list[BaseMessage]) -> AIMessage:
+        if "Attempt 1 of 3." in text(messages):
+            return tool_calls(*[("move", {"direction": "east"})] * trap_after)
+        on_start = "You are on A3." in str(messages[-1].content)
+        return tool_calls(("move", {"direction": "east" if on_start else "west"}))
+
+    strategy = by_system({REFLECTOR_INSTRUCTIONS: lambda m: AIMessage(NOTE)}, actor)
+    result = play("reflexion", "R1", 1000, strategy)
+    # Attempts 2 and 3: B3 is new to the attempt once, then MAX_STALE turns add nothing.
+    assert result.row.attempts == 3 and not result.row.success
+    assert result.row.steps == trap_after + 2 * (1 + MAX_STALE)

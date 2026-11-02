@@ -28,11 +28,14 @@ No reducers: each write replaces the value, as in A2's `MapState`.
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `subgoal` | `str` | The subgoal's text |
-| `status` | `"done"` \| `"unfinished"` | `done`: the executor answered without a tool call; `unfinished`: `MAX_TURNS` reached |
-| `report` | `str` | The executor's last reply text |
+| `status` | `"done"` \| `"cannot"` \| `"unfinished"` | `done`: the executor answered without a tool call; `cannot`: that answer started with `Cannot:` (any case); `unfinished`: `MAX_TURNS` reached |
+| `report` | `str` | The executor's last reply text, without a leading `Cannot:` |
 
-Rendered for the replanner as `1. <subgoal>: done: <report>` or
-`1. <subgoal>: unfinished after 20 turns: <report>`.
+Rendered for the replanner as `1. <subgoal>: done: <report>`,
+`1. <subgoal>: could not be done: <report>` or `1. <subgoal>: unfinished after 20 turns: <report>`.
+
+Changed on 2026-11-02: A3 commits to its plan. Before, every finished subgoal went back to the
+replanner, which made A3's graph the same as A5's supervisor loop.
 
 ## Transitions
 
@@ -43,7 +46,8 @@ Rendered for the replanner as `1. <subgoal>: done: <report>` or
 | `planner` | unusable, `misses` + 1 < 3 | `planner` | `misses` += 1, `note` set |
 | `planner` | unusable, `misses` + 1 = 3 | `END` | — |
 | `executor` | reply has tool calls (valid or invalid) | `act` | `messages` = [reply], `turns` += 1 |
-| `executor` | reply has no tool call, `idle` stays < 3 | `replanner` | outcome `done` appended, `plan` pops its head; `idle` += 1 if not `acted`, else 0 |
+| `executor` | reply has no tool call, `idle` stays < 3, outcome `done`, subgoals left | `executor` | outcome appended, `plan` pops its head, `subgoal` += 1, `turns` = 0, `acted` = false, `messages` = []; `idle` += 1 if not `acted`, else 0 |
+| `executor` | reply has no tool call, `idle` stays < 3, outcome `cannot` or no subgoal left | `replanner` | outcome appended, `plan` pops its head; `idle` += 1 if not `acted`, else 0 |
 | `executor` | reply has no tool call, `idle` reaches 3 | `END` | — |
 | `act` | `turns` < `MAX_TURNS` | `executor` | map updated, `messages` = [reply, results], `acted` = true, `steps` += results |
 | `act` | `turns` = `MAX_TURNS` | `replanner` | outcome `unfinished` appended, `plan` pops its head, `idle` = 0 |

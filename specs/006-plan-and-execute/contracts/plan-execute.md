@@ -31,7 +31,7 @@ The map is rendered as A2 renders it (`DungeonMap.render(False)` / `FieldMap.ren
 | replanner | `{"plan": ["…", …]}`, 1–8 non-empty strings | the subgoals still to do |
 | replanner | `{"done": true}` | A3 returns; the episode ends as `stopped` |
 | executor | a reply with tool calls | `act` runs them through `kit.tool_node` and updates the map |
-| executor | a reply without a tool call | its text is the subgoal's report |
+| executor | a reply without a tool call | its text is the subgoal's report; the next subgoal starts at once, unless the report starts with `Cannot:` or no subgoal is left, which go to the replanner |
 
 An unusable planner or replanner answer is not acted on; the next call of the same job starts
 with `Your answer was not used: <reason>. Answer with one JSON object as described.`

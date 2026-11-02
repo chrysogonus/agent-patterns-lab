@@ -49,10 +49,10 @@ def test_the_side_panel_shows_each_job_and_replays_it(tmp_path: Path, level: str
     events = _events(viewer, episode_id)
     turns = [e["data"] for e in events if e["type"] == "turn"]
     roles = [t["role"] for t in turns]
-    assert roles[:3] == ["planner", "executor (subgoal 1)", "replanner"]  # acceptance 1.2
-    assert roles[3] == "executor (subgoal 2)"  # acceptance 1.3
+    # A done subgoal hands straight over to the next one (acceptance 1.2, 1.3).
+    assert roles[:3] == ["planner", "executor (subgoal 1)", "executor (subgoal 2)"]
     # A walk longer than MAX_TURNS brings the replanner back in between.
-    assert {r for r in roles[3:] if not r.startswith("executor (subgoal ")} <= {"replanner"}
+    assert {r for r in roles[2:] if not r.startswith("executor (subgoal ")} <= {"replanner"}
     assert turns[0]["text"] == '{"plan": ["look around", "finish the task"]}'
     assert events[-1]["data"]["row"]["success"]
     replayed = _viewer(tmp_path, OLLAMA).session(episode_id)  # acceptance 1.4

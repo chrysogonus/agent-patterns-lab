@@ -436,6 +436,12 @@ def render(runs: Sequence[LoadedRun]) -> str:
     if missing:
         notes.append(f"{missing} episode{' has' if missing == 1 else 's have'} no token data.")
     notes += [f"Run {r.record.run_id} is incomplete." for r in runs if not r.record.completed]
+    if first.problem == "dungeon" and any(r.arch == "reflexion" for r in completed):
+        notes.append(
+            "reflexion on the dungeon has no wrong answer to fail on: an attempt ends only by "
+            "giving up or going stale, so its results measure reflection together with these "
+            "stall restarts."
+        )
     if notes:
         lines += ["", "Notes: " + " ".join(notes)]
     return "\n".join(lines) + "\n"

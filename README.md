@@ -186,8 +186,8 @@ is used in the docs, and the name column is what you pass to `--arch`.
 | A1 | `react` | The model calls tools in a loop and remembers only through its message history | ✓ | ✓ | ✓ | ✓ | ✓ |
 | A2 | `mapstate` | The explored map lives in graph state and is shown to the model every turn (on the signal trace: a probe log; on the rune floor: a walk log; in the workshop: a workshop log) | ✓ | ✓ | ✓ | ✓ | ✓ |
 | A2r | `mapstate_routes` | A2, plus the shortest known route to each unexplored exit | ✓ | | | | |
-| A3 | `plan_execute` | A planner writes subgoals, A2's agent carries them out, a replanner reacts to each report | ✓ | ✓ | ✓ | ✓ | ✓ |
-| A4 | `reflexion` | A2 that tries again: after a failed attempt (on the rune floor: a trap) it writes a note, the world restarts, all steps count | ✓ | ✓ | ✓ | ✓ | ✓ |
+| A3 | `plan_execute` | A planner writes subgoals, A2's agent carries them out in order, a replanner steps in only when a subgoal fails or the plan runs out | ✓ | ✓ | ✓ | ✓ | ✓ |
+| A4 | `reflexion` | A2 that tries again: after a failed attempt (on the rune floor: a trap, with the walk log kept) it writes a note, the world restarts, all steps count | ✓ | ✓ | ✓ | ✓ | ✓ |
 | A5 | `supervisor` | A supervisor hands tasks to a navigator (look, move) and an inventory helper (take, use), each a subgraph on A2's map (on the workshop: a researcher and a crafter) | ✓ | | | | ✓ |
 | A6 | `hybrid` | Code keeps the map and walks the routes; the model only picks where to go (on the signal trace: code lists the probes that split the suspects best; on the rune floor: code lists the moves with what happened on each tile before; in the workshop: code lists the actions it can take now) | ✓ | | ✓ | ✓ | ✓ |
 | A7 | `fanout` | An orchestrator sends out up to 4 scouts once; each explores alone | ✓ | ✓ | | | |

@@ -84,11 +84,23 @@ class WalkLog:
             current.steps.append((parse(data["position"]), str(data["color"])))
         self.position = parse(data["position"])
 
+    def restart(self) -> None:
+        """A4's restart puts the agent back on the start: an open walk ends there."""
+        if self.walks[-1].steps:
+            self.walks[-1].ending = "attempt restarted"
+            self.walks.append(WalkNote())
+        self.position = self.start
+
     @property
     def known(self) -> int:
         """Distinct cells stepped on, traps included: A4's measure of progress."""
-        cells = {c for w in self.walks for c, _ in w.steps}
-        return len(cells | {w.trap for w in self.walks if w.trap is not None})
+        return self.known_since(0)
+
+    def known_since(self, walk: int) -> int:
+        """The same from that walk on: A4 keeps the log across attempts and counts per attempt."""
+        walks = self.walks[walk:]
+        cells = {c for w in walks for c, _ in w.steps}
+        return len(cells | {w.trap for w in walks if w.trap is not None})
 
     def render(self) -> str:
         lines = [

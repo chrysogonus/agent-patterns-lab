@@ -5,7 +5,9 @@ results and the notes from earlier attempts. After a failed attempt the reflecto
 and the world is restarted; every attempt's steps count toward the one budget (specs/007
 contracts/reflexion.md, constitution 2.1.0). Written by the agent at the experimenter's request,
 as is its signal-trace version on the probe log (specs/009) and its rune-floor version on the walk
-log (specs/010), where a trap ends an attempt and the reply's moves run one at a time, and its
+log (specs/010), where a trap ends an attempt, the reply's moves run one at a time and the walk
+log is kept across attempts, so A4 has the same walk history as A2 (it still differs in the notes
+and in its retry controls), and its
 workshop version on the workshop log (specs/011), where getting stuck ends an attempt.
 """
 
@@ -42,7 +44,10 @@ your map is cleared, and you start again; the steps of every attempt count towar
 Notes you wrote after earlier attempts are shown under "Notes from earlier attempts:"."""
 
 # Added on the rune floor only, so the other problems' actor prompt stays as it was (specs/010).
-RUNE_ATTEMPT = "On this floor an attempt also fails when a step springs a trap."
+RUNE_ATTEMPT = (
+    "On this floor an attempt also fails when a step springs a trap, and your walk log is not "
+    "cleared: it keeps the walks of earlier attempts."
+)
 # The same for the workshop only (specs/011).
 WORKSHOP_ATTEMPT = "On this workshop an attempt also fails when the goal can no longer be made."
 
@@ -51,6 +56,8 @@ In this setup you do not call the tools yourself. An attempt has just failed. Yo
 ended, its last reply, the map it built and the notes from earlier attempts. Write a short note \
 for the next attempt, which starts again from the start with an empty map and sees only the \
 notes. Answer with the note only."""
+# The rune floor keeps the walk log (see RUNE_ATTEMPT).
+RUNE_REFLECT = "On this floor the next attempt also sees the walk log, with this attempt's walks."
 
 WRONG_TOTAL = "wrong total"
 WRONG_SEGMENT = "wrong segment"  # the signal trace's (specs/009)
@@ -67,6 +74,7 @@ class ReflexionState(TypedDict):
     notes: list[str]
     attempt: int
     stale: int  # actor turns in a row that added nothing to the map
+    first_walk: int  # the rune floor's walk log is kept: this attempt's first walk in it
     started: bool  # whether this attempt has shown the start result
     failure: str  # why the attempt ended; "" while it goes on
     last_reply: str
@@ -88,12 +96,14 @@ def _until_submit(message: BaseMessage) -> AIMessage:
     return message.model_copy(update={"tool_calls": kept, "invalid_tool_calls": []})
 
 
-def _size(found: DungeonMap | FieldMap | ProbeLog | WalkLog | WorkshopLog) -> int:
+def _size(found: DungeonMap | FieldMap | ProbeLog | WalkLog | WorkshopLog, first_walk: int) -> int:
+    if isinstance(found, WalkLog):
+        return found.known_since(first_walk)  # cells stepped on in this attempt (specs/010)
     if isinstance(found, WorkshopLog):
         # Gathering and crafting move the workshop on as much as inspecting does (specs/011).
         return found.progress
-    if isinstance(found, ProbeLog | WalkLog):
-        return found.known  # distinct segments probed (specs/009), cells stepped on (specs/010)
+    if isinstance(found, ProbeLog):
+        return found.known  # distinct segments probed (specs/009)
     return len(found.rooms) if isinstance(found, DungeonMap) else len(found.cells)
 
 
@@ -124,7 +134,8 @@ def play(kit: Kit) -> None:
     if workshop:
         actor_text += " " + WORKSHOP_ATTEMPT
     actor_system = SystemMessage(kit.base_prompt + "\n\n" + map_instructions + " " + actor_text)
-    reflector_system = SystemMessage(kit.base_prompt + "\n\n" + REFLECTOR_INSTRUCTIONS)
+    reflector_text = REFLECTOR_INSTRUCTIONS + (" " + RUNE_REFLECT if rune else "")
+    reflector_system = SystemMessage(kit.base_prompt + "\n\n" + reflector_text)
 
     def new_map() -> DungeonMap | FieldMap | ProbeLog | WalkLog | WorkshopLog:
         # A restarted world looks exactly like the start (research R5).
@@ -189,7 +200,7 @@ def play(kit: Kit) -> None:
 
     def act(state: ReflexionState) -> dict[str, Any]:
         reply = _until_submit(state["messages"][-1])
-        before = _size(state["map"])
+        before = _size(state["map"], state["first_walk"])
         if stepwise:
             reply, results = one_at_a_time(reply)
         else:
@@ -205,7 +216,7 @@ def play(kit: Kit) -> None:
             wrong = wrong or (isinstance(found, dict) and found.get("correct") is False)
             ended = isinstance(found, dict) and "attempts_left" in found
             wrong = wrong or (ended and stepwise)
-        stale = 0 if _size(state["map"]) > before else state["stale"] + 1
+        stale = 0 if _size(state["map"], state["first_walk"]) > before else state["stale"] + 1
         if stepwise:
             failure = (STUCK if workshop else TRAP) if wrong else ""
         else:
@@ -237,11 +248,17 @@ def play(kit: Kit) -> None:
         # After a wrong total or segment the world has already been restarted (research R3).
         if state["failure"] not in RESTARTED and not kit.restart():
             return {"failure": "no attempt left"}
+        found = state["map"]
+        if isinstance(found, WalkLog):  # the rune floor keeps its walk log (specs/010)
+            found.restart()
+        else:
+            found = new_map()
         return {
             "messages": [],
-            "map": new_map(),
+            "map": found,
             "attempt": state["attempt"] + 1,
             "stale": 0,
+            "first_walk": len(found.walks) - 1 if isinstance(found, WalkLog) else 0,
             "started": False,
             "failure": "",
         }
@@ -275,6 +292,7 @@ def play(kit: Kit) -> None:
             "notes": [],
             "attempt": 1,
             "stale": 0,
+            "first_walk": 0,
             "started": False,
             "failure": "",
             "last_reply": "",

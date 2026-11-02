@@ -119,12 +119,11 @@ def test_steps_are_the_executors_tool_calls_and_planning_is_counted_apart() -> N
     turns = iter([True, True, False, True, True, False])  # two bumps, then a report, twice
     executor = lambda m: bump_wall(wall)(m) if next(turns) else AIMessage("Bumped.")  # noqa: E731
     plan = json_answer({"plan": ["bump", "bump again"]})
-    replanner = _answers({"plan": ["bump again"]}, {"done": True})
-    result = _play("plan_execute", "L1", 1000, _a3(executor, plan, replanner))
+    result = _play("plan_execute", "L1", 1000, _a3(executor, plan, json_answer({"done": True})))
     row = result.row
     assert row.steps == 4 and row.invalid_actions == 4
     planning = roles(result).count("planner") + roles(result).count("replanner")
-    assert row.orchestrator_calls == planning == 3
+    assert row.orchestrator_calls == planning == 2
     assert row.end_reason == "stopped"
 
 
@@ -206,20 +205,37 @@ def test_done_ends_the_episode_as_stopped() -> None:  # acceptance 2.4
     assert row.end_reason == "stopped" and row.orchestrator_calls == 2 and row.steps == 0
 
 
-def test_the_replanner_sees_reports_and_the_plan_still_to_do() -> None:
+def test_a_done_subgoal_hands_over_to_the_next_without_replanning() -> None:
     seen: list[list[BaseMessage]] = []
     reports = iter(["Found a red key.", "Saw the exit."])
     executor = lambda m: AIMessage(next(reports))  # noqa: E731
-    plan = json_answer({"plan": ["look for keys", "look for the exit", "leave"]})
-    replanner = _answers({"plan": ["look for the exit", "leave"]}, {"done": True})
-    _play("plan_execute", "L1", 1000, recording(_a3(executor, plan, replanner), seen))
-    first, second = (text(m) for m in seen if _system(m).endswith(REPLANNER_INSTRUCTIONS))
-    assert "1. look for keys: done: Found a red key." in first
-    assert "Still planned:\n1. look for the exit\n2. leave" in first
-    assert "2. look for the exit: done: Saw the exit." in second
-    assert "Still planned:\n1. leave" in second
-    assert "Steps used so far: 0" in first
-    assert '"ok": true' in first and '"ok": true' in second  # the start result (FR-004)
+    plan = json_answer({"plan": ["look for keys", "look for the exit"]})
+    done = json_answer({"done": True})
+    result = _play("plan_execute", "L1", 1000, recording(_a3(executor, plan, done), seen))
+    assert roles(result) == [
+        "planner",
+        "executor (subgoal 1)",
+        "executor (subgoal 2)",
+        "replanner",
+    ]
+    (replanning,) = (text(m) for m in seen if _system(m).endswith(REPLANNER_INSTRUCTIONS))
+    assert "1. look for keys: done: Found a red key." in replanning
+    assert "2. look for the exit: done: Saw the exit." in replanning
+    assert "Still planned:\nnothing" in replanning
+    assert "Steps used so far: 0" in replanning
+    assert '"ok": true' in replanning  # the start result (FR-004)
+
+
+def test_a_subgoal_that_cannot_be_done_goes_back_to_the_replanner() -> None:
+    seen: list[list[BaseMessage]] = []
+    executor = lambda m: AIMessage("Cannot: there is no door to the north.")  # noqa: E731
+    plan = json_answer({"plan": ["go north", "leave"]})
+    done = json_answer({"done": True})
+    result = _play("plan_execute", "L1", 1000, recording(_a3(executor, plan, done), seen))
+    assert roles(result) == ["planner", "executor (subgoal 1)", "replanner"]
+    replanning = text(seen[-1])
+    assert "1. go north: could not be done: there is no door to the north." in replanning
+    assert "Still planned:\n1. leave" in replanning
 
 
 def test_a_new_subgoal_starts_without_the_previous_turn() -> None:
@@ -228,7 +244,7 @@ def test_a_new_subgoal_starts_without_the_previous_turn() -> None:
     moves = iter([True, False, True, False])
     executor = lambda m: bump_wall(wall)(m) if next(moves) else AIMessage("Done.")  # noqa: E731
     plan = json_answer({"plan": ["bump", "bump again"]})
-    replanner = _answers({"plan": ["bump again"]}, {"done": True})
+    replanner = json_answer({"done": True})
     result = _play("plan_execute", "L1", 1000, recording(_a3(executor, plan, replanner), seen))
     executing = [m for m in seen if _system(m).endswith(EXECUTOR_INSTRUCTIONS)]
     assert [len(m) for m in executing] == [3, 5, 3, 5]  # system, subgoal, [reply, result,] map
