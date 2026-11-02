@@ -7,7 +7,7 @@ import json
 import re
 import threading
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -42,6 +42,7 @@ from apl.survey.frames import snapshot as survey_snapshot
 from apl.survey.render_svg import CELL as FIELD_CELL
 from apl.survey.render_svg import MARGIN as FIELD_MARGIN
 from apl.survey.render_svg import svg as field_svg
+from apl.viewer.about import about
 from apl.viewer.events import EpisodeSession, ViewerCallbacks
 from apl.workshop import Workshop
 from apl.workshop.frames import reference_frames as reference_plan
@@ -120,6 +121,12 @@ class Viewer:
                         "architectures": [
                             a for a in self.architecture_names() if self.plays(a, name)
                         ],
+                        # What each architecture defines on this game, for the About card.
+                        "about": {
+                            a: asdict(card)
+                            for a in self.architecture_names()
+                            if self.plays(a, name) and (card := about(a, name)) is not None
+                        },
                     }
                     for name, p in problems.PROBLEMS.items()
                 },

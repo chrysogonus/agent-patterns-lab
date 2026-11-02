@@ -314,6 +314,9 @@ reach.
 
 - Pick a **problem, level and seed**, then an **agent** and a **model**, and press **Run**.
   Every move appears on the map as it happens.
+- Above the turns, **How <agent> plays the <problem>** draws the agent's graph for that game and
+  lists what it defines there: what the model sees, its memory, its tools and when it ends. During
+  an episode the node behind the current step is lit.
 - The side panel shows every model turn: what the model was told, its reasoning, its tool calls
   and their results. With scouts, each card says whether it was the orchestrator or which scout.
 - **Agent's view** dims what no scout has seen. **Shortest solution** (or **Reference walk**)

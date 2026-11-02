@@ -65,6 +65,17 @@ def test_options_list_only_written_architectures(tmp_path: Path) -> None:
     assert "react" in _body(viewer.options())["architectures"]
 
 
+def test_options_carry_an_about_card_per_architecture_and_game(tmp_path: Path) -> None:
+    problems = _body(Viewer(Settings(), results_dir=tmp_path).options())["problems"]
+    for name, problem in problems.items():
+        assert sorted(problem["about"]) == sorted(problem["architectures"]), name
+    card = problems["rune"]["about"]["reflexion"]
+    assert {"summary", "width", "height", "nodes", "edges", "groups", "facts"} <= set(card)
+    assert "walk log" in dict(card["facts"])["Memory"]
+    doubles = _viewer(tmp_path, architectures={"scripted": loop_arch.play}).options()
+    assert _body(doubles)["problems"]["dungeon"]["about"] == {}
+
+
 @pytest.mark.parametrize(
     ("model", "execute", "can_run"),
     [

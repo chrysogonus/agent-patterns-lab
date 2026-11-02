@@ -133,6 +133,28 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
 .card li .result.error { color: var(--red); }
 .card .waiting { color: var(--muted); font-style: italic; }
 .end { border-color: var(--trail); }
+/* the About card: the selected agent's graph on this game, the node behind the current step lit */
+#side { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+#about { background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; }
+#about summary { cursor: pointer; font-weight: 600; }
+#about-body > p { margin: 4px 0 6px; color: var(--muted); }
+#about-body svg { width: 100%; max-width: 560px; height: auto; display: block; }
+.ab-node { stroke-width: 1.5; }
+.ab-node.model { fill: var(--card); stroke: var(--ink); }
+.ab-node.code { fill: var(--bg); stroke: var(--muted); stroke-dasharray: 5 3; }
+.ab-node.end { fill: none; stroke: var(--muted); }
+.ab-node.active { fill: var(--trail); fill-opacity: 0.25; stroke: var(--trail); stroke-width: 2.5; }
+.ab-group { fill: none; stroke: var(--muted); stroke-opacity: 0.6; stroke-width: 1.2; stroke-dasharray: 2 3; }
+.ab-edge { fill: none; stroke: var(--muted); stroke-width: 1.3; }
+.ab-head { fill: var(--muted); }
+.ab-text { fill: var(--ink); font: 12px ui-monospace, monospace; text-anchor: middle; dominant-baseline: central; }
+.ab-label { fill: var(--muted); font: 10.5px system-ui, sans-serif; text-anchor: middle; dominant-baseline: central; }
+.ab-labelbox { fill: var(--card); }
+.ab-glabel { fill: var(--muted); font: 10.5px system-ui, sans-serif; }
+.ab-legend { color: var(--muted); font-size: 12px; margin-top: 4px; }
+#about-facts { display: grid; grid-template-columns: max-content 1fr; gap: 3px 10px; margin: 8px 0 0; font-size: 13px; }
+#about-facts dt { color: var(--muted); }
+#about-facts dd { margin: 0; }
 @media (prefers-reduced-motion: reduce) { #agent, .scout-agent { transition: none; } }
 </style>
 </head>
@@ -174,7 +196,10 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
     </div>
     <dl id="stats"></dl>
   </section>
-  <section id="panel" aria-label="Model turns"></section>
+  <section id="side">
+    <details id="about" open><summary id="about-title">How the agent works</summary><div id="about-body"></div></details>
+    <section id="panel" aria-label="Model turns"></section>
+  </section>
 </main>
 <script>
 (() => {
@@ -420,6 +445,8 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
     if (S.start && (S.start.problem || "dungeon") !== S.dungeon.problem) return;
     const frames = S.frames.length ? S.frames : [S.dungeon.solution[0]];
     S.current = Math.max(0, Math.min(frames.length - 1, n));
+    const behind = frames[S.current].call != null ? S.turns.get(frames[S.current].call) : null;
+    highlight(behind ? behind.role : undefined);
     if (isSignal() || isRune() || isWorkshop()) {
       if (isSignal()) renderSignal(frames); else if (isRune()) renderRune(frames); else renderWorkshop(frames);
       $("slider").max = String(frames.length - 1);
@@ -581,7 +608,7 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
       const node = el("div", null, "card");
       node.append(el("h3", `Model call ${call}${role ? ` · ${role}` : ""}`));
       $("panel").append(node);
-      S.turns.set(call, { node, items: [], done: false, usage: null });
+      S.turns.set(call, { node, items: [], done: false, usage: null, role: role ?? null });
     }
     return S.turns.get(call);
   }
@@ -591,6 +618,7 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
     return box;
   }
   function onThinking(data) {
+    highlight(data.role ?? null);
     const t = card(data.call, data.role);
     if (data.new_input.length) {
       const box = el("details");
@@ -641,6 +669,7 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
   function onStep(data) {
     data.frame.counted = data.step; // null for calls after the end, which cost no step
     data.frame.actor = data.scout || 0;
+    data.frame.call = data.call; // the model call behind the step, for the About card
     S.frames.push(data.frame);
     const index = S.frames.length - 1;
     const t = S.turns.get(data.call);
@@ -716,6 +745,7 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
       S.startedAt = Date.parse(data.started) || Date.now();
       S.frames = [data.frame]; // before the await: steps may arrive while the dungeon loads
       const problem = data.problem || "dungeon";
+      drawAbout(data.arch, problem);
       if (!S.dungeon || S.dungeon.problem !== problem || S.dungeon.level !== data.level || S.dungeon.seed !== data.seed) {
         await loadDungeon(data.level, data.seed, problem);
       }
@@ -831,6 +861,85 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
       return b;
     }));
     $("run").disabled = !p.architectures.length;
+    drawAbout();
+  }
+
+  /* ---------- the About card: what the agent defines on this game ---------- */
+  function clip(n, toward) { // where the line from n's center toward a point leaves n's box
+    const cx = n.x + n.w / 2, cy = n.y + n.h / 2, dx = toward[0] - cx, dy = toward[1] - cy;
+    const s = Math.min(dx ? n.w / 2 / Math.abs(dx) : Infinity, dy ? n.h / 2 / Math.abs(dy) : Infinity);
+    return [cx + dx * s, cy + dy * s];
+  }
+  function edgePath(a, b, bend) { // a quadratic curve, bent to the right of its direction
+    if (a === b) { // a loop above the node, or below it when bend < 0
+      const x = a.x + a.w / 2, y = bend < 0 ? a.y + a.h : a.y, up = bend < 0 ? -1 : 1;
+      return { d: `M${x - 16},${y} C${x - 30},${y - 34 * up} ${x + 30},${y - 34 * up} ${x + 16},${y}`,
+        at: [x, y - 30 * up] };
+    }
+    const ca = [a.x + a.w / 2, a.y + a.h / 2], cb = [b.x + b.w / 2, b.y + b.h / 2];
+    const dx = cb[0] - ca[0], dy = cb[1] - ca[1], len = Math.hypot(dx, dy) || 1;
+    const c = [(ca[0] + cb[0]) / 2 - (dy / len) * bend, (ca[1] + cb[1]) / 2 + (dx / len) * bend];
+    const from = clip(a, c), to = clip(b, c);
+    const at = [(from[0] + 2 * c[0] + to[0]) / 4, (from[1] + 2 * c[1] + to[1]) / 4];
+    return { d: `M${from.join(",")} Q${c.join(",")} ${to.join(",")}`, at };
+  }
+  function drawAbout(arch = $("arch").value, problem = problemOf()) {
+    const card = (((S.options.problems || {})[problem] || {}).about || {})[arch];
+    $("about").hidden = !card;
+    S.aboutNodes = [];
+    S.aboutShown = [arch, problem];
+    if (!card) return;
+    $("about-title").textContent = `How ${arch} plays the ${problem}`;
+    const svg = svgEl("svg", { viewBox: `0 0 ${card.width} ${card.height}`, role: "img", "aria-label": card.summary });
+    const marker = svgEl("marker", { id: "ab-arrow", viewBox: "0 0 10 10", refX: "9", refY: "5",
+      markerWidth: "7", markerHeight: "7", orient: "auto" });
+    marker.append(svgEl("path", { d: "M0,0 L10,5 L0,10 z", class: "ab-head" }));
+    const defs = svgEl("defs", {});
+    defs.append(marker);
+    svg.append(defs);
+    for (const g of card.groups) {
+      svg.append(svgEl("rect", { x: g.x, y: g.y, width: g.w, height: g.h, rx: 8, class: "ab-group" }));
+      const label = svgEl("text", { x: g.x + 8, y: g.y + g.h - 7, class: "ab-glabel" }); // clear of the handoffs
+      label.textContent = g.label;
+      svg.append(label);
+    }
+    const byId = new Map(card.nodes.map((n) => [n.id, n]));
+    const labels = [];
+    for (const e of card.edges) {
+      const { d, at } = edgePath(byId.get(e.source), byId.get(e.target), e.bend);
+      svg.append(svgEl("path", { d, class: "ab-edge", "marker-end": "url(#ab-arrow)" }));
+      if (e.label) {
+        const label = svgEl("text", { x: at[0], y: at[1], class: "ab-label" });
+        label.textContent = e.label;
+        labels.push(label);
+      }
+    }
+    for (const n of card.nodes) {
+      const rect = svgEl("rect", { x: n.x, y: n.y, width: n.w, height: n.h, rx: n.kind === "end" ? n.h / 2 : 6,
+        class: `ab-node ${n.kind}` });
+      const text = svgEl("text", { x: n.x + n.w / 2, y: n.y + n.h / 2, class: "ab-text" });
+      text.textContent = n.label;
+      svg.append(rect, text);
+      if (n.kind === "model") S.aboutNodes.push({ rect, roles: n.roles });
+    }
+    svg.append(...labels);
+    const facts = el("dl");
+    facts.id = "about-facts";
+    for (const [label, text] of card.facts) facts.append(el("dt", label), el("dd", text));
+    const legend = el("div", "Solid: a model call · dashed: plain code · lit: the call behind the step shown", "ab-legend");
+    $("about-body").replaceChildren(el("p", card.summary), svg, legend, facts);
+    for (const label of labels) { // a card-colored box behind each label, now that it has a size
+      const box = label.getBBox();
+      if (!box.width) continue; // the card is closed; it is drawn again when opened
+      label.before(svgEl("rect", { x: box.x - 2, y: box.y, width: box.width + 4, height: box.height,
+        class: "ab-labelbox" }));
+    }
+  }
+  // Lights the model node of a role ("planner", "executor (subgoal 2)"; null: a call without a
+  // role); undefined lights nothing.
+  function highlight(role) {
+    const word = role === undefined ? undefined : role ? role.split(" ")[0] : "";
+    for (const { rect, roles } of S.aboutNodes || []) rect.classList.toggle("active", roles.includes(word));
   }
 
   /* ---------- start ---------- */
@@ -843,6 +952,8 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
     }
     fillProblem();
     $("problem").addEventListener("change", () => { fillProblem(); generate(); });
+    $("arch").addEventListener("change", () => drawAbout());
+    $("about").addEventListener("toggle", () => { if ($("about").open) drawAbout(S.aboutShown[0], S.aboutShown[1]); });
     for (const m of data.models) { const o = el("option", m.name); o.value = m.name; $("model").append(o); }
     const canRun = () => {
       const reason = data.models.find((m) => m.name === $("model").value).cannot_run_reason;
