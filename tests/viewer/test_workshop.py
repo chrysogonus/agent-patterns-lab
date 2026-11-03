@@ -23,7 +23,7 @@ def test_options_and_the_workshop(tmp_path: Path) -> None:
     workshop = _body(viewer.options())["problems"]["workshop"]
     assert workshop["levels"] == ["W1", "W2", "W3"] and workshop["dev_seeds"][0] == 1000
     assert set(workshop["architectures"]) == {
-        "react", "mapstate", "plan_execute", "reflexion", "supervisor", "hybrid",
+        "react", "mapstate", "plan_execute", "reflexion", "retry", "supervisor", "hybrid",
     }  # fmt: skip
     w = generate("W2", 1000)
     data = _body(viewer.workshop("W2", "1000"))

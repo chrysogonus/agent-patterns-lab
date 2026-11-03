@@ -27,6 +27,7 @@ REFERENCES = {
     "blackboard": "mapstate",
     "plan_execute": "mapstate",  # A2 plus planning (specs/006)
     "reflexion": "mapstate",  # A2 plus retries with notes (specs/007)
+    "retry": "mapstate",  # A2 plus retries without notes; A4 against it isolates the notes
     "supervisor": "mapstate",  # A2 split into a navigator and an inventory helper (specs/008)
 }
 

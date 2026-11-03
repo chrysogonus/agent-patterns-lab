@@ -45,7 +45,7 @@ def test_known_architectures_are_checked() -> None:
         ValueError,
         match=(
             "registered: blackboard, fanout, hybrid, mapstate, mapstate_routes, plan_execute, "
-            "react, reflexion, rounds, supervisor"
+            "react, reflexion, retry, rounds, supervisor"
         ),
     ):
         _spec(architectures=["nope"])

@@ -71,7 +71,7 @@ def test_test_seeds_are_for_reporting(workdir: Path, capsys: pytest.CaptureFixtu
         (
             ["--arch", "nope", "--level", "L1"],
             "registered: blackboard, fanout, hybrid, mapstate, mapstate_routes, plan_execute, "
-            "react, reflexion, rounds, supervisor",
+            "react, reflexion, retry, rounds, supervisor",
         ),
         (["--arch", "react", "--level", "L9"], "unknown level 'L9' (levels: L1, L2, L3, all)"),
         (["--arch", "react", "--level", "L1", "--only", "5"], "not in the dev seeds"),

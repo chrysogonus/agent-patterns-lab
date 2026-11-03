@@ -250,6 +250,33 @@ def _reflexion(problem: str) -> About:
     )
 
 
+def _retry(problem: str) -> About:
+    """A4's graph without the reflector: the notes-only baseline."""
+    full = _reflexion(problem)
+    kept = "kept across attempts" if problem == "rune" else "cleared at each restart"
+    return About(
+        "A4 without the reflector: a failed attempt restarts the world with no note, the "
+        "baseline for what A4's notes add.",
+        520,
+        200,
+        tuple(n for n in full.nodes if n.id != "reflector"),
+        (
+            Edge("actor", "act", "tool calls", 14),
+            Edge("act", "actor", "results", 14),
+            Edge("act", "restart", "attempt failed"),
+            Edge("actor", "restart", "gave up", 48),
+            Edge("restart", "actor", "next attempt"),
+            Edge("restart", "end", "no attempt left"),
+        ),
+        facts=(
+            ("Model sees", "the attempt number, its last turn and the memory; no notes"),
+            ("Memory", f"{MEMORY[problem]}; {kept}"),
+            ("Tools", f"actor: {TOOLS[problem]}"),
+            *(f for f in full.facts if f[0] in ("Attempt fails when", "Attempts", "Ends when")),
+        ),
+    )
+
+
 def _supervisor(problem: str) -> About:
     team = TEAMS[problem]
     (first, own1), (second, own2) = team.tools.items()
@@ -418,6 +445,8 @@ def about(arch: str, problem: str) -> About | None:
         return _plan_execute(problem)
     if arch == "reflexion":
         return _reflexion(problem)
+    if arch == "retry":
+        return _retry(problem)
     if arch == "supervisor":
         return _supervisor(problem)
     if arch == "hybrid":

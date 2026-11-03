@@ -19,6 +19,7 @@ def test_options_and_the_pipe(tmp_path: Path) -> None:
         "mapstate",
         "plan_execute",
         "reflexion",
+        "retry",
         "hybrid",
     }
     pipe = generate("T2", 1000)

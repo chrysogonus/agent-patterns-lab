@@ -29,6 +29,7 @@ def test_options_and_the_floor(tmp_path: Path) -> None:
         "mapstate",
         "plan_execute",
         "reflexion",
+        "retry",
         "hybrid",
     }
     floor = generate("R1", 1000)
