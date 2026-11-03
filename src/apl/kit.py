@@ -1,8 +1,12 @@
 """What an architecture gets for one episode (contracts/kit.md). Architectures may import this.
 
 Besides this module, architectures may import only each problem's tools and results:
-`apl.dungeon.tools`, `apl.dungeon.results`, `apl.survey.tools` and `apl.survey.results`. The
-dungeon's kit is built here; the survey field's in `apl.survey.kit` (specs/005).
+`apl.dungeon.tools`, `apl.dungeon.results`, `apl.survey.tools`, `apl.survey.results`,
+`apl.signal_trace.tools`, `apl.signal_trace.results`, `apl.rune.tools`, `apl.rune.results`,
+`apl.workshop.tools`, `apl.workshop.results`, `apl.warehouse.tools` and `apl.warehouse.results`.
+The dungeon's kit is built here; the survey field's in `apl.survey.kit` (specs/005), the signal
+trace's in `apl.signal_trace.kit` (specs/009), the rune floor's in `apl.rune.kit` (specs/010), the
+workshop's in `apl.workshop.kit` (specs/011) and the warehouse's in `apl.warehouse.kit` (specs/012).
 """
 
 import copy
@@ -110,6 +114,10 @@ class Scout:
     start: str  # this scout's view of the start room, as a look result
 
 
+def _no_restart() -> bool:
+    return False
+
+
 @dataclass(frozen=True, slots=True)
 class Kit:
     model: BaseChatModel
@@ -120,6 +128,10 @@ class Kit:
     recursion_limit: int
     add_scout: Callable[[], Scout | None]  # None once the episode has 4 scouts; costs no step
     problem: str = "dungeon"  # the problem being played (specs/005 research R3)
+    # specs/007: restart the world for the next attempt (costs no step; False when refused), and
+    # the episode's attempt cap: 1 unless the architecture is registered as retrying.
+    restart: Callable[[], bool] = _no_restart
+    max_attempts: int = 1
 
 
 def _arg(args: object, name: str) -> str:
@@ -204,6 +216,10 @@ def build_kit(episode: Episode, model: BaseChatModel) -> Kit:
             start = ToolResult.success(episode.describe(number))
         return Scout(number, tool_node_for(number), json.dumps(start.to_dict()))
 
+    def restart() -> bool:
+        with lock:
+            return episode.restart()
+
     return Kit(
         model=model,
         tools=copy.deepcopy(TOOL_SCHEMAS),
@@ -212,4 +228,6 @@ def build_kit(episode: Episode, model: BaseChatModel) -> Kit:
         start=json.dumps(tools.start.to_dict()),
         recursion_limit=RECURSION_LIMIT,
         add_scout=add_scout,
+        restart=restart,
+        max_attempts=episode.max_attempts,
     )

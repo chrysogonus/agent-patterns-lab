@@ -42,6 +42,10 @@ def build_kit(episode: Episode, model: BaseChatModel) -> Kit:
             start = ToolResult.success(episode.describe(number))
         return Scout(number, tool_node_for(number), json.dumps(start.to_dict()))
 
+    def restart() -> bool:
+        with lock:
+            return episode.restart()
+
     return Kit(
         model=model,
         tools=copy.deepcopy(TOOL_SCHEMAS),
@@ -51,4 +55,6 @@ def build_kit(episode: Episode, model: BaseChatModel) -> Kit:
         recursion_limit=RECURSION_LIMIT,
         add_scout=add_scout,
         problem="survey",
+        restart=restart,
+        max_attempts=episode.max_attempts,
     )

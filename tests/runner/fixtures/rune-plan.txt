@@ -1,0 +1,20 @@
+Plan (dry run, nothing is sent or written)
+  architectures  react
+  problem        rune
+  levels         R0, R1, R2, R3
+  seeds          dev: 1000 (1 of 10)  -> development only, must not be reported
+  repeats        1
+  episodes       4
+  model          vllm:qwen3.5-9b
+  temperature    provider default
+  reasoning      provider default
+  context        from the server (read at --execute)
+  max output     8,192 tokens per call
+  token cap      2,000,000 per episode
+  prompt         7c213929b31a
+  code           30fffdf
+At most
+  model calls (est.)  164
+  tokens         8,000,000
+  cost           no estimate (set APL_PRICE_INPUT and APL_PRICE_OUTPUT)
+Run with --execute to start it (a paid provider then costs money).

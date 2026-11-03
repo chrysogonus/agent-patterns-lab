@@ -1,8 +1,11 @@
 """A6 hybrid: code keeps the map, finds the routes and walks them; the model only picks a target.
 
 The code nodes work only from the map, which is built from tool results (Constitution II), and
-every call they make is a tool call that costs a step (Constitution III). Written by the agent at
-the experimenter's request.
+every call they make is a tool call that costs a step (Constitution III). On the signal trace
+code keeps the suspects and lists the probes that split them best (specs/009); on the rune floor
+code keeps what happened on each tile and offers the moves, without guessing the rule (specs/010);
+in the workshop code offers every action it can take now and never picks a recipe (specs/011).
+Written by the agent at the experimenter's request.
 """
 
 import itertools
@@ -14,6 +17,9 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langgraph.graph import END, START, StateGraph
 
 from apl.arch.dungeon_map import DungeonMap
+from apl.arch.probe_log import ProbeLog
+from apl.arch.walk_log import WalkLog, cell_name
+from apl.arch.workshop_log import WorkshopLog
 from apl.kit import Kit
 
 # Explains the setup and the answer format only; no advice on which option to pick.
@@ -24,7 +30,34 @@ walks the shortest route there through doors you have already walked, unlocks th
 option says so, and then goes through the door or takes the item. Every call it makes costs a \
 step, as shown next to each option. Answer with the number of one option and nothing else."""
 
-Call = tuple[str, dict[str, str]]
+# The signal trace's (specs/009 contracts/architectures.md): the setup and the format only.
+SIGNAL_HYBRID_INSTRUCTIONS = """\
+In this setup you do not call the tools yourself. Every turn you see your probe log and a numbered \
+list of options. Code carries out the option you choose with one tool call. For each probe, the \
+option says how many segments could still be the broken one after each answer. Answer with the \
+number of one option and nothing else."""
+
+# The rune floor's (specs/010 contracts/architectures.md): the setup and the format only.
+RUNE_HYBRID_INSTRUCTIONS = """\
+In this setup you do not call the tools yourself. Every turn you see your walk log and a numbered \
+list of moves. Code carries out the move you choose with one tool call. For each move, the option \
+says what happened on that tile before: at which step of a walk it was safe or a trap. Answer with \
+the number of one option and nothing else."""
+
+# The workshop's (specs/011 contracts/architectures.md): the setup and the format only.
+WORKSHOP_HYBRID_INSTRUCTIONS = """\
+In this setup you do not call the tools yourself. Every turn you see your workshop log and a \
+numbered list of actions you can take now. Code carries out the action you choose with one tool \
+call. Answer with the number of one option and nothing else."""
+
+DIRECTIONS = ("north", "east", "south", "west")
+TIMES = {1: "once", 2: "twice"}
+
+# Probes listed per turn, and the suspects left from which submissions are offered (R11).
+SIGNAL_PROBES = 8
+SIGNAL_SUBMITS = 4
+
+Call = tuple[str, dict[str, object]]
 
 # Answers in a row that name no option before the agent gives up; re-asks cost no step.
 MAX_MISSES = 3
@@ -36,7 +69,7 @@ class Option(NamedTuple):
 
 
 class HybridState(TypedDict):
-    map: DungeonMap
+    map: DungeonMap | ProbeLog | WalkLog | WorkshopLog
     options: list[Option]
     note: str  # what happened since the model's last answer
     misses: int  # answers in a row that named no option
@@ -69,12 +102,84 @@ def options(m: DungeonMap) -> list[Option]:
     ]
 
 
+def signal_options(log: ProbeLog) -> list[Option]:
+    """The probes that split the suspects most evenly, then submissions near the end."""
+    left = log.suspects()
+    if len(left) <= 1:
+        return [Option(f"submit {k}", [("submit", {"segment": k})]) for k in sorted(left)]
+    probes = []
+    for k in range(1, log.segments + 1):
+        dry = len(left & log.upstream(k))
+        if 0 < dry < len(left):
+            probes.append((max(dry, len(left) - dry), k, len(left) - dry, dry))
+    probes.sort()
+    found = [
+        Option(f"probe {k}: leaves {wet} if wet, {dry} if dry", [("probe", {"segment": k})])
+        for _, k, wet, dry in probes[:SIGNAL_PROBES]
+    ]
+    if len(left) <= SIGNAL_SUBMITS:
+        found += [Option(f"submit {k}", [("submit", {"segment": k})]) for k in sorted(left)]
+    return found
+
+
+def rune_options(log: WalkLog) -> list[Option]:
+    """Every move that stays on the floor, with what happened on that tile before."""
+    found = []
+    step = len(log.walks[-1].steps) + 1  # the walk step the move would be
+    for direction in DIRECTIONS:
+        cell = log.neighbor(direction)
+        if cell is None:
+            continue
+        call: list[Call] = [("move", {"direction": direction})]
+        if cell == log.start:
+            found.append(Option(f"move {direction} to the start", call))
+            continue
+        if cell == log.goal:
+            found.append(Option(f"move {direction} to the goal", call))
+            continue
+        counts: dict[tuple[int, str], int] = {}
+        for pair in log.record(cell):
+            counts[pair] = counts.get(pair, 0) + 1
+        said = "; ".join(
+            f"{what} at walk step {at} ({TIMES.get(n, f'{n} times')})"
+            for (at, what), n in sorted(
+                counts.items(), key=lambda kv: (kv[0][0], kv[0][1] == "trap")
+            )
+        )
+        head = f"move {direction} to {cell_name(cell)} ({log.color(cell)}), walk step {step}"
+        found.append(Option(f"{head}: {said or 'never stepped on'}", call))
+    return found
+
+
 def play(kit: Kit) -> None:
+    if kit.problem == "workshop":  # specs/011: the same graph over a workshop log
+        system = SystemMessage(kit.base_prompt + "\n\n" + WORKSHOP_HYBRID_INSTRUCTIONS)
+        _graph(kit, system, WorkshopLog.from_start(kit.start))
+        return
+    if kit.problem == "rune":  # specs/010: the same graph over a walk log
+        system = SystemMessage(kit.base_prompt + "\n\n" + RUNE_HYBRID_INSTRUCTIONS)
+        _graph(kit, system, WalkLog.from_start(kit.start))
+        return
+    if kit.problem == "signal":  # specs/009: the same graph over a probe log
+        system = SystemMessage(kit.base_prompt + "\n\n" + SIGNAL_HYBRID_INSTRUCTIONS)
+        _graph(kit, system, ProbeLog.from_start(kit.start))
+        return
     system = SystemMessage(kit.base_prompt + "\n\n" + HYBRID_INSTRUCTIONS)
+    _graph(kit, system, DungeonMap.from_start(kit.start))
+
+
+def _graph(
+    kit: Kit, system: SystemMessage, start: DungeonMap | ProbeLog | WalkLog | WorkshopLog
+) -> None:
     ids = itertools.count(1)
 
     def plan(state: HybridState) -> dict[str, list[Option]]:
-        return {"options": options(state["map"])}
+        found = state["map"]
+        if isinstance(found, WalkLog):
+            return {"options": rune_options(found)}
+        if isinstance(found, WorkshopLog):
+            return {"options": [Option(text, [call]) for text, call in found.options()]}
+        return {"options": signal_options(found) if isinstance(found, ProbeLog) else options(found)}
 
     def choose(state: HybridState) -> dict[str, object]:
         listed = "\n".join(f"{i}. {o.text}" for i, o in enumerate(state["options"], 1))
@@ -119,6 +224,6 @@ def play(kit: Kit) -> None:
     graph.add_conditional_edges("choose", after_choose)
     graph.add_edge("act", "plan")
     graph.compile().invoke(
-        {"map": DungeonMap.from_start(kit.start), "options": [], "note": "", "misses": 0},
+        {"map": start, "options": [], "note": "", "misses": 0},
         config={"recursion_limit": kit.recursion_limit},
     )

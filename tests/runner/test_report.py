@@ -251,3 +251,230 @@ def test_dungeon_and_survey_runs_are_not_combined(tmp_path: Path) -> None:
         match=r"^these runs are on different problems \(dungeon, survey\); report them separately$",
     ):
         check_compatible([load_run(dungeon), load_run(survey)])
+
+
+def _signal(arch: str, seed: int, repeat: int, submitted: int | None, **kw: Any) -> dict[str, Any]:
+    right = submitted == 22
+    probes = kw.pop("probes", 6)
+    return _row(
+        seed, repeat, kw.pop("steps", probes + 1), arch=arch, level="T2", problem="signal",
+        success=right, end_reason="submitted" if submitted is not None else "budget",
+        budget_hit=submitted is None, optimal_steps=7, budget=64, submitted_segment=submitted,
+        broken_segment=22, segments=64, probes=probes, wasted_probes=kw.pop("wasted", 0),
+        reference_is_optimal=True, input_tokens=900, output_tokens=100, **kw,
+    )  # fmt: skip
+
+
+def test_the_signal_report(tmp_path: Path) -> None:  # specs/009 US3 4
+    rows = [
+        _signal("react", 1000, 1, 22, probes=21, wasted=3),
+        _signal("react", 1000, 2, 22, probes=13),
+        _signal("react", 1000, 3, None, probes=60, steps=64, wasted=9),
+        _signal("hybrid", 1000, 1, 22), _signal("hybrid", 1000, 2, 22),
+        _signal("hybrid", 1000, 3, 22),
+        _signal("mapstate", 1000, 1, 22, probes=9), _signal("mapstate", 1000, 2, 22, probes=9),
+        _signal("mapstate", 1000, 3, 21, probes=9),
+    ]  # fmt: skip
+    path = _write(
+        tmp_path / "run-t", rows, problem="signal", architectures=["react", "mapstate", "hybrid"],
+        levels=["T2"], seeds=[1000],
+    )  # fmt: skip
+    text = render([load_run(path)])
+    assert text.startswith("# Report: hybrid, mapstate, react on the signal trace\n")
+    assert (
+        "| Arch | Level | Episodes | Right | Probes (median) | Wasted (median) "
+        "| Efficiency (median) | Budget hit | Tokens (median) | Latency (median) |"
+    ) in text
+    # react: right 2 of 3; probes 21, 13, 60 -> 21; wasted 3, 0, 9 -> 3; efficiency 7/22, 7/14.
+    assert "| react | T2 | 3 | 67% | 21 | 3 | 0.41 | 33% | 1,000 | 1.0s |" in text
+    assert "| hybrid | T2 | 3 | 100% | 6 | 0 | 1.00 | 0% | 1,000 | 1.0s |" in text
+    assert "| Arch | Level | Right (min–max) | Probes (min–max) |" in text
+    assert "| react | T2 | 0%–100% | 13–60 |" in text
+    # The comparison: the dungeon's columns; on the signal trace A6's reference is A2.
+    assert "| Δ success | Δ efficiency | Reference |" in text
+    lines = text[text.index("## Comparison") :].splitlines()
+    hybrid = next(line for line in lines if line.startswith("| hybrid |"))
+    assert hybrid.endswith("| mapstate |")
+
+
+def test_signal_and_survey_runs_are_not_combined(tmp_path: Path) -> None:
+    survey = _write(tmp_path / "run-s", [_survey("react", 1000, 1, 15)], problem="survey")
+    signal = _write(tmp_path / "run-t", [_signal("react", 1000, 1, 22)], problem="signal")
+    with pytest.raises(ValueError, match="different problems"):
+        check_compatible([load_run(survey), load_run(signal)])
+
+
+def _rune(arch: str, seed: int, repeat: int, steps: int | None, **kw: Any) -> dict[str, Any]:
+    reached = steps is not None
+    return _row(
+        seed, repeat, steps if reached else 40, arch=arch, level="R1", problem="rune",
+        success=reached, end_reason="goal" if reached else "budget", budget_hit=not reached,
+        optimal_steps=10, budget=40, traps=kw.pop("traps", 0),
+        repeated_traps=kw.pop("repeated", 0), walks=kw.pop("walks", 1),
+        reference_is_optimal=True, input_tokens=900, output_tokens=100, **kw,
+    )  # fmt: skip
+
+
+def test_the_rune_report(tmp_path: Path) -> None:  # specs/010 US3 4
+    rows = [
+        _rune("react", 1000, 1, 20, traps=2, repeated=1, walks=3),
+        _rune("react", 1000, 2, None, traps=6, repeated=4, walks=7),
+        _rune("react", 1000, 3, 25, traps=3, repeated=1, walks=4),
+        _rune("reflexion", 1000, 1, 14, traps=1, walks=2),
+        _rune("reflexion", 1000, 2, 14, traps=1, walks=2),
+        _rune("reflexion", 1000, 3, 10),
+        _rune("mapstate", 1000, 1, 16, traps=1, walks=2),
+        _rune("mapstate", 1000, 2, 16, traps=1, walks=2),
+        _rune("mapstate", 1000, 3, None, traps=5, repeated=2, walks=6),
+        _rune("hybrid", 1000, 1, 12, traps=1, walks=2),
+    ]  # fmt: skip
+    path = _write(
+        tmp_path / "run-r", rows, problem="rune",
+        architectures=["react", "mapstate", "reflexion", "hybrid"], levels=["R1"], seeds=[1000],
+    )  # fmt: skip
+    text = render([load_run(path)])
+    assert text.startswith("# Report: hybrid, mapstate, react, reflexion on the rune floor\n")
+    assert (
+        "| Arch | Level | Episodes | Success | Steps (median) | Traps (median) "
+        "| Repeated (median) | Efficiency (median) | Budget hit | Tokens (median) "
+        "| Latency (median) |"
+    ) in text
+    # react: success 2 of 3; steps 20, 40, 25 -> 25; traps 2, 6, 3 -> 3; repeated 1, 4, 1 -> 1;
+    # efficiency 10/20, 10/25 -> 0.45.
+    assert "| react | R1 | 3 | 67% | 25 | 3 | 1 | 0.45 | 33% | 1,000 | 1.0s |" in text
+    assert "| reflexion | R1 | 3 | 100% | 14 | 1 | 0 | 0.71 | 0% | 1,000 | 1.0s |" in text
+    assert "| Arch | Level | Success (min–max) | Traps (min–max) |" in text
+    assert "| react | R1 | 0%–100% | 2–6 |" in text
+    # The comparison: the dungeon's columns; on the rune floor A6's reference is A2.
+    assert "| Δ success | Δ efficiency | Reference |" in text
+    lines = text[text.index("## Comparison") :].splitlines()
+    hybrid = next(line for line in lines if line.startswith("| hybrid |"))
+    assert hybrid.endswith("| mapstate |")
+
+
+def test_rune_and_signal_runs_are_not_combined(tmp_path: Path) -> None:
+    signal = _write(tmp_path / "run-t", [_signal("react", 1000, 1, 22)], problem="signal")
+    rune = _write(tmp_path / "run-r", [_rune("react", 1000, 1, 20)], problem="rune")
+    with pytest.raises(ValueError, match="different problems"):
+        check_compatible([load_run(signal), load_run(rune)])
+
+
+def _workshop(arch: str, seed: int, repeat: int, steps: int | None, **kw: Any) -> dict[str, Any]:
+    stuck = kw.pop("stuck", False)
+    made = steps is not None and not stuck
+    return _row(
+        seed, repeat, steps if steps is not None else 48, arch=arch, level="W2",
+        problem="workshop", success=made,
+        end_reason="goal" if made else "stuck" if stuck else "budget",
+        budget_hit=not made and not stuck, optimal_steps=16, budget=48, stuck=stuck,
+        wasted=kw.pop("wasted", 0), inspected=kw.pop("inspected", 5), crafted=kw.pop("crafted", 5),
+        reference_is_optimal=True, input_tokens=900, output_tokens=100, **kw,
+    )  # fmt: skip
+
+
+def test_the_workshop_report(tmp_path: Path) -> None:  # specs/011 US3 4
+    rows = [
+        _workshop("react", 1000, 1, 9, stuck=True, wasted=1),
+        _workshop("react", 1000, 2, 20, wasted=0),
+        _workshop("react", 1000, 3, 10, stuck=True, wasted=1),
+        _workshop("plan_execute", 1000, 1, 18), _workshop("plan_execute", 1000, 2, 20),
+        _workshop("plan_execute", 1000, 3, 16),
+        _workshop("mapstate", 1000, 1, 16), _workshop("mapstate", 1000, 2, 16),
+        _workshop("mapstate", 1000, 3, 9, stuck=True, wasted=1),
+        _workshop("hybrid", 1000, 1, 16),
+    ]  # fmt: skip
+    path = _write(
+        tmp_path / "run-w", rows, problem="workshop",
+        architectures=["react", "mapstate", "plan_execute", "hybrid"], levels=["W2"], seeds=[1000],
+    )  # fmt: skip
+    text = render([load_run(path)])
+    assert text.startswith("# Report: hybrid, mapstate, plan_execute, react on the workshop\n")
+    assert (
+        "| Arch | Level | Episodes | Success | Stuck | Steps (median) | Wasted (median) "
+        "| Efficiency (median) | Budget hit | Tokens (median) | Latency (median) |"
+    ) in text
+    # react: success 1 of 3, stuck 2 of 3; steps 9, 20, 10 -> 10; wasted 1, 0, 1 -> 1;
+    # efficiency 16/20.
+    assert "| react | W2 | 3 | 33% | 67% | 10 | 1 | 0.80 | 0% | 1,000 | 1.0s |" in text
+    assert "| plan_execute | W2 | 3 | 100% | 0% | 18 | 0 | 0.89 | 0% | 1,000 | 1.0s |" in text
+    assert "| Arch | Level | Success (min–max) | Steps (min–max) |" in text
+    assert "| react | W2 | 0%–100% | 9–20 |" in text
+    lines = text[text.index("## Comparison") :].splitlines()
+    hybrid = next(line for line in lines if line.startswith("| hybrid |"))
+    assert hybrid.endswith("| mapstate |")
+
+
+def test_workshop_and_rune_runs_are_not_combined(tmp_path: Path) -> None:
+    rune = _write(tmp_path / "run-r", [_rune("react", 1000, 1, 20)], problem="rune")
+    workshop = _write(tmp_path / "run-w", [_workshop("react", 1000, 1, 16)], problem="workshop")
+    with pytest.raises(ValueError, match="different problems"):
+        check_compatible([load_run(rune), load_run(workshop)])
+
+
+def test_a4_on_the_dungeon_is_labelled_a_stall_restart(tmp_path: Path) -> None:
+    rows = [_row(1000, 1, 10, arch="reflexion", attempts=2)]
+    report = render([load_run(_write(tmp_path / "a4", rows, architectures=["reflexion"]))])
+    assert "results measure reflection together with these stall restarts" in report
+    plain = render([load_run(_write(tmp_path / "a1", [_row(1000, 1, 10)]))])
+    assert "stall restart" not in plain
+
+
+def test_a4_elsewhere_has_no_stall_restart_label(tmp_path: Path) -> None:
+    rows = [_survey("reflexion", 1000, 1, 15, attempts=2)]
+    run = _write(tmp_path / "a4", rows, architectures=["reflexion"], problem="survey")
+    assert "stall restart" not in render([load_run(run)])
+
+
+def _warehouse(arch: str, seed: int, repeat: int, steps: int | None, **kw: Any) -> dict[str, Any]:
+    done = steps is not None
+    return _row(
+        seed, repeat, steps if done else 126, arch=arch, level="P2", problem="warehouse",
+        success=done, end_reason="delivered" if done else "budget", budget_hit=not done,
+        optimal_steps=42, budget=126, delivered=kw.pop("delivered", 3 if done else 1),
+        packages=3, parallel_turns=kw.pop("turns"), idle_robot_turns=kw.pop("idle", 0),
+        scouts=kw.pop("robots", 1), reference_is_optimal=False, input_tokens=900,
+        output_tokens=100, **kw,
+    )  # fmt: skip
+
+
+def test_the_warehouse_report(tmp_path: Path) -> None:  # specs/012 US3 4
+    rows = [
+        _warehouse("mapstate", 1000, 1, 42, turns=42),
+        _warehouse("mapstate", 1000, 2, 60, turns=60),
+        _warehouse("mapstate", 1000, 3, None, turns=126),
+        _warehouse("fanout", 1000, 1, 39, turns=22, idle=27, robots=3),
+        _warehouse("fanout", 1000, 2, 45, turns=25, idle=30, robots=3),
+        _warehouse("fanout", 1000, 3, 40, turns=24, idle=21, robots=3),
+    ]  # fmt: skip
+    path = _write(
+        tmp_path / "run-p", rows, problem="warehouse", architectures=["mapstate", "fanout"],
+        levels=["P2"], seeds=[1000],
+    )  # fmt: skip
+    text = render([load_run(path)])
+    assert text.startswith("# Report: fanout, mapstate on the warehouse\n")
+    assert (
+        "| Arch | Level | Episodes | Success | Delivered (median) | Steps (median) "
+        "| Efficiency (median) | Turns (median) | Idle (median) | Robots (median) | Budget hit "
+        "| Tokens (median) | Latency (median) |"
+    ) in text
+    # mapstate: 2 of 3; delivered 3, 3, 1 -> 3; steps 42, 60, 126 -> 60; efficiency 1.00 and
+    # 0.70 -> 0.85; turns 60; idle 0; robots 1; budget hit 1 of 3.
+    assert "| mapstate | P2 | 3 | 67% | 3 | 60 | 0.85 | 60 | 0 | 1 | 33% | 1,000 | 1.0s |" in text
+    # fanout: steps 39, 45, 40 -> 40; efficiency 42/39, 42/45, 42/40 -> 1.05; turns 24; idle 27.
+    assert "| fanout | P2 | 3 | 100% | 3 | 40 | 1.05 | 24 | 27 | 3 | 0% | 1,000 | 1.0s |" in text
+    assert "| Arch | Level | Success (min–max) | Turns (min–max) |" in text
+    assert "| mapstate | P2 | 0%–100% | 42–126 |" in text
+    assert "## Attempts" not in text
+    lines = text[text.index("## Comparison") :].splitlines()
+    assert any("| Δ success |" in line and "| Turns |" in line for line in lines)
+    fanout = next(line for line in lines if line.startswith("| fanout |"))
+    assert fanout.endswith("| mapstate |") and "| −36 |" in fanout  # turns 24 against 60
+
+
+def test_warehouse_and_survey_runs_are_not_combined(tmp_path: Path) -> None:
+    survey = _write(tmp_path / "run-s", [_survey("react", 1000, 1, 15)], problem="survey")
+    hall = _write(
+        tmp_path / "run-p", [_warehouse("react", 1000, 1, 42, turns=42)], problem="warehouse"
+    )
+    with pytest.raises(ValueError, match="different problems"):
+        render([load_run(survey), load_run(hall)])

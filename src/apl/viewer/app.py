@@ -7,7 +7,7 @@ import json
 import re
 import threading
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -17,6 +17,12 @@ from apl.dungeon import DEV_SEEDS, LEVELS, TEST_SEEDS, generate
 from apl.dungeon.frames import build_frames, snapshot
 from apl.dungeon.model import Dungeon
 from apl.dungeon.render_html import CELL, MARGIN, svg
+from apl.rune import Floor
+from apl.rune import start_episode as start_rune
+from apl.rune.frames import reference_frames as reference_walk
+from apl.rune.frames import snapshot as rune_snapshot
+from apl.rune.render_svg import svg as floor_svg
+from apl.rune.rules import describe as describe_rule
 from apl.runner import registry
 from apl.runner.episode import ModelFactory, PermanentProviderError, play_episode
 from apl.runner.registry import Play
@@ -25,20 +31,35 @@ from apl.runner.run import code_version, default_model_factory, package_versions
 from apl.runner.settings import Settings
 from apl.runner.spec import EpisodeKey
 from apl.runner.vllm import with_server_context
+from apl.signal_trace import Pipe
+from apl.signal_trace import start_episode as start_signal
+from apl.signal_trace.frames import reference_frames as reference_probes
+from apl.signal_trace.frames import snapshot as signal_snapshot
+from apl.signal_trace.render_svg import svg as pipe_svg
 from apl.survey import Field
-from apl.survey import generate as generate_field
 from apl.survey.frames import reference_frames
 from apl.survey.frames import snapshot as survey_snapshot
 from apl.survey.render_svg import CELL as FIELD_CELL
 from apl.survey.render_svg import MARGIN as FIELD_MARGIN
 from apl.survey.render_svg import svg as field_svg
+from apl.viewer.about import about
 from apl.viewer.events import EpisodeSession, ViewerCallbacks
+from apl.warehouse import Floor as WarehouseFloor
+from apl.warehouse.frames import reference_frames as reference_delivery
+from apl.warehouse.frames import snapshot as warehouse_snapshot
+from apl.warehouse.render_svg import CELL as HALL_CELL
+from apl.warehouse.render_svg import MARGIN as HALL_MARGIN
+from apl.warehouse.render_svg import svg as warehouse_svg
+from apl.workshop import Workshop
+from apl.workshop.frames import reference_frames as reference_plan
+from apl.workshop.frames import snapshot as workshop_snapshot
+from apl.workshop.render_svg import svg as workshop_svg
 
 Response = tuple[int, str, bytes]
 LOCAL_PROVIDERS = ("ollama:", "vllm:")  # no cost, so no --execute needed (research R8)
 MODELS = ("vllm:qwen3.5-9b", "openai:gpt-6-luna")  # the page's model switch, besides APL_MODEL
 # Checked before any file access, so an id can never point outside results/viewer/.
-EPISODE_ID = re.compile(r"\d{8}-\d{6}-[a-z0-9_]+-[LS][1-3]-\d+(-\d+)?")
+EPISODE_ID = re.compile(r"\d{8}-\d{6}-[a-z0-9_]+-(?:[LSTWP][1-3]|R[0-3])-\d+(-\d+)?")
 
 
 def json_response(status: int, data: object) -> Response:
@@ -106,6 +127,12 @@ class Viewer:
                         "architectures": [
                             a for a in self.architecture_names() if self.plays(a, name)
                         ],
+                        # What each architecture defines on this game, for the About card.
+                        "about": {
+                            a: asdict(card)
+                            for a in self.architecture_names()
+                            if self.plays(a, name) and (card := about(a, name)) is not None
+                        },
                     }
                     for name, p in problems.PROBLEMS.items()
                 },
@@ -154,6 +181,94 @@ class Viewer:
         }
         return json_response(200, data)
 
+    def signal(self, level: str, seed: str) -> Response:
+        """A pipe for the page (specs/009 contracts/viewer.md); test seeds are refused."""
+        found = parse_pipe(level, seed)
+        if not isinstance(found, Pipe):
+            return found
+        data: dict[str, Any] = {
+            "problem": "signal",
+            "level": level,
+            "seed": found.seed,
+            "segments": found.segments,
+            "runs": _runs(found),
+            "broken": found.broken,
+            "budget": found.budget,
+            "optimal_steps": found.reference_steps,
+            "reference_is_optimal": found.reference_is_optimal,
+            "svg": pipe_svg(found, animated=True),
+            "solution": reference_probes(found),
+        }
+        return json_response(200, data)
+
+    def rune(self, level: str, seed: str) -> Response:
+        """A rune floor for the page (specs/010 contracts/viewer.md); test seeds are refused."""
+        found = parse_floor(level, seed)
+        if not isinstance(found, Floor):
+            return found
+        view = start_rune(found).describe().to_dict()
+        data: dict[str, Any] = {
+            "problem": "rune",
+            "level": level,
+            "seed": found.seed,
+            "columns": found.columns,
+            "rows": found.rows,
+            "start": view["start"],
+            "goal": view["goal"],
+            "floor": view["floor"],
+            "rule": describe_rule(found.rule),
+            "budget": found.budget,
+            "optimal_steps": found.reference_steps,
+            "reference_is_optimal": found.reference_is_optimal,
+            "svg": floor_svg(found, animated=True),
+            "solution": reference_walk(found),
+        }
+        return json_response(200, data)
+
+    def workshop(self, level: str, seed: str) -> Response:
+        """A workshop for the page (specs/011 contracts/viewer.md); test seeds are refused."""
+        found = parse_workshop(level, seed)
+        if not isinstance(found, Workshop):
+            return found
+        data: dict[str, Any] = {
+            "problem": "workshop",
+            "level": level,
+            "seed": found.seed,
+            "goal": found.goal,
+            "stock": dict(found.stock),
+            "scarce": sorted(found.scarce),
+            "recipes": {k: [list(r) for r in v] for k, v in found.recipes.items()},
+            "reference_choice": dict(found.reference_choice),
+            "budget": found.budget,
+            "optimal_steps": found.reference_steps,
+            "reference_is_optimal": found.reference_is_optimal,
+            "svg": workshop_svg(found, animated=True),
+            "solution": reference_plan(found),
+        }
+        return json_response(200, data)
+
+    def warehouse(self, level: str, seed: str) -> Response:
+        """A warehouse for the page (specs/012 contracts/viewer.md); test seeds are refused."""
+        found = parse_warehouse(level, seed)
+        if not isinstance(found, WarehouseFloor):
+            return found
+        data: dict[str, Any] = {
+            "problem": "warehouse",
+            "level": level,
+            "seed": found.seed,
+            "columns": found.columns,
+            "rows": found.rows,
+            "packages": len(found.packages),
+            "budget": found.budget,
+            "optimal_steps": found.reference_steps,
+            "reference_is_optimal": found.reference_is_optimal,
+            "cell": HALL_CELL,
+            "margin": HALL_MARGIN,
+            "svg": warehouse_svg(found, animated=True),
+            "solution": reference_delivery(found),
+        }
+        return json_response(200, data)
+
     # ---------- episodes ----------
 
     def _play(self, arch: str) -> Play:
@@ -177,7 +292,12 @@ class Viewer:
             return error(400, f"unknown model {model!r} (models: {', '.join(self.choices())})")
         if not isinstance(seed, int) or isinstance(seed, bool):
             return error(400, f"seed must be a whole number ≥ 0, got {seed!r}")
-        world = (parse_field if problem == "survey" else parse_dungeon)(str(level), str(seed))
+        parsers = {
+            "survey": parse_field, "signal": parse_pipe, "rune": parse_floor,
+            "workshop": parse_workshop, "warehouse": parse_warehouse,
+        }  # fmt: skip
+        parse = parsers.get(problem, parse_dungeon)
+        world = parse(str(level), str(seed))
         if isinstance(world, tuple):
             return world
         if (reason := self.cannot_run_reason(chosen.model)) is not None:
@@ -225,15 +345,34 @@ class Viewer:
         started = datetime.now().astimezone().isoformat(timespec="seconds")
         record = settings.record(problem)
         survey = problem == "survey"
+        signal = problem == "signal"  # specs/009
+        rune = problem == "rune"  # specs/010
+        workshop = problem == "workshop"  # specs/011
+        warehouse = problem == "warehouse"  # specs/012
 
         def frame_of(episode: Any, index: int, action: Any, result: Any) -> dict[str, Any]:
             if survey:
                 return survey_snapshot(episode, index, action, result)
+            if signal:
+                return signal_snapshot(episode, index, action, result)
+            if rune:
+                return rune_snapshot(episode, index, action, result)
+            if workshop:
+                return workshop_snapshot(episode, index, action, result)
+            if warehouse:
+                return warehouse_snapshot(episode, index, action, result)
             return snapshot(episode, index, action, result).to_dict()
 
         def on_episode(episode: Any) -> None:
             session.episode = episode
-            world = episode.field if survey else episode.dungeon
+            if signal:
+                world = episode.pipe
+            elif rune or warehouse:
+                world = episode.floor
+            elif workshop:
+                world = episode.workshop
+            else:
+                world = episode.field if survey else episode.dungeon
             session.emit(
                 "start",
                 {
@@ -248,6 +387,16 @@ class Viewer:
                     "started": started,
                     # Survey episodes say so; dungeon events stay as they were (specs/005).
                     **({"problem": problem, "true_total": world.true_total} if survey else {}),
+                    **(
+                        {"problem": problem, "segments": world.segments, "broken": world.broken}
+                        if signal
+                        else {}
+                    ),
+                    **(_rune_start(world) if rune else {}),
+                    **(_workshop_start(world) if workshop else {}),
+                    **(_warehouse_start(world) if warehouse else {}),
+                    # A retrying architecture's cap; other events stay as they were (specs/007).
+                    **({"attempts": episode.max_attempts} if episode.max_attempts > 1 else {}),
                 },
             )
 
@@ -268,6 +417,13 @@ class Viewer:
                 )
 
             episode.on_step = on_step
+
+            def on_restart() -> None:  # A4's next attempt (specs/007 research R8)
+                frame = frame_of(episode, len(episode.log), None, None)
+                data = {"attempt": episode.attempt, "of": episode.max_attempts, "frame": frame}
+                session.emit("restart", data)
+
+            episode.on_restart = on_restart
             if session.stop_requested:
                 episode.stop()
 
@@ -300,7 +456,11 @@ class Viewer:
                 "row": row,
                 "error": trouble,
                 "arch": key.arch,
-                **({"problem": problem} if survey else {}),
+                **(
+                    {"problem": problem}
+                    if survey or signal or rune or workshop or warehouse
+                    else {}
+                ),
                 "level": key.level,
                 "seed": key.seed,
                 "settings": record,
@@ -395,7 +555,69 @@ class Viewer:
 
 def parse_field(level: str, seed: str) -> Field | Response:
     """The survey field for a request, or the error response; test seeds are refused."""
-    chosen = problems.get("survey")
+    found: Field | Response = _parse_world("survey", level, seed)
+    return found
+
+
+def parse_pipe(level: str, seed: str) -> Pipe | Response:
+    """The signal-trace pipe for a request, or the error response; test seeds are refused."""
+    found: Pipe | Response = _parse_world("signal", level, seed)
+    return found
+
+
+def parse_floor(level: str, seed: str) -> Floor | Response:
+    """The rune floor for a request, or the error response; test seeds are refused."""
+    found: Floor | Response = _parse_world("rune", level, seed)
+    return found
+
+
+def parse_workshop(level: str, seed: str) -> Workshop | Response:
+    """The workshop for a request, or the error response; test seeds are refused."""
+    found: Workshop | Response = _parse_world("workshop", level, seed)
+    return found
+
+
+def parse_warehouse(level: str, seed: str) -> WarehouseFloor | Response:
+    """The warehouse for a request, or the error response; test seeds are refused."""
+    found: WarehouseFloor | Response = _parse_world("warehouse", level, seed)
+    return found
+
+
+def _warehouse_start(floor: WarehouseFloor) -> dict[str, Any]:
+    """What a warehouse episode's start event adds (specs/012 contracts/viewer.md)."""
+    return {
+        "problem": "warehouse",
+        "packages": len(floor.packages),
+        "columns": floor.columns,
+        "rows": floor.rows,
+    }
+
+
+def _workshop_start(workshop: Workshop) -> dict[str, Any]:
+    """What a workshop episode's start event adds (specs/011 contracts/viewer.md)."""
+    return {
+        "problem": "workshop",
+        "goal": workshop.goal,
+        "stock": dict(workshop.stock),
+        "scarce": sorted(workshop.scarce),
+    }
+
+
+def _rune_start(floor: Floor) -> dict[str, Any]:
+    """What a rune episode's start event adds (specs/010 contracts/viewer.md)."""
+    view = start_rune(floor).describe().to_dict()
+    return {
+        "problem": "rune",
+        "columns": floor.columns,
+        "rows": floor.rows,
+        "start": view["start"],
+        "goal": view["goal"],
+    }
+
+
+def _parse_world(problem: str, level: str, seed: str) -> Any:
+    """A problem's world for a request, or the error response (specs/005, specs/009)."""
+    chosen = problems.get(problem)
     if level not in chosen.levels:
         return error(400, f"unknown level {level!r} (levels: {', '.join(sorted(chosen.levels))})")
     try:
@@ -406,7 +628,14 @@ def parse_field(level: str, seed: str) -> Field | Response:
         return error(
             403, f"seed {number} is a test seed; test seeds are reserved for reported results"
         )
-    return generate_field(level, number)
+    return chosen.generate(level, number)
+
+
+def _runs(pipe: Pipe) -> list[object]:
+    """The layout's runs as the agent sees them in its free start view."""
+    runs = start_signal(pipe).describe().to_dict()["runs"]
+    assert isinstance(runs, list)
+    return runs
 
 
 def parse_dungeon(level: str, seed: str) -> Dungeon | Response:

@@ -28,6 +28,14 @@ class Handler(BaseHTTPRequestHandler):
             self._send(self.viewer.dungeon(query.get("level", ""), query.get("seed", "")))
         elif url.path == "/api/survey":
             self._send(self.viewer.survey(query.get("level", ""), query.get("seed", "")))
+        elif url.path == "/api/signal":
+            self._send(self.viewer.signal(query.get("level", ""), query.get("seed", "")))
+        elif url.path == "/api/rune":
+            self._send(self.viewer.rune(query.get("level", ""), query.get("seed", "")))
+        elif url.path == "/api/workshop":
+            self._send(self.viewer.workshop(query.get("level", ""), query.get("seed", "")))
+        elif url.path == "/api/warehouse":
+            self._send(self.viewer.warehouse(query.get("level", ""), query.get("seed", "")))
         elif url.path == "/api/episodes":
             self._send(self.viewer.list_episodes())
         elif match := EVENTS.fullmatch(url.path):

@@ -18,6 +18,10 @@ from langchain_core.outputs import ChatGeneration, LLMResult
 from apl.dungeon.env import Episode
 from apl.kit import EpisodeEnded
 
+# Roles that lead the work without acting: A7/A8's orchestrator, A3's planner and replanner
+# (specs/006 research R7), A4's reflector (specs/007 R7), A5's supervisor (specs/008 R7).
+LEAD_ROLES = frozenset({"orchestrator", "planner", "replanner", "reflector", "supervisor"})
+
 
 def message_key(message: BaseMessage) -> str:
     """A message as sorted JSON: equal messages, equal keys (also used by the viewer)."""
@@ -57,7 +61,7 @@ class Meter(BaseCallbackHandler):
         self.usage_missing = False
         self.token_cap_hit = False
         self.output_limit_hits = 0  # calls cut off by APL_MAX_OUTPUT_TOKENS
-        self.orchestrator_calls = 0  # calls with the metadata role "orchestrator" (specs/004 R5)
+        self.orchestrator_calls = 0  # calls with a metadata role in LEAD_ROLES (specs/004 R5)
         self.transcript = Transcript()
         self._started: dict[UUID, tuple[float, list[int], str | None]] = {}
         # An orchestrator's scouts call the model from parallel graph branches.
@@ -76,7 +80,7 @@ class Meter(BaseCallbackHandler):
             if self.episode.end_reason is not None:
                 raise EpisodeEnded
             self.llm_calls += 1
-            self.orchestrator_calls += role == "orchestrator"
+            self.orchestrator_calls += role in LEAD_ROLES
             inputs = [self.transcript.add(m) for m in messages[0]]
             self._started[run_id] = (time.perf_counter(), inputs, role)
 

@@ -12,6 +12,7 @@ from apl.survey.model import DIRECTIONS, Action, Cell, Field, cell_name
 from apl.survey.results import CellView, EndReason, ErrorCode, Submitted, ToolResult
 
 MAX_SCOUTS = 4  # per episode, scout 0 included, as on the dungeon
+MAX_ATTEMPTS = 3  # for a retrying architecture, as on the dungeon (specs/007)
 
 
 @dataclass(frozen=True, slots=True)
@@ -22,6 +23,7 @@ class LogEntry:
     result: ToolResult
     scout: int = 0
     turn: int | None = None  # the model call count when the call was applied (research R11)
+    attempt: int = 1  # specs/007
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -29,6 +31,7 @@ class LogEntry:
             "step": self.step,
             **({"scout": self.scout} if self.scout else {}),
             **({"turn": self.turn} if self.turn is not None else {}),
+            **({"attempt": self.attempt} if self.attempt > 1 else {}),
             "action": self.action.to_dict(),
             "result": self.result.to_dict(),
         }
@@ -49,6 +52,7 @@ class Outcome:
     cells_seen: int
     cells: int
     reference_is_optimal: bool
+    attempts: int = 1  # the attempt the episode ended in (specs/007)
 
     @property
     def scouts(self) -> int:
@@ -89,6 +93,7 @@ class Outcome:
             "cells": self.cells,
             "parallel_turns": self.parallel_turns,
             "reference_is_optimal": self.reference_is_optimal,
+            **({"attempts": self.attempts} if self.attempts > 1 else {}),
             "log": [e.to_dict() for e in self.log],
         }
 
@@ -103,7 +108,8 @@ def _total(raw: object) -> int | None:
         return None
     if isinstance(raw, int):
         return raw if raw >= 0 else None
-    if isinstance(raw, str) and raw.isascii() and raw.isdigit():
+    # At most 6 digits: a longer string is no count of deposits, and int() refuses very long ones.
+    if isinstance(raw, str) and raw.isascii() and raw.isdigit() and len(raw) <= 6:
         return int(raw)
     return None
 
@@ -112,7 +118,8 @@ class Episode:
     def __init__(self, field: Field) -> None:
         self.field = field
         self.scouts: list[Cell] = [field.start]
-        self.seen: set[Cell] = {field.start}
+        self.seen: set[Cell] = {field.start}  # in this attempt
+        self.seen_ever: set[Cell] = {field.start}  # in every attempt, for the outcome
         self.steps = 0
         self.invalid_actions = 0
         self.submitted: int | None = None
@@ -120,6 +127,9 @@ class Episode:
         self.log: list[LogEntry] = []
         self.on_step: Callable[[LogEntry], None] | None = None  # an observer, e.g. the viewer
         self.turn_source: Callable[[], int] | None = None  # set by the runner (research R11)
+        self.attempt = 1
+        self.max_attempts = 1  # MAX_ATTEMPTS for a retrying architecture (specs/007 R2)
+        self.on_restart: Callable[[], None] | None = None  # an observer, e.g. the viewer
 
     def add_scout(self) -> int | None:
         """A new scout at the start; None once there are MAX_SCOUTS. Costs no step."""
@@ -127,6 +137,21 @@ class Episode:
             return None
         self.scouts.append(self.field.start)
         return len(self.scouts) - 1
+
+    def restart(self) -> bool:
+        """The field back in its start state for the next attempt; steps and log go on.
+
+        Costs no step. Refused once the episode is over or the attempts are used up.
+        """
+        if self.end_reason is not None or self.attempt >= self.max_attempts:
+            return False
+        self.scouts = [self.field.start]
+        self.seen = {self.field.start}
+        self.submitted = None
+        self.attempt += 1
+        if self.on_restart is not None:
+            self.on_restart()
+        return True
 
     def describe(self, scout: int = 0) -> CellView:
         """A scout's cell, as it sees it. Free: does not count as a step."""
@@ -179,9 +204,10 @@ class Episode:
             log=tuple(self.log),
             submitted_total=self.submitted,
             true_total=f.true_total,
-            cells_seen=len(self.seen),
+            cells_seen=len(self.seen_ever),
             cells=f.cells,
             reference_is_optimal=f.reference_is_optimal,
+            attempts=self.attempt,
         )
 
     def _scout(self, number: int) -> int:
@@ -194,19 +220,31 @@ class Episode:
         turn = self.turn_source() if self.turn_source is not None else None
         if self.end_reason is not None:
             result = ToolResult.failure(ErrorCode.EPISODE_OVER, "The episode is over.")
-            self._append(LogEntry(len(self.log), None, action, result, scout, turn))
+            self._append(LogEntry(len(self.log), None, action, result, scout, turn, self.attempt))
             return result
         self.steps += 1
+        attempt = self.attempt
         result = handler()
         if not result.ok:
             self.invalid_actions += 1
+        retry = self.submitted is not None and self._retries_wrong_total()
         # A submission on the last step counts before the budget.
-        if self.submitted is not None:
+        if self.submitted is not None and not retry:
             self.end_reason = EndReason.SUBMITTED
         elif self.steps >= self.field.budget:
             self.end_reason = EndReason.BUDGET
-        self._append(LogEntry(len(self.log), self.steps, action, result, scout, turn))
+        if retry and self.end_reason is None:
+            # A wrong total ends a retrying architecture's attempt (specs/007 research R3).
+            result = ToolResult.success(
+                Submitted(self.submitted or 0, False, self.max_attempts - self.attempt)
+            )
+        self._append(LogEntry(len(self.log), self.steps, action, result, scout, turn, attempt))
+        if retry and self.end_reason is None:
+            self.restart()
         return result
+
+    def _retries_wrong_total(self) -> bool:
+        return self.submitted != self.field.true_total and self.attempt < self.max_attempts
 
     def _append(self, entry: LogEntry) -> None:
         self.log.append(entry)
@@ -224,6 +262,7 @@ class Episode:
             return ToolResult.failure(ErrorCode.WALL, f"There is a wall to the {raw}.")
         self.scouts[scout] = other
         self.seen.add(other)
+        self.seen_ever.add(other)
         return ToolResult.success(self.describe(scout))
 
     def _submit(self, raw: object) -> ToolResult:

@@ -7,6 +7,7 @@ PAGE = (importlib.resources.files("apl.viewer") / "assets" / "index.html").read_
 IDS = [
     "level", "seed", "random", "dev-seeds", "generate", "arch", "run", "stop", "saved", "map",
     "slider", "follow", "fog", "solution", "panel", "stats", "message", "problem", "solution-label",
+    "about", "about-title", "about-body",
 ]  # fmt: skip
 
 

@@ -104,6 +104,15 @@ def test_counts_orchestrator_calls_and_records_roles() -> None:  # specs/004 res
     assert "role" not in meter.transcript.calls[2]  # calls without a role are as before
 
 
+def test_planning_calls_count_as_orchestrator_calls() -> None:  # specs/006 research R7
+    meter, model, _ = _setup(usage_per_call(1))
+    for role in ("planner", "executor (subgoal 1)", "replanner", "scout 0"):
+        model.invoke(PROMPT, config={"metadata": {"role": role}})
+    assert (meter.llm_calls, meter.orchestrator_calls) == (4, 2)
+    roles = [call.get("role") for call in meter.transcript.calls]
+    assert roles == ["planner", "executor (subgoal 1)", "replanner", "scout 0"]
+
+
 def test_parallel_calls_are_counted_exactly() -> None:
     meter, model, _ = _setup(usage_per_call(3, 2), cap=10**9)
     prompts = [[SystemMessage("rules"), HumanMessage(f"start {i % 7}")] for i in range(25)]

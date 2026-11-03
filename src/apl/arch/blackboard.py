@@ -40,6 +40,13 @@ FIELD_TASK = (
     "tool call. When the board shows every cell, submit the total."
 )
 
+# The warehouse's task (specs/012 contracts/architectures.md): the board and the claim line only.
+WAREHOUSE_TASK = (
+    "Deliver every package. Other robots work in the same warehouse; the board shows what all of "
+    "you have seen and what each of you has claimed. To claim a package or an aisle, add a line "
+    '"claim: package <n>" or "claim: aisle <n>" to a reply that also makes your next tool call.'
+)
+
 
 def play(kit: Kit) -> None:
     board = SharedMap.from_start(kit.start, 0)
@@ -48,7 +55,7 @@ def play(kit: Kit) -> None:
         board.add(scout.number)
         scouts.append(scout)
     for scout in scouts:
-        scout.task = FIELD_TASK if kit.problem == "survey" else TASK
+        scout.task = {"survey": FIELD_TASK, "warehouse": WAREHOUSE_TASK}.get(kit.problem, TASK)
 
     def next_scout(state: ScoutGraph) -> Sequence[Send] | str:
         """The active scout with the fewest turns: one scout per turn, in number order."""

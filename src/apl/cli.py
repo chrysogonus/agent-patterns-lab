@@ -13,6 +13,7 @@ from apl.dungeon.frames import Frame, build_frames, parse_route_file
 from apl.dungeon.model import Dungeon
 from apl.dungeon.render_html import render_html
 from apl.dungeon.render_text import render_text
+from apl.problems import PROBLEMS
 
 if TYPE_CHECKING:
     from apl.runner.episode import EpisodeResult
@@ -55,6 +56,70 @@ def _survey_show(args: argparse.Namespace) -> int:
         print(f"apl: {error}", file=sys.stderr)
         return 2
     print(render_field(field, route=args.route == "reference"), end="")
+    return 0
+
+
+def _signal_show(args: argparse.Namespace) -> int:
+    from apl.signal_trace import generate as generate_pipe
+    from apl.signal_trace.render_svg import html
+    from apl.signal_trace.render_text import render_text as render_pipe
+
+    try:
+        pipe = generate_pipe(args.level, args.seed)
+        if args.html:
+            Path(args.html).write_text(html(pipe), encoding="utf-8")
+    except (OSError, ValueError) as error:
+        print(f"apl: {error}", file=sys.stderr)
+        return 2
+    print(render_pipe(pipe, route=args.route == "reference"), end="")
+    return 0
+
+
+def _rune_show(args: argparse.Namespace) -> int:
+    from apl.rune import generate as generate_floor
+    from apl.rune.render_svg import html
+    from apl.rune.render_text import render_text as render_floor
+
+    try:
+        floor = generate_floor(args.level, args.seed)
+        if args.html:
+            Path(args.html).write_text(html(floor), encoding="utf-8")
+    except (OSError, ValueError) as error:
+        print(f"apl: {error}", file=sys.stderr)
+        return 2
+    print(render_floor(floor, route=args.route == "reference"), end="")
+    return 0
+
+
+def _workshop_show(args: argparse.Namespace) -> int:
+    from apl.workshop import generate as generate_workshop
+    from apl.workshop.render_svg import html
+    from apl.workshop.render_text import render_text as render_workshop
+
+    try:
+        workshop = generate_workshop(args.level, args.seed)
+        if args.html:
+            Path(args.html).write_text(html(workshop), encoding="utf-8")
+    except (OSError, ValueError) as error:
+        print(f"apl: {error}", file=sys.stderr)
+        return 2
+    print(render_workshop(workshop, route=args.route == "reference"), end="")
+    return 0
+
+
+def _warehouse_show(args: argparse.Namespace) -> int:
+    from apl.warehouse import generate as generate_warehouse
+    from apl.warehouse.render_svg import html
+    from apl.warehouse.render_text import render_text as render_warehouse
+
+    try:
+        floor = generate_warehouse(args.level, args.seed)
+        if args.html:
+            Path(args.html).write_text(html(floor), encoding="utf-8")
+    except (OSError, ValueError) as error:
+        print(f"apl: {error}", file=sys.stderr)
+        return 2
+    print(render_warehouse(floor, route=args.route == "reference"), end="")
     return 0
 
 
@@ -292,9 +357,37 @@ def main(argv: list[str] | None = None) -> int:
     field_show.add_argument("--seed", required=True, type=int)
     field_show.add_argument("--route", choices=["reference"], help="number the reference walk")
     field_show.add_argument("--html", metavar="OUT", help="also write a picture")
+    signal = commands.add_parser("signal", help="inspect generated signal trace pipes")
+    signal_commands = signal.add_subparsers(dest="signal_command")
+    pipe_show = signal_commands.add_parser("show", help="print a pipe as text")
+    pipe_show.add_argument("--level", required=True, choices=["T1", "T2", "T3"])
+    pipe_show.add_argument("--seed", required=True, type=int)
+    pipe_show.add_argument("--route", choices=["reference"], help="list the reference probes")
+    pipe_show.add_argument("--html", metavar="OUT", help="also write a picture")
+    rune = commands.add_parser("rune", help="inspect generated rune floors")
+    rune_commands = rune.add_subparsers(dest="rune_command")
+    floor_show = rune_commands.add_parser("show", help="print a rune floor as text")
+    floor_show.add_argument("--level", required=True, choices=["R0", "R1", "R2", "R3"])
+    floor_show.add_argument("--seed", required=True, type=int)
+    floor_show.add_argument("--route", choices=["reference"], help="list the reference path")
+    floor_show.add_argument("--html", metavar="OUT", help="also write a picture")
+    workshop = commands.add_parser("workshop", help="inspect generated workshops")
+    workshop_commands = workshop.add_subparsers(dest="workshop_command")
+    tree_show = workshop_commands.add_parser("show", help="print a workshop as text")
+    tree_show.add_argument("--level", required=True, choices=["W1", "W2", "W3"])
+    tree_show.add_argument("--seed", required=True, type=int)
+    tree_show.add_argument("--route", choices=["reference"], help="list the reference plan")
+    tree_show.add_argument("--html", metavar="OUT", help="also write a picture")
+    warehouse = commands.add_parser("warehouse", help="inspect generated warehouses")
+    warehouse_commands = warehouse.add_subparsers(dest="warehouse_command")
+    hall_show = warehouse_commands.add_parser("show", help="print a warehouse as a text map")
+    hall_show.add_argument("--level", required=True, choices=["P1", "P2", "P3"])
+    hall_show.add_argument("--seed", required=True, type=int)
+    hall_show.add_argument("--route", choices=["reference"], help="list the reference's calls")
+    hall_show.add_argument("--html", metavar="OUT", help="also write a picture")
     run = commands.add_parser("run", help="plan a run, or play it with --execute")
     run.add_argument(
-        "--problem", default="dungeon", choices=["dungeon", "survey"], help="default: dungeon"
+        "--problem", default="dungeon", choices=list(PROBLEMS), help="default: dungeon"
     )
     run.add_argument("--arch", required=True, help="architecture names, comma-separated")
     run.add_argument("--level", required=True, help="the problem's levels, comma-separated, or all")
@@ -318,6 +411,14 @@ def main(argv: list[str] | None = None) -> int:
         return _show(args)
     if args.command == "survey" and args.survey_command == "show":
         return _survey_show(args)
+    if args.command == "signal" and args.signal_command == "show":
+        return _signal_show(args)
+    if args.command == "rune" and args.rune_command == "show":
+        return _rune_show(args)
+    if args.command == "workshop" and args.workshop_command == "show":
+        return _workshop_show(args)
+    if args.command == "warehouse" and args.warehouse_command == "show":
+        return _warehouse_show(args)
     if args.command == "run":
         return _run(args)
     if args.command == "report":
@@ -326,5 +427,9 @@ def main(argv: list[str] | None = None) -> int:
         return _continue(args)
     if args.command == "serve":
         return _serve(args)
-    {"dungeon": dungeon, "survey": survey}.get(args.command, parser).print_help()
+    groups = {
+        "dungeon": dungeon, "survey": survey, "signal": signal, "rune": rune, "workshop": workshop,
+        "warehouse": warehouse,
+    }  # fmt: skip
+    groups.get(args.command, parser).print_help()
     return 2

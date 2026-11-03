@@ -49,6 +49,29 @@ class EpisodeRow:
     cells: int | None = None
     parallel_turns: int | None = None
     reference_is_optimal: bool | None = None
+    # specs/007: attempts used by a retrying architecture; None for the others and older rows.
+    attempts: int | None = None
+    # specs/009: the signal trace's own fields (None on the other problems' rows;
+    # contracts/results.md). `reference_is_optimal` above is shared with the survey field.
+    submitted_segment: int | None = None
+    broken_segment: int | None = None
+    segments: int | None = None
+    probes: int | None = None
+    wasted_probes: int | None = None
+    # specs/010: the rune floor's own fields (None on the other problems' rows).
+    traps: int | None = None
+    repeated_traps: int | None = None
+    walks: int | None = None
+    # specs/011: the workshop's own fields (None on the other problems' rows).
+    stuck: bool | None = None
+    wasted: int | None = None
+    inspected: int | None = None
+    crafted: int | None = None
+    # specs/012: the warehouse's own fields (None on the other problems' rows); it shares
+    # `parallel_turns`, `scouts` and `reference_is_optimal`.
+    delivered: int | None = None
+    packages: int | None = None
+    idle_robot_turns: int | None = None
 
     @classmethod
     def completed(
@@ -61,6 +84,7 @@ class EpisodeRow:
         latency_s: float,
         arch_error: str | None,
         problem: str = "dungeon",
+        attempts: int | None = None,
     ) -> "EpisodeRow":
         return cls(
             **_identity(key, run_id, seed_set),
@@ -86,6 +110,11 @@ class EpisodeRow:
             scouts=outcome.scouts,
             orchestrator_calls=meter.orchestrator_calls,
             **_survey(outcome),
+            **_signal(outcome),
+            **_rune(outcome),
+            **_workshop(outcome),
+            **_warehouse(outcome),
+            attempts=attempts,
         )
 
     @classmethod
@@ -129,6 +158,7 @@ class EpisodeRow:
             scouts=None,
             orchestrator_calls=meter.orchestrator_calls,
             **_field_totals(episode),
+            **_pipe_totals(episode),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -141,7 +171,9 @@ class EpisodeRow:
             raise ValueError(f"a row must be an object, got {data!r}")
         data = {
             "output_limit_hits": None, "scouts": None, "orchestrator_calls": None,
-            "problem": "dungeon", **dict.fromkeys(_SURVEY_FIELDS), **data,
+            "problem": "dungeon", **dict.fromkeys(_SURVEY_FIELDS), "attempts": None,
+            **dict.fromkeys(_SIGNAL_FIELDS), **dict.fromkeys(_RUNE_FIELDS),
+            **dict.fromkeys(_WORKSHOP_FIELDS), **dict.fromkeys(_WAREHOUSE_FIELDS), **data,
         }  # fmt: skip
         names = [f.name for f in fields(cls)]
         odd = sorted(set(names) ^ set(data))
@@ -193,19 +225,42 @@ _ROW_TYPES.update(
     cells=int,
     parallel_turns=int,
     reference_is_optimal=bool,
+    attempts=int,
+    submitted_segment=int,
+    broken_segment=int,
+    segments=int,
+    probes=int,
+    wasted_probes=int,
+    traps=int,
+    repeated_traps=int,
+    walks=int,
+    stuck=bool,
+    wasted=int,
+    inspected=int,
+    crafted=int,
+    delivered=int,
+    packages=int,
+    idle_robot_turns=int,
 )
 _SURVEY_FIELDS = (
     "submitted_total", "true_total", "cells_seen", "cells", "parallel_turns",
     "reference_is_optimal",
 )  # fmt: skip
+_SIGNAL_FIELDS = ("submitted_segment", "broken_segment", "segments", "probes", "wasted_probes")
+_RUNE_FIELDS = ("traps", "repeated_traps", "walks")
+_WORKSHOP_FIELDS = ("stuck", "wasted", "inspected", "crafted")
+_WAREHOUSE_FIELDS = ("delivered", "packages", "idle_robot_turns")
 _NULLABLE = {
     "success", "end_reason", "steps", "efficiency", "invalid_actions", "budget_hit",
     "token_cap_hit", "output_limit_hits", "input_tokens", "output_tokens", "arch_error", "error",
-    "scouts", "orchestrator_calls", *_SURVEY_FIELDS,
+    "scouts", "orchestrator_calls", *_SURVEY_FIELDS, "attempts", *_SIGNAL_FIELDS,
+    *_RUNE_FIELDS, *_WORKSHOP_FIELDS, *_WAREHOUSE_FIELDS,
 }  # fmt: skip
 _ALLOWED: dict[str, set[str]] = {
     "status": {"completed", "error"},
-    "end_reason": {str(r) for r in EndReason} | {"submitted"},  # the survey's (specs/005 R7)
+    # The survey's and the signal trace's "submitted" (specs/005 R7), the rune floor's and the
+    # workshop's "goal", the workshop's "stuck" (specs/011), the warehouse's "delivered" (012).
+    "end_reason": {str(r) for r in EndReason} | {"submitted", "goal", "stuck", "delivered"},
     "seed_set": set(SEED_SETS),
     "problem": set(PROBLEMS),
 }
@@ -216,6 +271,41 @@ def _survey(outcome: object) -> dict[str, Any]:
     if not hasattr(outcome, "true_total"):
         return {}
     return {f: getattr(outcome, f) for f in _SURVEY_FIELDS}
+
+
+def _signal(outcome: object) -> dict[str, Any]:
+    """The signal trace's own row fields from its outcome; none for the other problems'."""
+    if not hasattr(outcome, "broken_segment"):
+        return {}
+    return {f: getattr(outcome, f) for f in (*_SIGNAL_FIELDS, "reference_is_optimal")}
+
+
+def _rune(outcome: object) -> dict[str, Any]:
+    """The rune floor's own row fields from its outcome; none for the other problems'."""
+    if not hasattr(outcome, "repeated_traps"):
+        return {}
+    return {f: getattr(outcome, f) for f in (*_RUNE_FIELDS, "reference_is_optimal")}
+
+
+def _workshop(outcome: object) -> dict[str, Any]:
+    """The workshop's own row fields from its outcome; none for the other problems'."""
+    if not hasattr(outcome, "crafted"):
+        return {}
+    return {f: getattr(outcome, f) for f in (*_WORKSHOP_FIELDS, "reference_is_optimal")}
+
+
+def _warehouse(outcome: object) -> dict[str, Any]:
+    """The warehouse's own row fields from its outcome; none for the other problems'."""
+    if not hasattr(outcome, "idle_robot_turns"):
+        return {}
+    shared = ("parallel_turns", "reference_is_optimal")
+    return {f: getattr(outcome, f) for f in (*_WAREHOUSE_FIELDS, *shared)}
+
+
+def _pipe_totals(episode: object) -> dict[str, Any]:
+    """An infrastructure error on the signal trace still records the pipe's size and break."""
+    pipe = getattr(episode, "pipe", None)
+    return {} if pipe is None else {"broken_segment": pipe.broken, "segments": pipe.segments}
 
 
 def _field_totals(episode: object) -> dict[str, Any]:

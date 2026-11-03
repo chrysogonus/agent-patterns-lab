@@ -2,7 +2,9 @@
 
 Each turn the model sees the base prompt with the map instructions, its previous reply with that
 reply's tool results, and the map (specs/003 contracts/mapstate.md). Written by the agent at the
-experimenter's request.
+experimenter's request; the signal trace's probe log (specs/009) and the rune floor's walk log
+(specs/010), the workshop's log
+(specs/011) and the warehouse's floor map (specs/012) too.
 """
 
 import json
@@ -13,6 +15,10 @@ from langgraph.graph import END, START, StateGraph
 
 from apl.arch.dungeon_map import DungeonMap
 from apl.arch.field_map import FieldMap
+from apl.arch.floor_map import FloorMap
+from apl.arch.probe_log import ProbeLog
+from apl.arch.walk_log import WalkLog
+from apl.arch.workshop_log import WorkshopLog
 from apl.kit import Kit
 
 # Explains the map only; strategy advice would mix a prompt effect into the memory effect (R15).
@@ -32,6 +38,32 @@ whether it holds a deposit, the number of cells and deposits seen, the walls you
 the unseen cells next to seen ones. Your previous reply and its tool results come just before the \
 map."""
 
+# The same for the signal trace (specs/009 contracts/architectures.md): the log, not a strategy.
+PROBE_LOG_INSTRUCTIONS = """\
+You do not see the earlier conversation. Instead, every turn ends with your probe log. It is built \
+from your own tool results so far: the pipe's runs and every probe answer, in the order you got \
+them. Your previous reply and its tool results come just before the log."""
+
+# The same for the rune floor (specs/010 contracts/architectures.md): the walks, not the rule.
+WALK_LOG_INSTRUCTIONS = """\
+You do not see the earlier conversation. Instead, every turn ends with your walk log. It is built \
+from your own tool results so far: the floor, the cell you are on, and every walk from the start, \
+with the tiles you stepped on in order and how the walk ended. Your previous reply and its tool \
+results come just before the log."""
+
+# The same for the workshop (specs/011 contracts/architectures.md): what was seen, not a plan.
+WORKSHOP_LOG_INSTRUCTIONS = """\
+You do not see the earlier conversation. Instead, every turn ends with your workshop log. It is \
+built from your own tool results so far: the goal, the stock, your inventory and every recipe you \
+have inspected. Your previous reply and its tool results come just before the log."""
+
+# The same for the warehouse (specs/012 contracts/architectures.md): what was seen, not a split.
+FLOOR_MAP_INSTRUCTIONS = """\
+You do not see the earlier conversation. Instead, every turn ends with your floor map. It is built \
+from your own tool results so far: the floor plan, the corridors you have seen, the packages you \
+have seen and where, what you carry, and how many packages are delivered. Your previous reply and \
+its tool results come just before the map."""
+
 # For the routes variant (mapstate_routes); it explains the list, it does not say which to take.
 ROUTE_INSTRUCTIONS = """\
 Under the map, each unexplored exit is listed with the moves that reach it from your room through \
@@ -41,7 +73,7 @@ doors you have already walked, nearest first."""
 class MapState(TypedDict):
     # No reducers: each write replaces the value, so the history never builds up (R11).
     messages: list[BaseMessage]  # the latest turn only
-    map: DungeonMap | FieldMap
+    map: DungeonMap | FieldMap | ProbeLog | WalkLog | WorkshopLog | FloorMap
 
 
 def play(kit: Kit) -> None:
@@ -51,14 +83,26 @@ def play(kit: Kit) -> None:
 def run(kit: Kit, *, routes: bool) -> None:
     model = kit.model.bind_tools(kit.tools)
     survey = kit.problem == "survey"  # the field map; written by the agent (specs/005 R10)
-    if survey:
+    signal = kit.problem == "signal"  # the probe log; written by the agent (specs/009 R11)
+    rune = kit.problem == "rune"  # the walk log; written by the agent (specs/010 R12)
+    workshop = kit.problem == "workshop"  # the workshop log; written by the agent (specs/011)
+    warehouse = kit.problem == "warehouse"  # the floor map; written by the agent (specs/012)
+    if warehouse:
+        instructions = FLOOR_MAP_INSTRUCTIONS
+    elif workshop:
+        instructions = WORKSHOP_LOG_INSTRUCTIONS
+    elif rune:
+        instructions = WALK_LOG_INSTRUCTIONS
+    elif signal:
+        instructions = PROBE_LOG_INSTRUCTIONS
+    elif survey:
         instructions = FIELD_MAP_INSTRUCTIONS
     else:
         instructions = MAP_INSTRUCTIONS + (" " + ROUTE_INSTRUCTIONS if routes else "")
     system = SystemMessage(kit.base_prompt + "\n\n" + instructions)
     start = HumanMessage(kit.start)
 
-    def render(found: DungeonMap | FieldMap) -> str:
+    def render(found: DungeonMap | FieldMap | ProbeLog | WalkLog | WorkshopLog | FloorMap) -> str:
         return found.render(routes) if isinstance(found, DungeonMap) else found.render()
 
     def agent(state: MapState) -> dict[str, list[BaseMessage]]:
@@ -89,10 +133,20 @@ def run(kit: Kit, *, routes: bool) -> None:
     graph.add_edge(START, "agent")
     graph.add_conditional_edges("agent", route)
     graph.add_edge("act", "agent")
+    found: DungeonMap | FieldMap | ProbeLog | WalkLog | WorkshopLog | FloorMap
+    if warehouse:
+        found = FloorMap.from_start(kit.start)
+    elif workshop:
+        found = WorkshopLog.from_start(kit.start)
+    elif rune:
+        found = WalkLog.from_start(kit.start)
+    elif signal:
+        found = ProbeLog.from_start(kit.start)
+    elif survey:
+        found = FieldMap.from_start(kit.start)
+    else:
+        found = DungeonMap.from_start(kit.start)
     graph.compile().invoke(
-        {
-            "messages": [],
-            "map": FieldMap.from_start(kit.start) if survey else DungeonMap.from_start(kit.start),
-        },
+        {"messages": [], "map": found},
         config={"recursion_limit": kit.recursion_limit},
     )

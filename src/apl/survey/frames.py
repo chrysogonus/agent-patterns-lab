@@ -28,6 +28,7 @@ def snapshot(
         **({"scouts": scouts} if len(scouts) > 1 else {}),
         "deposits_seen": len(episode.seen & episode.field.deposits),
         "submitted": episode.submitted,
+        **({"attempt": episode.attempt} if episode.attempt > 1 else {}),  # specs/007
     }
 
 

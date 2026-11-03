@@ -33,6 +33,19 @@ Returns the page (`text/html`), which is `apl/viewer/assets/index.html` unchange
 - `models` is the page's model switch (added 2026-10-31): the default model first, then the
   others in `apl.viewer.app.MODELS`, each with the same `.env` settings and its own
   `cannot_run_reason`.
+- `problems.<name>.about` (added 2026-11-02) maps each listed architecture to its About card on
+  that problem, from `apl.viewer.about.about(arch, problem)`: `summary`, the drawing (`width`,
+  `height`, `nodes` with `id`, `label`, `kind` (`model`, `code`, `end`), box, `roles` and
+  `group`; `edges` with `source`, `target`, `label`, `bend`; `groups` for subgraphs) and `facts`,
+  a list of `[label, text]` rows (Model sees, Memory, Tools, Ends when, and the architecture's
+  own rows). Node ids are the compiled graph's node names (`<group>/<name>` inside a subgraph);
+  `tests/viewer/test_about.py` checks them against the graphs. Architectures without a card,
+  such as test doubles, are left out.
+
+The page shows the card for the selected agent, or for the episode being watched, above the
+model turns. During an episode the model node whose `roles` holds the first word of the current
+call's role (`""` for a call without one) is lit: on each `thinking` event, and on the slider
+through the `call` of the step shown.
 
 ## `GET /api/dungeon?level=<L>&seed=<n>`
 

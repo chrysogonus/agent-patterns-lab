@@ -25,6 +25,17 @@ REFERENCES = {
     "fanout": "mapstate",
     "rounds": "mapstate",
     "blackboard": "mapstate",
+    "plan_execute": "mapstate",  # A2 plus planning (specs/006)
+    "reflexion": "mapstate",  # A2 plus retries with notes (specs/007)
+    "supervisor": "mapstate",  # A2 split into a navigator and an inventory helper (specs/008)
+}
+
+# Per-problem changes to the references (specs/009–011): A2r plays only the dungeon, so A6 is
+# measured against A2 on the other problems it plays.
+PROBLEM_REFERENCES: dict[str, dict[str, str]] = {
+    "signal": {"hybrid": "mapstate"},
+    "rune": {"hybrid": "mapstate"},
+    "workshop": {"hybrid": "mapstate"},
 }
 
 _HEADER = (
@@ -48,11 +59,18 @@ _SURVEY_HEADER = (
 )
 
 
+# On the warehouse the same columns, with success in place of right totals (specs/012).
+_WAREHOUSE_HEADER = _SURVEY_HEADER.replace("| Right |", "| Success |").replace(
+    "| Δ right |", "| Δ success |"
+)
+
+
 def _row(
     arch: str,
     rows: Sequence[EpisodeRow],
     reference: Sequence[EpisodeRow] | None,
     survey: bool = False,
+    references: dict[str, str] = REFERENCES,
 ) -> str:
     success = _rate(rows, lambda r: r.success)
     efficiency = _efficiency(rows)
@@ -78,7 +96,7 @@ def _row(
         _count(_median([r.scouts for r in rows])),
         d_success,
         d_efficiency,
-        REFERENCES.get(arch, "—"),
+        references.get(arch, "—"),
     ]
     if survey:
         turns = _median([r.parallel_turns for r in rows])
@@ -117,12 +135,15 @@ def render_comparison(runs: Sequence[LoadedRun], completed: Sequence[EpisodeRow]
         f"Seeds {seeds}, {repeats} repeat{plural}. Differences are against the reference "
         "architecture in the last column.",
     ]
-    survey = first.problem == "survey"
+    survey = first.problem in ("survey", "warehouse")  # both add parallel turns
+    references = REFERENCES | PROBLEM_REFERENCES.get(first.problem, {})
     header, columns = (_SURVEY_HEADER, 13) if survey else (_HEADER, 11)
+    if first.problem == "warehouse":
+        header = _WAREHOUSE_HEADER
     for level in sorted({level for level, _ in groups}):
         lines += ["", f"### {level}", "", header, "| --- " * columns + "|"]
         for arch in order:
             if (level, arch) in groups:
-                reference = groups.get((level, REFERENCES.get(arch, "")))
-                lines.append(_row(arch, groups[level, arch], reference, survey))
+                reference = groups.get((level, references.get(arch, "")))
+                lines.append(_row(arch, groups[level, arch], reference, survey, references))
     return lines

@@ -15,8 +15,10 @@ ARCH_DIR = Path(__file__).resolve().parents[2] / "src" / "apl" / "arch"
 # Architectures may import from apl only these (and each other, inside apl.arch).
 ALLOWED = {
     "apl.kit", "apl.dungeon.tools", "apl.dungeon.results", "apl.survey.tools",
-    "apl.survey.results", "apl.arch",
-}  # fmt: skip  # each problem's tools and results (constitution 2.0.0, specs/005 FR-024)
+    "apl.survey.results", "apl.signal_trace.tools", "apl.signal_trace.results",
+    "apl.rune.tools", "apl.rune.results", "apl.workshop.tools", "apl.workshop.results",
+    "apl.warehouse.tools", "apl.warehouse.results", "apl.arch",
+}  # fmt: skip  # each problem's tools and results (constitution 2.5.0, specs/005, /009–/012)
 # They must use kit.model, never create a model of their own (Constitution I, research R15).
 MODEL_MODULES = (
     "openai",
@@ -218,4 +220,69 @@ def test_the_survey_field_internals_are_forbidden_too(tmp_path: Path) -> None:  
         "peek.py: apl.survey.env",
         "peek.py: apl.survey.generator.generate",
         "peek.py: apl.survey.walk",
+    ]
+
+
+def test_the_signal_trace_internals_are_forbidden_too(tmp_path: Path) -> None:  # specs/009 US4
+    (tmp_path / "ok.py").write_text(
+        "from apl.signal_trace.tools import AgentTools\n"
+        "from apl.signal_trace.results import ToolResult\n"
+    )
+    (tmp_path / "peek.py").write_text(
+        "from apl.signal_trace.generator import generate\nimport apl.signal_trace.env\n"
+        "from apl.signal_trace import strategy\nfrom apl.signal_trace.model import Pipe\n"
+    )
+    assert _forbidden(tmp_path) == [
+        "peek.py: apl.signal_trace.env",
+        "peek.py: apl.signal_trace.generator.generate",
+        "peek.py: apl.signal_trace.model.Pipe",
+        "peek.py: apl.signal_trace.strategy",
+    ]
+
+
+def test_the_rune_floor_internals_are_forbidden_too(tmp_path: Path) -> None:  # specs/010 US4
+    (tmp_path / "ok.py").write_text(
+        "from apl.rune.tools import AgentTools\nfrom apl.rune.results import ToolResult\n"
+    )
+    (tmp_path / "peek.py").write_text(
+        "from apl.rune.generator import generate\nimport apl.rune.env\n"
+        "from apl.rune import rules\nfrom apl.rune.model import Floor\n"
+    )
+    assert _forbidden(tmp_path) == [
+        "peek.py: apl.rune.env",
+        "peek.py: apl.rune.generator.generate",
+        "peek.py: apl.rune.model.Floor",
+        "peek.py: apl.rune.rules",
+    ]
+
+
+def test_the_workshop_internals_are_forbidden_too(tmp_path: Path) -> None:  # specs/011 US4
+    (tmp_path / "ok.py").write_text(
+        "from apl.workshop.tools import AgentTools\nfrom apl.workshop.results import ToolResult\n"
+    )
+    (tmp_path / "peek.py").write_text(
+        "from apl.workshop.generator import generate\nimport apl.workshop.env\n"
+        "from apl.workshop import plans\nfrom apl.workshop.model import Workshop\n"
+    )
+    assert _forbidden(tmp_path) == [
+        "peek.py: apl.workshop.env",
+        "peek.py: apl.workshop.generator.generate",
+        "peek.py: apl.workshop.model.Workshop",
+        "peek.py: apl.workshop.plans",
+    ]
+
+
+def test_the_warehouse_internals_are_forbidden_too(tmp_path: Path) -> None:  # specs/012 US4
+    (tmp_path / "ok.py").write_text(
+        "from apl.warehouse.tools import AgentTools\nfrom apl.warehouse.results import ToolResult\n"
+    )
+    (tmp_path / "peek.py").write_text(
+        "from apl.warehouse.generator import generate\nimport apl.warehouse.env\n"
+        "from apl.warehouse import plans\nfrom apl.warehouse.model import Floor\n"
+    )
+    assert _forbidden(tmp_path) == [
+        "peek.py: apl.warehouse.env",
+        "peek.py: apl.warehouse.generator.generate",
+        "peek.py: apl.warehouse.model.Floor",
+        "peek.py: apl.warehouse.plans",
     ]

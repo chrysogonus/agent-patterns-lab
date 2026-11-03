@@ -44,9 +44,19 @@ class CellView:
 @dataclass(frozen=True, slots=True)
 class Submitted:
     submitted: int
+    # Only for a retrying architecture's wrong total with attempts left (specs/007 R3): it says
+    # the total was wrong, never what the true total is.
+    correct: bool | None = None
+    attempts_left: int | None = None
 
     def to_dict(self) -> dict[str, object]:
-        return {"submitted": self.submitted}
+        if self.correct is None:
+            return {"submitted": self.submitted}
+        return {
+            "submitted": self.submitted,
+            "correct": self.correct,
+            "attempts_left": self.attempts_left,
+        }
 
 
 @dataclass(frozen=True, slots=True)

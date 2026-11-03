@@ -47,6 +47,7 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
 .room { fill: transparent; pointer-events: none; }
 .room.fog { fill: var(--fog); }
 #trail { fill: none; stroke: var(--trail); stroke-width: 3; stroke-opacity: 0.5; }
+#trail-past { fill: none; stroke: var(--trail); stroke-width: 2; stroke-opacity: 0.3; stroke-dasharray: 4 4; }
 #agent, .scout-agent { fill: var(--agent); transition: cx var(--move, 0.25s), cy var(--move, 0.25s); }
 .scout-trail { fill: none; stroke-width: 3; stroke-opacity: 0.5; }
 .s1 { fill: var(--scout1); stroke: var(--scout1); } .s2 { fill: var(--scout2); stroke: var(--scout2); }
@@ -66,6 +67,55 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
 .edge { fill: none; stroke: var(--wall); stroke-width: 4; }
 .start { fill: none; stroke: var(--trail); stroke-width: 2; }
 .right { color: var(--green); } .wrong { color: var(--red); }
+/* the signal trace (specs/009), drawn as in the problem mock-up: a snaking pipe, the water line,
+   wet probes as dots, dry probes as crosses, suspects shaded */
+.seg { fill: var(--floor); stroke: var(--line); }
+.seg.suspect { fill: var(--fog); fill-opacity: 0.45; }
+.seg.found { fill: var(--red); fill-opacity: 0.35; }
+.pipe { fill: none; stroke: var(--muted); stroke-width: 3; stroke-opacity: 0.45; stroke-linejoin: round; }
+.water { fill: none; stroke: var(--solution); stroke-width: 4; stroke-linejoin: round; stroke-linecap: round; }
+.source-dot { fill: var(--solution); }
+.inlet { fill: var(--muted); }
+.source { fill: var(--ink); font-weight: 700; }
+.probe-wet { fill: var(--solution); stroke: var(--card); stroke-width: 1.5; }
+.probe-dry { fill: none; stroke: var(--red); stroke-width: 2.4; stroke-linecap: round; }
+.seg-label { fill: var(--muted); font-size: 7px; font-family: ui-monospace, monospace; pointer-events: none; }
+.broken { fill: none; stroke: var(--red); stroke-width: 2; stroke-dasharray: 3 2; }
+.broken.hide, #ref-marks.hide { display: none; }
+.ref-mark { fill: var(--solution); font-size: 10px; font-weight: 700; font-family: ui-monospace, monospace; }
+/* the rune floor (specs/010), drawn as in the problem mock-up: soft colored tiles, the current walk
+   bold, earlier walks faded, a cross where each trap sprang */
+.tile { stroke: var(--card); stroke-width: 1; }
+.tile.red { fill: var(--red); fill-opacity: 0.42; }
+.tile.blue { fill: var(--blue); fill-opacity: 0.42; }
+.tile.green { fill: var(--green); fill-opacity: 0.42; }
+.tile.yellow { fill: var(--yellow); fill-opacity: 0.42; }
+.tile.start, .tile.goal { fill: var(--floor); stroke: var(--line); stroke-width: 1; }
+.mark { fill: var(--ink); font-size: 14px; font-weight: 600; font-family: ui-monospace, monospace; }
+.axis { fill: var(--muted); font-size: 11px; font-family: ui-monospace, monospace; }
+.rule { fill: var(--ink); font-size: 9px; font-family: ui-monospace, monospace; }
+.reference { fill: none; stroke: var(--solution); stroke-width: 2; stroke-dasharray: 5 4; stroke-linejoin: round; }
+.truth-traps { fill: none; stroke: var(--muted); stroke-width: 1.5; stroke-opacity: 0.6; }
+.walk-now { fill: none; stroke: var(--trail); stroke-width: 4; stroke-linejoin: round; stroke-linecap: round; }
+.walk-past { fill: none; stroke: var(--ink); stroke-width: 2.5; stroke-opacity: 0.25; stroke-linejoin: round; stroke-linecap: round; }
+.trap-mark { fill: none; stroke: var(--red); stroke-width: 2.4; stroke-linecap: round; }
+.rune-agent { fill: var(--agent); }
+.rule.hide, .reference.hide, .truth-traps.hide { display: none; }
+/* the workshop (specs/011), drawn as in the problem mock-up: the recipe tree under the goal, the
+   stock on the raw materials, held counts as badges, a scarce material red when it runs out */
+.w-item { fill: var(--card); stroke: var(--line); stroke-width: 1.2; }
+.w-item.goal { stroke: var(--trail); stroke-width: 2; }
+.w-item.raw { fill: var(--floor); }
+.w-item.made { fill: var(--trail); fill-opacity: 0.2; }
+.w-item.out { fill: var(--red); fill-opacity: 0.25; stroke: var(--red); }
+.w-item.scarce-shown { stroke: var(--red); stroke-width: 2; }
+.w-item.unknown, .w-label.unknown, .w-edge.unknown { display: none; }
+.w-label { fill: var(--ink); font-size: 11px; font-family: ui-monospace, monospace; pointer-events: none; }
+.w-edge { stroke: var(--muted); stroke-width: 1.5; stroke-opacity: 0.6; }
+.w-edge.r2 { stroke-dasharray: 5 4; }
+.w-edge.w-ref.show-ref { stroke: var(--solution); stroke-width: 2.5; stroke-opacity: 1; }
+.badge { fill: var(--trail); }
+.badge-text { fill: var(--card); font-size: 10px; font-weight: 700; font-family: ui-monospace, monospace; }
 #slider { flex: 1 1 160px; }
 #stats { display: grid; grid-template-columns: max-content 1fr; gap: 2px 12px; margin-top: 8px; }
 #stats dt { color: var(--muted); }
@@ -83,6 +133,33 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
 .card li .result.error { color: var(--red); }
 .card .waiting { color: var(--muted); font-style: italic; }
 .end { border-color: var(--trail); }
+/* the warehouse (specs/012): shelves, packages on their cells or robots */
+.shelf { fill: var(--wall); opacity: 0.85; }
+.package { fill: var(--yellow); stroke: var(--card); stroke-width: 1.5; }
+.package.carried { stroke: var(--ink); }
+.package.hide { display: none; }
+/* the About card: the selected agent's graph on this game, the node behind the current step lit */
+#side { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+#about { background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; }
+#about summary { cursor: pointer; font-weight: 600; }
+#about-body > p { margin: 4px 0 6px; color: var(--muted); }
+#about-body svg { width: 100%; max-width: 560px; height: auto; display: block; }
+.ab-node { stroke-width: 1.5; }
+.ab-node.model { fill: var(--card); stroke: var(--ink); }
+.ab-node.code { fill: var(--bg); stroke: var(--muted); stroke-dasharray: 5 3; }
+.ab-node.end { fill: none; stroke: var(--muted); }
+.ab-node.active { fill: var(--trail); fill-opacity: 0.25; stroke: var(--trail); stroke-width: 2.5; }
+.ab-group { fill: none; stroke: var(--muted); stroke-opacity: 0.6; stroke-width: 1.2; stroke-dasharray: 2 3; }
+.ab-edge { fill: none; stroke: var(--muted); stroke-width: 1.3; }
+.ab-head { fill: var(--muted); }
+.ab-text { fill: var(--ink); font: 12px ui-monospace, monospace; text-anchor: middle; dominant-baseline: central; }
+.ab-label { fill: var(--muted); font: 10.5px system-ui, sans-serif; text-anchor: middle; dominant-baseline: central; }
+.ab-labelbox { fill: var(--card); }
+.ab-glabel { fill: var(--muted); font: 10.5px system-ui, sans-serif; }
+.ab-legend { color: var(--muted); font-size: 12px; margin-top: 4px; }
+#about-facts { display: grid; grid-template-columns: max-content 1fr; gap: 3px 10px; margin: 8px 0 0; font-size: 13px; }
+#about-facts dt { color: var(--muted); }
+#about-facts dd { margin: 0; }
 @media (prefers-reduced-motion: reduce) { #agent, .scout-agent { transition: none; } }
 </style>
 </head>
@@ -124,7 +201,10 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
     </div>
     <dl id="stats"></dl>
   </section>
-  <section id="panel" aria-label="Model turns"></section>
+  <section id="side">
+    <details id="about" open><summary id="about-title">How the agent works</summary><div id="about-body"></div></details>
+    <section id="panel" aria-label="Model turns"></section>
+  </section>
 </main>
 <script>
 (() => {
@@ -154,21 +234,39 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
   const isTestSeed = (n) => S.options && n >= S.options.test_seeds[0] && n <= S.options.test_seeds[1];
   const problemOf = () => $("problem").value || "dungeon";
   const isSurvey = () => !!S.dungeon && S.dungeon.problem === "survey";
+  const isSignal = () => !!S.dungeon && S.dungeon.problem === "signal";
+  const isRune = () => !!S.dungeon && S.dungeon.problem === "rune";
+  const isWorkshop = () => !!S.dungeon && S.dungeon.problem === "workshop";
+  const isWarehouse = () => !!S.dungeon && S.dungeon.problem === "warehouse";
+  const PATHS = { survey: "/api/survey", signal: "/api/signal", rune: "/api/rune", workshop: "/api/workshop", warehouse: "/api/warehouse" };
+  // Problems whose SVG brings its own reference, shown from the start (specs/010, specs/011).
+  const OWN_REFERENCE = ["rune", "workshop"];
 
   /* ---------- the world: a dungeon or a survey field (specs/005) ---------- */
   async function loadDungeon(level, seed, problem = problemOf()) {
-    const path = problem === "survey" ? "/api/survey" : "/api/dungeon";
+    const path = PATHS[problem] || "/api/dungeon";
     const { ok, data } = await api(`${path}?level=${encodeURIComponent(level)}&seed=${encodeURIComponent(seed)}`);
     if (!ok) { message(data.error); return false; }
     data.problem = data.problem || "dungeon";
+    // The rune floor outlines its reference path from the start (specs/010 US1/AC1); the shared
+    // toggle goes back to what it was when another problem is shown.
+    const was = S.dungeon ? S.dungeon.problem : null;
+    const own = OWN_REFERENCE.includes(data.problem), had = OWN_REFERENCE.includes(was);
+    if (own && !had) { S.keptSolution = $("solution").checked; $("solution").checked = true; }
+    if (!own && had) $("solution").checked = !!S.keptSolution;
     S.dungeon = data;
     if ($("problem").value !== data.problem) { $("problem").value = data.problem; fillProblem(); }
-    $("solution-label").textContent = data.problem === "survey" ? "Reference walk" : "Shortest solution";
+    const labels = { survey: "Reference walk", signal: "Reference probes", rune: "Reference path", workshop: "Reference plan", warehouse: "Reference walk" };
+    $("solution-label").textContent = labels[data.problem] || "Shortest solution";
     $("map").innerHTML = data.svg;
-    const line = document.createElementNS(SVGNS, "polyline");
-    line.id = "solution-line";
-    line.setAttribute("points", data.solution.map((f) => center(f.position).join(",")).join(" "));
-    $("map").querySelector("svg").insertBefore(line, $("trail"));
+    if (data.problem === "signal") referenceMarks(data.solution);
+    else if (OWN_REFERENCE.includes(data.problem)) { /* the SVG brings its own reference */ }
+    else {
+      const line = document.createElementNS(SVGNS, "polyline");
+      line.id = "solution-line";
+      line.setAttribute("points", data.solution.map((f) => center(f.position).join(",")).join(" "));
+      $("map").querySelector("svg").insertBefore(line, $("trail"));
+    }
     $("level").value = data.level;
     $("seed").value = data.seed;
     toggles();
@@ -181,16 +279,194 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
   function toggles() {
     const line = $("solution-line");
     if (line) line.classList.toggle("show", $("solution").checked);
+    const marks = $("ref-marks");
+    if (marks) marks.classList.toggle("hide", !$("solution").checked);
+    // The rune floor's truth: the rule and R0's traps hide under "Agent's view"; the reference
+    // path shows when asked for and the truth is shown (specs/010 contracts/viewer.md).
+    const fog = $("fog").checked;
+    for (const id of ["rule", "truth-traps"]) { const x = $(id); if (x && isRune()) x.classList.toggle("hide", fog); }
+    const path = $("reference");
+    if (path && isRune()) path.classList.toggle("hide", fog || !$("solution").checked);
     render(S.current);
+  }
+  // The reference's probes, numbered in order on their boxes (specs/009 contracts/viewer.md).
+  function referenceMarks(frames) {
+    const group = document.createElementNS(SVGNS, "g");
+    group.id = "ref-marks";
+    let n = 0;
+    for (const f of frames) {
+      if (!f.action || f.action.tool !== "probe") continue;
+      const box = $("map").querySelector(`.seg[data-seg="${f.action.args[0]}"]`);
+      if (!box) continue;
+      const mark = document.createElementNS(SVGNS, "text");
+      mark.setAttribute("class", "ref-mark");
+      mark.setAttribute("x", Number(box.getAttribute("x")) + Number(box.getAttribute("width")) - 2);
+      mark.setAttribute("y", Number(box.getAttribute("y")) + Number(box.getAttribute("height")) - 3);
+      mark.setAttribute("text-anchor", "end");
+      mark.textContent = String(++n);
+      group.append(mark);
+    }
+    $("map").querySelector("svg").append(group);
+  }
+  // Each segment's feeder (0 is S), from the runs the pipe was sent with.
+  function feeders() {
+    const feeder = new Map();
+    for (const r of S.dungeon.runs || []) {
+      feeder.set(r.first, r.from === "S" ? 0 : r.from);
+      for (let k = r.first + 1; k <= r.last; k++) feeder.set(k, k - 1);
+    }
+    return feeder;
+  }
+  // A segment's centre, and the source's, from the drawn pipe.
+  function centreOf(k) {
+    const box = $("map").querySelector(`.seg[data-seg="${k}"]`);
+    if (!box) return null;
+    const x = Number(box.getAttribute("x")), y = Number(box.getAttribute("y"));
+    return [x + Number(box.getAttribute("width")) / 2, y + Number(box.getAttribute("height")) / 2];
+  }
+  const SEG_STEP = 26; // one box in the pipe drawing (render_svg.CELL)
+  function svgEl(tag, attrs) {
+    const node = document.createElementNS(SVGNS, tag);
+    for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
+    return node;
+  }
+  function renderSignal(frames) {
+    const f = frames[S.current];
+    const suspect = new Set(f.suspects || []), wet = new Set(), feeder = feeders();
+    const answers = f.answers || [];
+    for (const [k, water] of answers) {
+      // Water reached k, so it reached every segment between S and k (FR-016).
+      if (water) for (let j = k; j; j = feeder.get(j) || 0) wet.add(j);
+    }
+    const found = suspect.size === 1;
+    document.querySelectorAll(".seg").forEach((box) => {
+      const k = Number(box.dataset.seg);
+      box.classList.toggle("suspect", suspect.has(k) && !found);
+      box.classList.toggle("found", found && suspect.has(k));
+    });
+    // The water line: along each run from what feeds it, as far as the segments are wet.
+    const water = $("water");
+    water.replaceChildren();
+    for (const r of S.dungeon.runs || []) {
+      // Each run comes in one box left of its first segment (the drawn inlet).
+      if (r.from !== "S" && !wet.has(r.from)) continue;
+      const first = centreOf(r.first);
+      const start = [first[0] - SEG_STEP, first[1]];
+      const points = [start];
+      for (let k = r.first; k <= r.last && wet.has(k); k++) points.push(centreOf(k));
+      if (points.length > 1) water.append(svgEl("polyline", { class: "water", points: points.map((p) => p.join(",")).join(" ") }));
+    }
+    // The probes: a dot where water was found, a cross where it was not; the latest one larger.
+    const marks = $("probes");
+    marks.replaceChildren();
+    answers.forEach(([k, isWet], i) => {
+      const c = centreOf(k);
+      if (!c) return;
+      const r = i === answers.length - 1 ? 6 : 4.5;
+      if (isWet) marks.append(svgEl("circle", { class: "probe-wet", cx: c[0], cy: c[1], r }));
+      else marks.append(svgEl("path", { class: "probe-dry", d: `M${c[0] - r} ${c[1] - r}L${c[0] + r} ${c[1] + r}M${c[0] + r} ${c[1] - r}L${c[0] - r} ${c[1] + r}` }));
+    });
+    const ring = $("broken");
+    if (ring) ring.classList.toggle("hide", $("fog").checked);
+  }
+
+  // A tile's centre, from the drawn floor (cells are named like "C3").
+  function tileCentre(name) {
+    const tile = $("map").querySelector(`.tile[data-cell="${name}"]`);
+    if (!tile) return null;
+    const x = Number(tile.getAttribute("x")), y = Number(tile.getAttribute("y"));
+    return [x + Number(tile.getAttribute("width")) / 2, y + Number(tile.getAttribute("height")) / 2];
+  }
+  function cross(c, r, cls) {
+    return svgEl("path", { class: cls, d: `M${c[0] - r} ${c[1] - r}L${c[0] + r} ${c[1] + r}M${c[0] + r} ${c[1] - r}L${c[0] - r} ${c[1] + r}` });
+  }
+  function renderRune(frames) {
+    const f = frames[S.current], d = S.dungeon;
+    const line = (cells, cls) => {
+      const points = [d.start, ...cells].map(tileCentre).filter(Boolean);
+      return points.length > 1 ? svgEl("polyline", { class: cls, points: points.map((p) => p.join(",")).join(" ") }) : null;
+    };
+    const trails = $("trails");
+    trails.replaceChildren();
+    for (const w of f.walks || []) {
+      // An earlier walk, faded, up to the trap's tile where it ended there.
+      const past = line([...w.cells, ...(w.ending === "trap" ? [w.at] : [])], "walk-past");
+      if (past) trails.append(past);
+    }
+    const now = line([...(f.walk || []), ...(f.end_reason === "goal" ? [d.goal] : [])], "walk-now");
+    if (now) trails.append(now);
+    const traps = $("traps");
+    traps.replaceChildren();
+    (f.traps || []).forEach((t, i) => {
+      const c = tileCentre(t.cell);
+      if (c) traps.append(cross(c, i === f.traps.length - 1 ? 8 : 6, "trap-mark"));
+    });
+    const agent = $("agent");
+    agent.replaceChildren();
+    const at = tileCentre(f.end_reason === "goal" ? d.goal : f.position);
+    if (at) agent.append(svgEl("circle", { class: "rune-agent", cx: at[0], cy: at[1], r: 7 }));
+  }
+
+  // The workshop: what the agent knows opens the tree; stock, badges and the goal follow the frame.
+  function renderWorkshop(frames) {
+    const f = frames[S.current], d = S.dungeon, fog = $("fog").checked;
+    const inspected = new Set(f.inspected || []);
+    const known = new Set([d.goal, ...Object.keys(d.stock)]);
+    for (const item of inspected) for (const recipe of d.recipes[item] || []) for (const i of recipe) known.add(i);
+    const held = f.inventory || {};
+    $("map").querySelectorAll(".w-item").forEach((box) => {
+      const item = box.dataset.item, raw = item in d.stock;
+      box.classList.toggle("unknown", fog && !known.has(item));
+      box.classList.toggle("made", !!held[item] && !raw || (item === d.goal && f.end_reason === "goal"));
+      box.classList.toggle("out", raw && d.scarce.includes(item) && f.stock[item] === 0);
+      box.classList.toggle("scarce-shown", !fog && d.scarce.includes(item)); // the truth view only
+    });
+    $("map").querySelectorAll(".w-label").forEach((label) => {
+      const item = label.dataset.label, raw = item in d.stock;
+      label.classList.toggle("unknown", fog && !known.has(item));
+      const unseen = fog && !raw && !inspected.has(item);
+      label.textContent = raw ? `${item} ×${f.stock[item]}` : unseen ? `${item} ?` : item;
+    });
+    $("map").querySelectorAll(".w-edge").forEach((edge) => {
+      edge.classList.toggle("unknown", fog && !inspected.has(edge.dataset.from));
+      edge.classList.toggle("show-ref", !fog && $("solution").checked);
+    });
+    const badges = $("badges");
+    badges.replaceChildren();
+    for (const [item, n] of Object.entries(held)) {
+      const box = $("map").querySelector(`.w-item[data-item="${item}"]`);
+      if (!box) continue;
+      const x = Number(box.getAttribute("x")) + Number(box.getAttribute("width")) - 2, y = Number(box.getAttribute("y")) + 2;
+      badges.append(svgEl("circle", { class: "badge", cx: x, cy: y, r: 8 }));
+      const label = svgEl("text", { class: "badge-text", x, y: y + 3.5, "text-anchor": "middle" });
+      label.textContent = `×${n}`;
+      badges.append(label);
+    }
   }
 
   /* ---------- drawing one step (as the M1 player does) ---------- */
   function render(n, ms = 250) {
     if (!S.dungeon) return;
+    // While an episode's own world is still loading, its frames do not fit the world shown.
+    if (S.start && (S.start.problem || "dungeon") !== S.dungeon.problem) return;
     const frames = S.frames.length ? S.frames : [S.dungeon.solution[0]];
     S.current = Math.max(0, Math.min(frames.length - 1, n));
+    const behind = frames[S.current].call != null ? S.turns.get(frames[S.current].call) : null;
+    highlight(behind ? behind.role : undefined);
+    if (isSignal() || isRune() || isWorkshop()) {
+      if (isSignal()) renderSignal(frames); else if (isRune()) renderRune(frames); else renderWorkshop(frames);
+      $("slider").max = String(frames.length - 1);
+      $("slider").value = String(S.current);
+      stats();
+      return;
+    }
     const f = frames[S.current];
-    const shown = frames.slice(0, S.current + 1);
+    const all = frames.slice(0, S.current + 1);
+    // A4's attempts (specs/007): the trail and fog of the current attempt; earlier ones dashed.
+    const attempt = f.attempt || 1;
+    const first = all.findIndex((g) => (g.attempt || 1) === attempt);
+    const shown = all.slice(first), past = all.slice(0, first);
+    pastTrail().setAttribute("points", past.map((g) => center(positionOf(g, 0)).join(",")).join(" "));
     const count = f.scouts ? f.scouts.length : 1;
     document.querySelectorAll(".scout-agent, .scout-trail").forEach((x) => { if (Number(x.dataset.scout) >= count) x.remove(); });
     S.drawn = S.drawn || [];
@@ -215,17 +491,45 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
     fail.setAttribute("x", S.dungeon.margin + failed[0] * S.dungeon.cell);
     fail.setAttribute("y", S.dungeon.margin + failed[1] * S.dungeon.cell);
     const visited = new Set();
-    for (const g of shown) for (let i = 0; i < (g.scouts ? g.scouts.length : 1); i++) {
+    if (f.seen) for (const q of f.seen) visited.add(`room-${q[0]}-${q[1]}`); // the warehouse's corridors
+    else for (const g of shown) for (let i = 0; i < (g.scouts ? g.scouts.length : 1); i++) {
       const q = positionOf(g, i);
       visited.add(`room-${q[0]}-${q[1]}`);
     }
     const fog = $("fog").checked;
     document.querySelectorAll(".room").forEach((x) => x.classList.toggle("fog", fog && !visited.has(x.id)));
+    if (f.packages) drawPackages(f, fog ? visited : null);
     $("slider").max = String(frames.length - 1);
     $("slider").value = String(S.current);
     stats();
   }
 
+  // The warehouse's packages: on their cell, on their robot (a corner of its cell), or gone once
+  // delivered; under the fog only those in seen corridors or carried show (specs/012).
+  function drawPackages(f, visible) {
+    const C = S.dungeon.cell, M = S.dungeon.margin;
+    for (const p of f.packages) {
+      const box = document.querySelector(`.package[data-package="${p.name}"]`);
+      if (!box) continue;
+      const hidden = p.delivered || (visible && p.carrier === null && !visible.has(`room-${p.cell[0]}-${p.cell[1]}`));
+      box.classList.toggle("hide", hidden);
+      box.classList.toggle("carried", p.carrier !== null);
+      if (hidden) continue;
+      const size = Number(box.getAttribute("width")), offset = p.carrier !== null ? 2 : (C - size) / 2;
+      box.setAttribute("x", M + p.cell[0] * C + offset);
+      box.setAttribute("y", M + p.cell[1] * C + offset);
+    }
+  }
+
+  function pastTrail() {
+    let line = $("trail-past");
+    if (!line) {
+      line = document.createElementNS(SVGNS, "polyline");
+      line.id = "trail-past";
+      $("trail").before(line);
+    }
+    return line;
+  }
   // Scout i's room in a frame; frames of single-agent episodes have no "scouts".
   function positionOf(g, i) {
     if (g.scouts) return g.scouts[i] ? g.scouts[i].position : null;
@@ -257,14 +561,47 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
     if (!d) return;
     const f = S.frames[S.current];
     const steps = Math.max(0, ...S.frames.slice(0, S.current + 1).map((g) => g.counted || 0));
-    const best = isSurvey() ? "reference" : "optimal";
-    rows.push([isSurvey() ? "Field" : "Dungeon", `${d.level} seed ${d.seed}`]);
+    const best = isSurvey() || isSignal() || isWarehouse() ? "reference" : "optimal";
+    const world = isWarehouse() ? "Warehouse" : isWorkshop() ? "Workshop" : isRune() ? "Floor" : isSignal() ? "Pipe" : isSurvey() ? "Field" : "Dungeon";
+    rows.push([world, `${d.level} seed ${d.seed}`]);
+    if (S.attempts) rows.push(["Attempt", `${(f && f.attempt) || 1} / ${S.attempts}`]);
     rows.push(["Steps", S.episode ? `${steps} / ${d.budget} (${best} ${d.optimal_steps})` : `budget ${d.budget}, ${best} ${d.optimal_steps}`]);
     if (isSurvey()) {
       rows.push(["True total", String(d.true_total)]);
       if (f && f.deposits_seen !== undefined) rows.push(["Seen so far", String(f.deposits_seen)]);
       const submitted = f && f.submitted !== null && f.submitted !== undefined ? f.submitted : null;
       if (submitted !== null) rows.push(["Submitted", `${submitted} — ${submitted === d.true_total ? "right" : "wrong"}`]);
+    }
+    if (isSignal() && f) {
+      rows.push(["Probes", `${f.probes} (reference ${d.optimal_steps - 1})`]);
+      rows.push(["Suspects left", String((f.suspects || []).length)]);
+      rows.push(["Wasted probes", String(f.wasted)]);
+      if (!$("fog").checked) rows.push(["Broken", String(d.broken)]);
+      if (f.submitted !== null && f.submitted !== undefined) rows.push(["Submitted", `${f.submitted} — ${f.submitted === d.broken ? "right" : "wrong"}`]);
+    }
+    if (isRune() && f) {
+      rows.push(["Walk", String(f.walk_number)]);
+      rows.push(["Traps", f.repeated ? `${f.traps_count} (${f.repeated} repeated)` : String(f.traps_count)]);
+      if (!$("fog").checked) rows.push(["Rule", d.rule]);
+      if (f.end_reason === "goal") rows.push(["Result", "Reached G"]);
+      else if (f.end_reason === "budget") rows.push(["Result", "Out of budget"]);
+    }
+    if (isWorkshop() && f) {
+      rows.push(["Goal", d.goal]);
+      rows.push(["Inspected", String((f.inspected || []).length)]);
+      rows.push(["Wasted", String(f.wasted)]);
+      if (!$("fog").checked) rows.push(["Scarce", d.scarce.join(", ") || "none"]);
+      if (f.end_reason === "goal") rows.push(["Result", `Crafted ${d.goal}`]);
+      else if (f.end_reason === "stuck") rows.push(["Result", "Stuck"]);
+      else if (f.end_reason === "budget") rows.push(["Result", "Out of budget"]);
+    }
+    if (isWarehouse() && f) {
+      rows.push(["Delivered", `${f.delivered} / ${d.packages}`]);
+      rows.push(["Parallel turns", String(f.parallel_turns)]);
+      rows.push(["Idle robot-turns", String(f.idle_robot_turns)]);
+      if (f.scouts) rows.push(["Carrying", f.scouts.map((s, i) => `robot ${i}: ${s.carrying || "nothing"}`).join(" · ")]);
+      if (f.end_reason === "delivered") rows.push(["Result", "Every package delivered"]);
+      else if (f.end_reason === "budget") rows.push(["Result", "Out of budget"]);
     }
     if (S.episode) {
       const turns = [...S.turns.values()];
@@ -276,7 +613,7 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
       rows.push(["Time", `${seconds.toFixed(1)} s`]);
       if (f && f.action) rows.push(["Step", `${f.action.tool} ${f.action.args.join(" ")} → ${f.ok ? "ok" : f.error}`]);
       const keys = (inventory) => inventory.length ? inventory.map((c) => `${c} key`).join(", ") : "empty";
-      if (isSurvey()) { /* no inventories on the field */ }
+      if (isSurvey() || isSignal() || isRune() || isWorkshop() || isWarehouse()) { /* own rows above */ }
       else if (f && f.scouts) rows.push(["Inventories", f.scouts.map((s, i) => `scout ${i}: ${keys(s.inventory)}`).join(" · ")]);
       else if (f) rows.push(["Inventory", keys(f.inventory)]);
       if (S.end) {
@@ -293,6 +630,7 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
     for (const [k, v] of rows) {
       const dd = el("dd", v);
       if (k === "Submitted") dd.className = v.endsWith("right") ? "right" : "wrong";
+      if (k === "Result") dd.className = v === "Reached G" || v.startsWith("Crafted") || v.startsWith("Every") ? "right" : "wrong";
       dl.append(el("dt", k), dd);
     }
   }
@@ -303,7 +641,7 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
       const node = el("div", null, "card");
       node.append(el("h3", `Model call ${call}${role ? ` · ${role}` : ""}`));
       $("panel").append(node);
-      S.turns.set(call, { node, items: [], done: false, usage: null });
+      S.turns.set(call, { node, items: [], done: false, usage: null, role: role ?? null });
     }
     return S.turns.get(call);
   }
@@ -313,6 +651,7 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
     return box;
   }
   function onThinking(data) {
+    highlight(data.role ?? null);
     const t = card(data.call, data.role);
     if (data.new_input.length) {
       const box = el("details");
@@ -363,6 +702,7 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
   function onStep(data) {
     data.frame.counted = data.step; // null for calls after the end, which cost no step
     data.frame.actor = data.scout || 0;
+    data.frame.call = data.call; // the model call behind the step, for the About card
     S.frames.push(data.frame);
     const index = S.frames.length - 1;
     const t = S.turns.get(data.call);
@@ -374,6 +714,15 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
       slot.result.classList.toggle("error", !r.ok);
       slot.item.addEventListener("click", () => { $("follow").checked = false; render(index); });
     }
+    if ($("follow").checked) follow(); else render(S.current);
+  }
+  function onRestart(data) {
+    S.attempts = data.of;
+    S.frames.push(data.frame);
+    const node = el("div", null, "card");
+    node.append(el("h3", `Attempt ${data.attempt} starts`));
+    node.append(el("div", "The world is back at the start; the steps so far still count.", "waiting"));
+    $("panel").append(node);
     if ($("follow").checked) follow(); else render(S.current);
   }
   // Steps can arrive in a burst (A6's code walks a whole route between two model calls), so the
@@ -397,8 +746,11 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
     const r = data.row;
     const node = el("div", null, "card end");
     node.append(el("h3", "Episode over"));
-    const total = r && r.problem === "survey" ? ` — submitted ${r.submitted_total ?? "nothing"}, true ${r.true_total}${r.success ? ", right" : ""}` : "";
-    const best = r && r.problem === "survey" ? "reference" : "optimal";
+    let total = r && r.problem === "survey" ? ` — submitted ${r.submitted_total ?? "nothing"}, true ${r.true_total}${r.success ? ", right" : ""}` : "";
+    if (r && r.problem === "signal") total = ` — submitted ${r.submitted_segment ?? "nothing"}, broken ${r.broken_segment}${r.success ? ", right" : ""}`;
+    if (r && r.problem === "rune") total = ` — ${r.traps ?? 0} trap${r.traps === 1 ? "" : "s"}, ${r.repeated_traps ?? 0} repeated`;
+    if (r && r.problem === "workshop") total = ` — ${r.wasted ?? 0} scarce unit${r.wasted === 1 ? "" : "s"} wasted`;
+    const best = r && (r.problem === "survey" || r.problem === "signal" || r.problem === "warehouse") ? "reference" : "optimal";
     node.append(el("div", !r ? `Error: ${data.error}` : r.status === "error" ? `Infrastructure error: ${r.error}` :
       `${r.end_reason}${r.success ? ` in ${r.steps} steps (${best} ${r.optimal_steps})` : ""}${total}${r.arch_error ? ` — ${r.arch_error}` : ""}`));
     $("panel").append(node);
@@ -413,7 +765,7 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
   async function attach(id, live) {
     if (S.source) S.source.close();
     Object.assign(S, { episode: id, frames: [], current: 0, turns: new Map(), start: null, end: null,
-      waitingSince: null, startedAt: null });
+      waitingSince: null, startedAt: null, attempts: null });
     $("panel").replaceChildren();
     $("follow").checked = live;
     $("stop").disabled = !live;
@@ -422,9 +774,11 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
     source.addEventListener("start", async (e) => {
       const data = JSON.parse(e.data);
       S.start = data;
+      S.attempts = data.attempts || null;
       S.startedAt = Date.parse(data.started) || Date.now();
       S.frames = [data.frame]; // before the await: steps may arrive while the dungeon loads
       const problem = data.problem || "dungeon";
+      drawAbout(data.arch, problem);
       if (!S.dungeon || S.dungeon.problem !== problem || S.dungeon.level !== data.level || S.dungeon.seed !== data.seed) {
         await loadDungeon(data.level, data.seed, problem);
       }
@@ -433,6 +787,7 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
     source.addEventListener("thinking", (e) => onThinking(JSON.parse(e.data)));
     source.addEventListener("turn", (e) => onTurn(JSON.parse(e.data)));
     source.addEventListener("step", (e) => onStep(JSON.parse(e.data)));
+    source.addEventListener("restart", (e) => onRestart(JSON.parse(e.data)));
     source.addEventListener("stopping", () => message("Stopping after the current model turn…", true));
     source.addEventListener("end", (e) => onEnd(JSON.parse(e.data)));
     // A saved episode is complete once sent; a live one reconnects and resumes after its last id.
@@ -446,7 +801,7 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
     select.replaceChildren(el("option", "—"));
     select.firstChild.value = "";
     for (const e of data) {
-      const label = `${e.running ? "▶ running: " : ""}${e.problem === "survey" ? "survey " : ""}${e.arch} ${e.level} ${e.seed} · ${e.model || "?"} · ${e.end_reason || ""} · ${e.id.slice(0, 15)}`;
+      const label = `${e.running ? "▶ running: " : ""}${e.problem === "survey" || e.problem === "warehouse" ? `${e.problem} ` : ""}${e.arch} ${e.level} ${e.seed} · ${e.model || "?"} · ${e.end_reason || ""} · ${e.id.slice(0, 15)}`;
       const option = el("option", label);
       option.value = e.id;
       select.append(option);
@@ -460,7 +815,12 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
     const seed = $("seed").value.trim();
     if (!/^\d+$/.test(seed)) { message(`seed must be a whole number ≥ 0, got "${seed}"`); return; }
     if (S.source && !S.end) { message("An episode is running; stop it first or wait for it to end."); return; }
-    if (await loadDungeon($("level").value, seed)) {
+    // The old episode's frames belong to the old world: drop them before the new one is drawn
+    // (a signal frame has no position for a dungeon or field), and keep them if loading fails.
+    const kept = S.frames;
+    S.frames = [];
+    if (!(await loadDungeon($("level").value, seed))) S.frames = kept;
+    else {
       Object.assign(S, { episode: null, frames: [], current: 0, start: null, end: null });
       $("panel").replaceChildren();
       $("saved").value = "";
@@ -534,6 +894,85 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
       return b;
     }));
     $("run").disabled = !p.architectures.length;
+    drawAbout();
+  }
+
+  /* ---------- the About card: what the agent defines on this game ---------- */
+  function clip(n, toward) { // where the line from n's center toward a point leaves n's box
+    const cx = n.x + n.w / 2, cy = n.y + n.h / 2, dx = toward[0] - cx, dy = toward[1] - cy;
+    const s = Math.min(dx ? n.w / 2 / Math.abs(dx) : Infinity, dy ? n.h / 2 / Math.abs(dy) : Infinity);
+    return [cx + dx * s, cy + dy * s];
+  }
+  function edgePath(a, b, bend) { // a quadratic curve, bent to the right of its direction
+    if (a === b) { // a loop above the node, or below it when bend < 0
+      const x = a.x + a.w / 2, y = bend < 0 ? a.y + a.h : a.y, up = bend < 0 ? -1 : 1;
+      return { d: `M${x - 16},${y} C${x - 30},${y - 34 * up} ${x + 30},${y - 34 * up} ${x + 16},${y}`,
+        at: [x, y - 30 * up] };
+    }
+    const ca = [a.x + a.w / 2, a.y + a.h / 2], cb = [b.x + b.w / 2, b.y + b.h / 2];
+    const dx = cb[0] - ca[0], dy = cb[1] - ca[1], len = Math.hypot(dx, dy) || 1;
+    const c = [(ca[0] + cb[0]) / 2 - (dy / len) * bend, (ca[1] + cb[1]) / 2 + (dx / len) * bend];
+    const from = clip(a, c), to = clip(b, c);
+    const at = [(from[0] + 2 * c[0] + to[0]) / 4, (from[1] + 2 * c[1] + to[1]) / 4];
+    return { d: `M${from.join(",")} Q${c.join(",")} ${to.join(",")}`, at };
+  }
+  function drawAbout(arch = $("arch").value, problem = problemOf()) {
+    const card = (((S.options.problems || {})[problem] || {}).about || {})[arch];
+    $("about").hidden = !card;
+    S.aboutNodes = [];
+    S.aboutShown = [arch, problem];
+    if (!card) return;
+    $("about-title").textContent = `How ${arch} plays the ${problem}`;
+    const svg = svgEl("svg", { viewBox: `0 0 ${card.width} ${card.height}`, role: "img", "aria-label": card.summary });
+    const marker = svgEl("marker", { id: "ab-arrow", viewBox: "0 0 10 10", refX: "9", refY: "5",
+      markerWidth: "7", markerHeight: "7", orient: "auto" });
+    marker.append(svgEl("path", { d: "M0,0 L10,5 L0,10 z", class: "ab-head" }));
+    const defs = svgEl("defs", {});
+    defs.append(marker);
+    svg.append(defs);
+    for (const g of card.groups) {
+      svg.append(svgEl("rect", { x: g.x, y: g.y, width: g.w, height: g.h, rx: 8, class: "ab-group" }));
+      const label = svgEl("text", { x: g.x + 8, y: g.y + g.h - 7, class: "ab-glabel" }); // clear of the handoffs
+      label.textContent = g.label;
+      svg.append(label);
+    }
+    const byId = new Map(card.nodes.map((n) => [n.id, n]));
+    const labels = [];
+    for (const e of card.edges) {
+      const { d, at } = edgePath(byId.get(e.source), byId.get(e.target), e.bend);
+      svg.append(svgEl("path", { d, class: "ab-edge", "marker-end": "url(#ab-arrow)" }));
+      if (e.label) {
+        const label = svgEl("text", { x: at[0], y: at[1], class: "ab-label" });
+        label.textContent = e.label;
+        labels.push(label);
+      }
+    }
+    for (const n of card.nodes) {
+      const rect = svgEl("rect", { x: n.x, y: n.y, width: n.w, height: n.h, rx: n.kind === "end" ? n.h / 2 : 6,
+        class: `ab-node ${n.kind}` });
+      const text = svgEl("text", { x: n.x + n.w / 2, y: n.y + n.h / 2, class: "ab-text" });
+      text.textContent = n.label;
+      svg.append(rect, text);
+      if (n.kind === "model") S.aboutNodes.push({ rect, roles: n.roles });
+    }
+    svg.append(...labels);
+    const facts = el("dl");
+    facts.id = "about-facts";
+    for (const [label, text] of card.facts) facts.append(el("dt", label), el("dd", text));
+    const legend = el("div", "Solid: a model call · dashed: plain code · lit: the call behind the step shown", "ab-legend");
+    $("about-body").replaceChildren(el("p", card.summary), svg, legend, facts);
+    for (const label of labels) { // a card-colored box behind each label, now that it has a size
+      const box = label.getBBox();
+      if (!box.width) continue; // the card is closed; it is drawn again when opened
+      label.before(svgEl("rect", { x: box.x - 2, y: box.y, width: box.width + 4, height: box.height,
+        class: "ab-labelbox" }));
+    }
+  }
+  // Lights the model node of a role ("planner", "executor (subgoal 2)"; null: a call without a
+  // role); undefined lights nothing.
+  function highlight(role) {
+    const word = role === undefined ? undefined : role ? role.split(" ")[0] : "";
+    for (const { rect, roles } of S.aboutNodes || []) rect.classList.toggle("active", roles.includes(word));
   }
 
   /* ---------- start ---------- */
@@ -546,6 +985,8 @@ main { display: grid; grid-template-columns: minmax(280px, 560px) minmax(300px, 
     }
     fillProblem();
     $("problem").addEventListener("change", () => { fillProblem(); generate(); });
+    $("arch").addEventListener("change", () => drawAbout());
+    $("about").addEventListener("toggle", () => { if ($("about").open) drawAbout(S.aboutShown[0], S.aboutShown[1]); });
     for (const m of data.models) { const o = el("option", m.name); o.value = m.name; $("model").append(o); }
     const canRun = () => {
       const reason = data.models.find((m) => m.name === $("model").value).cannot_run_reason;

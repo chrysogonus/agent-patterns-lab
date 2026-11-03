@@ -3,6 +3,8 @@
 The orchestrator is called once with the start room. Each scout sees only its own map and never
 hears from the others (specs/004 contracts/orchestrators.md). On the survey field the
 orchestrator is called once more with the scouts' reports and submits the total (specs/005 R14).
+In the warehouse the scouts are robots and there is no collect step: the last delivery ends the
+episode (specs/012).
 Written by the agent at the experimenter's request.
 """
 
@@ -48,6 +50,15 @@ When all scouts are done, you get their reports and submit the total. You decide
 once, now. Answer with one JSON object and nothing else:
 {"scouts": [{"task": "<what this scout should do>", "steps": <its step limit>}, ...]}"""
 
+# The same for the warehouse (specs/012 contracts/architectures.md): no advice on the split.
+WAREHOUSE_FANOUT_INSTRUCTIONS = """\
+In this setup you do not call the tools yourself. You send between 1 and 4 robots into the \
+warehouse. Each starts on the dock, calls the tools itself, carries out the task you give it \
+within the number of steps you give it, and never hears from the other robots. Every tool call of \
+every robot costs a step from the one shared budget. You decide once, now. Answer with one JSON \
+object and nothing else:
+{"scouts": [{"task": "<what this robot should do>", "steps": <its step limit>}, ...]}"""
+
 COLLECT = """\
 The scouts are done. Their reports:
 {reports}
@@ -63,7 +74,10 @@ class FanoutState(ScoutGraph):
 
 def play(kit: Kit) -> None:
     survey = kit.problem == "survey"
+    warehouse = kit.problem == "warehouse"  # specs/012
     instructions = FIELD_FANOUT_INSTRUCTIONS if survey else FANOUT_INSTRUCTIONS
+    if warehouse:
+        instructions = WAREHOUSE_FANOUT_INSTRUCTIONS
     system = SystemMessage(kit.base_prompt + "\n\n" + instructions)
     after_scouts = "collect" if survey else END
 
@@ -71,7 +85,7 @@ def play(kit: Kit) -> None:
         return SharedMap.from_start(start, number)
 
     def orchestrate(state: FanoutState) -> dict[str, Any]:
-        start = "The start cell" if survey else "The start room"
+        start = "The start cell" if survey else "The start view" if warehouse else "The start room"
         prompt = f"{state['note']}\n\n{start}:\n{kit.start}".lstrip()
         config: Any = {"metadata": {"role": "orchestrator"}}
         reply = kit.model.invoke([system, HumanMessage(prompt)], config=config)

@@ -2,7 +2,8 @@
 
 Each round the orchestrator sees what all scouts have seen; the scouts it gives a task see the
 merged map of the round's start plus their own results (specs/004 contracts/orchestrators.md).
-On the survey field the stop answer is the total, which the graph submits (specs/005 R14).
+On the survey field the stop answer is the total, which the graph submits (specs/005 R14). In
+the warehouse the scouts are robots and `{"done": true}` stops, as on the dungeon (specs/012).
 Written by the agent at the experimenter's request.
 """
 
@@ -53,6 +54,18 @@ shared budget. Answer with one JSON object and nothing else:
 or {"total": <the number of deposits in the whole field>} to submit it and end."""
 
 
+# The same for the warehouse (specs/012 contracts/architectures.md).
+WAREHOUSE_ROUNDS_INSTRUCTIONS = """\
+In this setup you do not call the tools yourself. You lead up to 4 robots, numbered 0 to 3. Robot \
+0 is on the dock; another robot appears there when you first give it a task. Each round you see \
+the map merged from all robots' tool results, where each robot is and what it carries, and how the \
+last round went. You give some robots a short task with a step limit; they carry out their tasks \
+at the same time, and then you plan the next round. Every tool call of every robot costs a step \
+from the one shared budget. Answer with one JSON object and nothing else:
+{"tasks": [{"scout": <0 to 3>, "task": "<what to do>", "steps": <step limit>}, ...]}
+or {"done": true} to stop."""
+
+
 class RoundsState(ScoutGraph):
     note: str  # how the last round went, or why the last answer was not used
     misses: int
@@ -62,6 +75,8 @@ class RoundsState(ScoutGraph):
 def play(kit: Kit) -> None:
     survey = kit.problem == "survey"
     instructions = FIELD_ROUNDS_INSTRUCTIONS if survey else ROUNDS_INSTRUCTIONS
+    if kit.problem == "warehouse":  # specs/012
+        instructions = WAREHOUSE_ROUNDS_INSTRUCTIONS
     system = SystemMessage(kit.base_prompt + "\n\n" + instructions)
     board = SharedMap.from_start(kit.start, 0)
     everyone = [first_scout(kit, lambda number, start: board)]
