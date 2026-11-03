@@ -9,6 +9,9 @@ log (specs/010), where a trap ends an attempt, the reply's moves run one at a ti
 log is kept across attempts, so A4 has the same walk history as A2 (it still differs in the notes
 and in its retry controls), and its
 workshop version on the workshop log (specs/011), where getting stuck ends an attempt.
+
+`run(kit, reflect=False)` is A4r retry: the same attempts and restarts with no reflector and no
+notes, so comparing it with A4 isolates what the notes add.
 """
 
 import json
@@ -18,14 +21,8 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, System
 from langgraph.graph import END, START, StateGraph
 
 from apl.arch.dungeon_map import DungeonMap
-from apl.arch.field_map import FieldMap
-from apl.arch.mapstate import (
-    FIELD_MAP_INSTRUCTIONS,
-    MAP_INSTRUCTIONS,
-    PROBE_LOG_INSTRUCTIONS,
-    WALK_LOG_INSTRUCTIONS,
-    WORKSHOP_LOG_INSTRUCTIONS,
-)
+from apl.arch.floor_map import FloorMap
+from apl.arch.mapstate import Memory, memory
 from apl.arch.probe_log import ProbeLog
 from apl.arch.walk_log import WalkLog
 from apl.arch.workshop_log import WorkshopLog
@@ -36,12 +33,15 @@ from apl.kit import Kit
 MAX_STALE = 12
 
 # Explain attempts, notes and the job; no advice about the dungeon or the field (research R6).
-ACTOR_INSTRUCTIONS = """\
+ATTEMPT_INSTRUCTIONS = """\
 You may get up to {max_attempts} attempts. An attempt fails when you answer without a tool call, \
 when many turns in a row show you nothing new, or, if the task ends with a submission, when the \
 submitted answer is wrong. After a failed attempt everything is put back as it was at the start, \
-your map is cleared, and you start again; the steps of every attempt count toward the one budget. \
-Notes you wrote after earlier attempts are shown under "Notes from earlier attempts:"."""
+your map is cleared, and you start again; the steps of every attempt count toward the one budget."""
+NOTES_INSTRUCTIONS = (
+    'Notes you wrote after earlier attempts are shown under "Notes from earlier attempts:".'
+)
+ACTOR_INSTRUCTIONS = ATTEMPT_INSTRUCTIONS + " " + NOTES_INSTRUCTIONS  # A4's; A4r has no notes
 
 # Added on the rune floor only, so the other problems' actor prompt stays as it was (specs/010).
 RUNE_ATTEMPT = (
@@ -70,7 +70,7 @@ RESTARTED = frozenset({WRONG_TOTAL, WRONG_SEGMENT, TRAP, STUCK})
 class ReflexionState(TypedDict):
     # No reducers: each write replaces the value, as in A2 (data-model.md).
     messages: list[BaseMessage]  # the actor's latest turn only
-    map: DungeonMap | FieldMap | ProbeLog | WalkLog | WorkshopLog  # this attempt's
+    map: Memory  # this attempt's
     notes: list[str]
     attempt: int
     stale: int  # actor turns in a row that added nothing to the map
@@ -96,7 +96,7 @@ def _until_submit(message: BaseMessage) -> AIMessage:
     return message.model_copy(update={"tool_calls": kept, "invalid_tool_calls": []})
 
 
-def _size(found: DungeonMap | FieldMap | ProbeLog | WalkLog | WorkshopLog, first_walk: int) -> int:
+def _size(found: Memory, first_walk: int) -> int:
     if isinstance(found, WalkLog):
         return found.known_since(first_walk)  # cells stepped on in this attempt (specs/010)
     if isinstance(found, WorkshopLog):
@@ -104,6 +104,8 @@ def _size(found: DungeonMap | FieldMap | ProbeLog | WalkLog | WorkshopLog, first
         return found.progress
     if isinstance(found, ProbeLog):
         return found.known  # distinct segments probed (specs/009)
+    if isinstance(found, FloorMap):
+        return len(found.seen)  # corridors seen; A4 does not play the warehouse (specs/012)
     return len(found.rooms) if isinstance(found, DungeonMap) else len(found.cells)
 
 
@@ -114,21 +116,19 @@ def _notes(notes: list[str]) -> str:
 
 
 def play(kit: Kit) -> None:
+    run(kit, reflect=True)
+
+
+def run(kit: Kit, *, reflect: bool) -> None:
     model = kit.model.bind_tools(kit.tools)
-    survey = kit.problem == "survey"
     signal = kit.problem == "signal"  # the probe log (specs/009 R11)
     rune = kit.problem == "rune"  # the walk log (specs/010 R12)
     workshop = kit.problem == "workshop"  # the workshop log (specs/011 R12)
     stepwise = rune or workshop  # an attempt can end on a result, not only on a submission
-    if workshop:
-        map_instructions = WORKSHOP_LOG_INSTRUCTIONS
-    elif rune:
-        map_instructions = WALK_LOG_INSTRUCTIONS
-    elif signal:
-        map_instructions = PROBE_LOG_INSTRUCTIONS
-    else:
-        map_instructions = FIELD_MAP_INSTRUCTIONS if survey else MAP_INSTRUCTIONS
-    actor_text = ACTOR_INSTRUCTIONS.format(max_attempts=kit.max_attempts)
+    map_instructions, build = memory(kit.problem)  # A2's memory on this problem
+    actor_text = (ACTOR_INSTRUCTIONS if reflect else ATTEMPT_INSTRUCTIONS).format(
+        max_attempts=kit.max_attempts
+    )
     if rune:
         actor_text += " " + RUNE_ATTEMPT
     if workshop:
@@ -137,17 +137,10 @@ def play(kit: Kit) -> None:
     reflector_text = REFLECTOR_INSTRUCTIONS + (" " + RUNE_REFLECT if rune else "")
     reflector_system = SystemMessage(kit.base_prompt + "\n\n" + reflector_text)
 
-    def new_map() -> DungeonMap | FieldMap | ProbeLog | WalkLog | WorkshopLog:
-        # A restarted world looks exactly like the start (research R5).
-        if workshop:
-            return WorkshopLog.from_start(kit.start)
-        if rune:
-            return WalkLog.from_start(kit.start)
-        if signal:
-            return ProbeLog.from_start(kit.start)
-        return FieldMap.from_start(kit.start) if survey else DungeonMap.from_start(kit.start)
+    def new_map() -> Memory:
+        return build(kit.start)  # a restarted world looks exactly like the start (research R5)
 
-    def render(found: DungeonMap | FieldMap | ProbeLog | WalkLog | WorkshopLog) -> str:
+    def render(found: Memory) -> str:
         return found.render(False) if isinstance(found, DungeonMap) else found.render()
 
     def actor(state: ReflexionState) -> dict[str, Any]:
@@ -263,8 +256,10 @@ def play(kit: Kit) -> None:
             "failure": "",
         }
 
+    failed = "reflector" if reflect else "restart"  # A4r goes straight to the restart
+
     def end_attempt(state: ReflexionState) -> str:
-        return "reflector" if state["attempt"] < kit.max_attempts else END
+        return failed if state["attempt"] < kit.max_attempts else END
 
     def after_actor(state: ReflexionState) -> str:
         return "act" if _has_calls(state["messages"][-1]) else end_attempt(state)
@@ -278,12 +273,13 @@ def play(kit: Kit) -> None:
     graph = StateGraph(ReflexionState)
     graph.add_node("actor", actor)
     graph.add_node("act", act)
-    graph.add_node("reflector", reflector)
     graph.add_node("restart", restart)
     graph.add_edge(START, "actor")
-    graph.add_conditional_edges("actor", after_actor, ["act", "reflector", END])
-    graph.add_conditional_edges("act", after_act, ["actor", "reflector", END])
-    graph.add_edge("reflector", "restart")
+    graph.add_conditional_edges("actor", after_actor, ["act", failed, END])
+    graph.add_conditional_edges("act", after_act, ["actor", failed, END])
+    if reflect:
+        graph.add_node("reflector", reflector)
+        graph.add_edge("reflector", "restart")
     graph.add_conditional_edges("restart", after_restart, ["actor", END])
     graph.compile().invoke(
         {

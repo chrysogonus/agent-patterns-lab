@@ -20,19 +20,9 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, System
 from langgraph.graph import END, START, StateGraph
 
 from apl.arch.dungeon_map import DungeonMap
-from apl.arch.field_map import FieldMap
 from apl.arch.hybrid import MAX_MISSES
-from apl.arch.mapstate import (
-    FIELD_MAP_INSTRUCTIONS,
-    MAP_INSTRUCTIONS,
-    PROBE_LOG_INSTRUCTIONS,
-    WALK_LOG_INSTRUCTIONS,
-    WORKSHOP_LOG_INSTRUCTIONS,
-)
-from apl.arch.probe_log import ProbeLog
+from apl.arch.mapstate import Memory, memory
 from apl.arch.scouts import read_answer
-from apl.arch.walk_log import WalkLog
-from apl.arch.workshop_log import WorkshopLog
 from apl.kit import Kit
 
 # Constants, not derived from the step budget: the budget would reveal the optimum (research R5).
@@ -83,7 +73,7 @@ class Outcome:
 class PlanState(TypedDict):
     # No reducers: each write replaces the value, as in A2 (data-model.md).
     messages: list[BaseMessage]  # the executor's latest turn only
-    map: DungeonMap | FieldMap | ProbeLog | WalkLog | WorkshopLog
+    map: Memory
     plan: list[str]  # subgoals still to do; plan[0] is the current one
     finished: list[Outcome]
     subgoal: int  # subgoals started so far, for the executor's role
@@ -132,25 +122,14 @@ def _finish(
 
 def play(kit: Kit) -> None:
     model = kit.model.bind_tools(kit.tools)
-    survey = kit.problem == "survey"
-    signal = kit.problem == "signal"  # the probe log (specs/009 R11)
-    rune = kit.problem == "rune"  # the walk log (specs/010 R12)
-    workshop = kit.problem == "workshop"  # the workshop log (specs/011 R12)
-    if workshop:
-        map_instructions = WORKSHOP_LOG_INSTRUCTIONS
-    elif rune:
-        map_instructions = WALK_LOG_INSTRUCTIONS
-    elif signal:
-        map_instructions = PROBE_LOG_INSTRUCTIONS
-    else:
-        map_instructions = FIELD_MAP_INSTRUCTIONS if survey else MAP_INSTRUCTIONS
+    map_instructions, build = memory(kit.problem)  # A2's memory on this problem
     planner_system = SystemMessage(kit.base_prompt + "\n\n" + PLANNER_INSTRUCTIONS)
     replanner_system = SystemMessage(kit.base_prompt + "\n\n" + REPLANNER_INSTRUCTIONS)
     executor_system = SystemMessage(
         kit.base_prompt + "\n\n" + map_instructions + " " + EXECUTOR_INSTRUCTIONS
     )
 
-    def render(found: DungeonMap | FieldMap | ProbeLog | WalkLog | WorkshopLog) -> str:
+    def render(found: Memory) -> str:
         return found.render(False) if isinstance(found, DungeonMap) else found.render()
 
     def ask(system: SystemMessage, parts: list[str], role: str) -> dict[str, Any] | str:
@@ -269,21 +248,10 @@ def play(kit: Kit) -> None:
     graph.add_conditional_edges(
         "replanner", after_planning("replanner"), ["replanner", "executor", END]
     )
-    found: DungeonMap | FieldMap | ProbeLog | WalkLog | WorkshopLog
-    if workshop:
-        found = WorkshopLog.from_start(kit.start)
-    elif rune:
-        found = WalkLog.from_start(kit.start)
-    elif signal:
-        found = ProbeLog.from_start(kit.start)
-    elif survey:
-        found = FieldMap.from_start(kit.start)
-    else:
-        found = DungeonMap.from_start(kit.start)
     graph.compile().invoke(
         {
             "messages": [],
-            "map": found,
+            "map": build(kit.start),
             "plan": [],
             "finished": [],
             "subgoal": 0,

@@ -213,6 +213,7 @@ is used in the docs, and the name column is what you pass to `--arch`.
 | A2r | `mapstate_routes` | A2, plus the shortest known route to each unexplored exit | ✓ | | | | | |
 | A3 | `plan_execute` | A planner writes subgoals, A2's agent carries them out in order, a replanner steps in only when a subgoal fails or the plan runs out | ✓ | ✓ | ✓ | ✓ | ✓ | |
 | A4 | `reflexion` | A2 that tries again: after a failed attempt (on the rune floor: a trap, with the walk log kept) it writes a note, the world restarts, all steps count | ✓ | ✓ | ✓ | ✓ | ✓ | |
+| A4r | `retry` | A4 without the reflector: the same attempts and restarts with no notes, the baseline for what A4's notes add | ✓ | ✓ | ✓ | ✓ | ✓ | |
 | A5 | `supervisor` | A supervisor hands tasks to a navigator (look, move) and an inventory helper (take, use), each a subgraph on A2's map (on the workshop: a researcher and a crafter) | ✓ | | | | ✓ | |
 | A6 | `hybrid` | Code keeps the map and walks the routes; the model only picks where to go (on the signal trace: code lists the probes that split the suspects best; on the rune floor: code lists the moves with what happened on each tile before; in the workshop: code lists the actions it can take now) | ✓ | | ✓ | ✓ | ✓ | |
 | A7 | `fanout` | An orchestrator sends out up to 4 scouts once; each explores alone (in the warehouse the scouts are robots) | ✓ | ✓ | | | | ✓ |

@@ -23,6 +23,7 @@ ROLES = {
     "hybrid": {""},
     "plan_execute": {"planner", "executor", "replanner"},
     "reflexion": {"actor", "reflector"},
+    "retry": {"actor"},
     "supervisor": {"supervisor", "navigator", "inventory", "researcher", "crafter"},
     "fanout": {"orchestrator", "scout"},
     "rounds": {"orchestrator", "scout"},

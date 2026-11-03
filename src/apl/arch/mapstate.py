@@ -8,6 +8,7 @@ experimenter's request; the signal trace's probe log (specs/009) and the rune fl
 """
 
 import json
+from collections.abc import Callable
 from typing import TypedDict
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
@@ -70,10 +71,29 @@ Under the map, each unexplored exit is listed with the moves that reach it from 
 doors you have already walked, nearest first."""
 
 
+Memory = DungeonMap | FieldMap | ProbeLog | WalkLog | WorkshopLog | FloorMap
+
+# Each problem's explicit memory, built from the start view, and the text that explains it. A2,
+# A3 and A4 use the same memory on a problem; an unknown problem gets the dungeon's, as before.
+MEMORIES: dict[str, tuple[str, Callable[[str], Memory]]] = {
+    "dungeon": (MAP_INSTRUCTIONS, DungeonMap.from_start),
+    "survey": (FIELD_MAP_INSTRUCTIONS, FieldMap.from_start),  # specs/005 R10
+    "signal": (PROBE_LOG_INSTRUCTIONS, ProbeLog.from_start),  # specs/009 R11
+    "rune": (WALK_LOG_INSTRUCTIONS, WalkLog.from_start),  # specs/010 R12
+    "workshop": (WORKSHOP_LOG_INSTRUCTIONS, WorkshopLog.from_start),  # specs/011 R12
+    "warehouse": (FLOOR_MAP_INSTRUCTIONS, FloorMap.from_start),  # specs/012 R12
+}
+
+
+def memory(problem: str) -> tuple[str, Callable[[str], Memory]]:
+    """The memory's instructions and builder for a problem."""
+    return MEMORIES.get(problem, MEMORIES["dungeon"])
+
+
 class MapState(TypedDict):
     # No reducers: each write replaces the value, so the history never builds up (R11).
     messages: list[BaseMessage]  # the latest turn only
-    map: DungeonMap | FieldMap | ProbeLog | WalkLog | WorkshopLog | FloorMap
+    map: Memory
 
 
 def play(kit: Kit) -> None:
@@ -82,27 +102,13 @@ def play(kit: Kit) -> None:
 
 def run(kit: Kit, *, routes: bool) -> None:
     model = kit.model.bind_tools(kit.tools)
-    survey = kit.problem == "survey"  # the field map; written by the agent (specs/005 R10)
-    signal = kit.problem == "signal"  # the probe log; written by the agent (specs/009 R11)
-    rune = kit.problem == "rune"  # the walk log; written by the agent (specs/010 R12)
-    workshop = kit.problem == "workshop"  # the workshop log; written by the agent (specs/011)
-    warehouse = kit.problem == "warehouse"  # the floor map; written by the agent (specs/012)
-    if warehouse:
-        instructions = FLOOR_MAP_INSTRUCTIONS
-    elif workshop:
-        instructions = WORKSHOP_LOG_INSTRUCTIONS
-    elif rune:
-        instructions = WALK_LOG_INSTRUCTIONS
-    elif signal:
-        instructions = PROBE_LOG_INSTRUCTIONS
-    elif survey:
-        instructions = FIELD_MAP_INSTRUCTIONS
-    else:
-        instructions = MAP_INSTRUCTIONS + (" " + ROUTE_INSTRUCTIONS if routes else "")
+    instructions, build = memory(kit.problem)
+    if routes and instructions == MAP_INSTRUCTIONS:  # the routes explain a dungeon map's list
+        instructions += " " + ROUTE_INSTRUCTIONS
     system = SystemMessage(kit.base_prompt + "\n\n" + instructions)
     start = HumanMessage(kit.start)
 
-    def render(found: DungeonMap | FieldMap | ProbeLog | WalkLog | WorkshopLog | FloorMap) -> str:
+    def render(found: Memory) -> str:
         return found.render(routes) if isinstance(found, DungeonMap) else found.render()
 
     def agent(state: MapState) -> dict[str, list[BaseMessage]]:
@@ -133,20 +139,7 @@ def run(kit: Kit, *, routes: bool) -> None:
     graph.add_edge(START, "agent")
     graph.add_conditional_edges("agent", route)
     graph.add_edge("act", "agent")
-    found: DungeonMap | FieldMap | ProbeLog | WalkLog | WorkshopLog | FloorMap
-    if warehouse:
-        found = FloorMap.from_start(kit.start)
-    elif workshop:
-        found = WorkshopLog.from_start(kit.start)
-    elif rune:
-        found = WalkLog.from_start(kit.start)
-    elif signal:
-        found = ProbeLog.from_start(kit.start)
-    elif survey:
-        found = FieldMap.from_start(kit.start)
-    else:
-        found = DungeonMap.from_start(kit.start)
     graph.compile().invoke(
-        {"messages": [], "map": found},
+        {"messages": [], "map": build(kit.start)},
         config={"recursion_limit": kit.recursion_limit},
     )

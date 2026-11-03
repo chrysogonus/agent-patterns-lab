@@ -17,6 +17,7 @@ ARCHITECTURES: dict[str, str] = {
     "blackboard": "apl.arch.blackboard",
     "plan_execute": "apl.arch.plan_execute",
     "reflexion": "apl.arch.reflexion",
+    "retry": "apl.arch.retry",  # A4r: A4 without the reflector
     "supervisor": "apl.arch.supervisor",
 }
 
@@ -32,12 +33,13 @@ SUPPORTS: dict[str, frozenset[str]] = {
     "blackboard": _BOTH | {"warehouse"},
     "plan_execute": _BOTH | {"signal", "rune", "workshop"},
     "reflexion": _BOTH | {"signal", "rune", "workshop"},
+    "retry": _BOTH | {"signal", "rune", "workshop"},  # wherever A4 plays
     # Its helpers are per problem: the dungeon's (specs/008) and the workshop's (specs/011).
     "supervisor": frozenset({"dungeon", "workshop"}),
 }
 
 # Architectures that may restart the world, up to 3 attempts (constitution 2.1.0, specs/007 R2).
-RETRYING: frozenset[str] = frozenset({"reflexion"})
+RETRYING: frozenset[str] = frozenset({"reflexion", "retry"})
 
 Play = Callable[[Kit], None]
 
