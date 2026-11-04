@@ -12,8 +12,9 @@ there is no LLM judge.
 An orchestrator (first card on the right) gives four scouts short tasks. Each colored line is
 one scout's trail, and the triangles are ore deposits. The scouts found all 15.</sub>
 
-> **Status:** M12 built: a sixth problem, the warehouse, alongside the dungeon, the survey field,
-> the signal trace, the rune floor and the workshop; every architecture in the plan is in. First
+> **Status:** M13 built: six problems (the dungeon, the survey field, the signal trace, the rune
+> floor, the workshop and the warehouse), with a harder top level on the signal trace (T4) and the
+> workshop (W4); every architecture in the plan is in. First
 > results (M4, dungeon only, a first look): [`docs/findings/m4-first-comparison.md`](docs/findings/m4-first-comparison.md).
 
 ---
@@ -122,6 +123,7 @@ segment needs about N probes; one that halves the suspects each time needs about
 | T1 | 16 | one straight run | 4 probes + submit | 16 |
 | T2 | 64 | one straight run | 6 probes + submit | 64 |
 | T3 | 64 | a tree with 4 pipe ends | about 7 probes + submit | 64 |
+| T4 | 256 | a tree with 8 pipe ends | about 11–12 probes + submit | 256 |
 
 **Success** means naming the broken segment. The report also counts **wasted probes**: probes
 whose answer earlier answers already implied.
@@ -171,6 +173,7 @@ pay off.
 | W1 | 3 | none | 3× the reference plan |
 | W2 | 5 | one scarce material, one tempting recipe | 3× the reference plan |
 | W3 | 8 | two | 3× the reference plan |
+| W4 | 12 | three | 3× the reference plan |
 
 **Success** means crafting the goal. An episode ends **stuck** once the goal can no longer be made,
 and the report counts the scarce units **wasted** on items the reference plan does not use them for.
@@ -427,6 +430,7 @@ The full rules are in [`.specify/memory/constitution.md`](.specify/memory/consti
 | ✅ | M10 | The rune floor; A1–A4 and A6 play it |
 | ✅ | M11 | The workshop; A1–A6 play it |
 | ✅ | M12 | The warehouse; A1, A2 and A7–A9 play it |
+| ✅ | M13 | Harder top levels: T4 on the signal trace, W4 on the workshop |
 
 The full design is in [`plan.md`](plan.md).
 

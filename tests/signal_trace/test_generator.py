@@ -59,7 +59,14 @@ def test_t3_is_a_bounded_tree_marked_as_a_reference() -> None:
         assert pipe.reference_probes <= 8
 
 
-@pytest.mark.parametrize(("level", "budget"), [("T1", 16), ("T2", 64), ("T3", 64)])
+def test_t4_is_a_bounded_tree_marked_as_a_reference() -> None:  # specs/013 FR-001, FR-003
+    for pipe in _pipes("T4"):
+        assert pipe.segments == 256 and len(pipe.runs) == 2 * 8 - 1
+        assert not pipe.reference_is_optimal
+        assert pipe.reference_probes <= 12
+
+
+@pytest.mark.parametrize(("level", "budget"), [("T1", 16), ("T2", 64), ("T3", 64), ("T4", 256)])
 def test_the_budget(level: str, budget: int) -> None:
     for pipe in _pipes(level):
         assert pipe.reference_steps == pipe.reference_probes + 1
@@ -71,5 +78,5 @@ def test_the_broken_segment_varies_with_the_seed() -> None:
 
 
 def test_an_unknown_level_is_refused() -> None:
-    with pytest.raises(ValueError, match="T1, T2, T3"):
+    with pytest.raises(ValueError, match="T1, T2, T3, T4"):
         generate("T9", 1000)

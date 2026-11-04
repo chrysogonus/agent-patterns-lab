@@ -64,7 +64,7 @@ Rationale: runs cost money, and dry runs must be safe by default.
   worst-case probes of code's own probe strategy on that layout, plus one submission. On straight
   levels the strategy is bisection, the optimum there; elsewhere the reference is marked as a
   reference, not an optimum. The step budget is the larger of 3× the reference and a full
-  probe-by-probe scan (every segment but one probed, plus one submission). Levels T1–T3 are
+  probe-by-probe scan (every segment but one probed, plus one submission). Levels T1–T4 are
   defined in plan.md.
 - **Rune floor**: floors of colored tiles are generated from a seed, with a start S, a goal G and
   a hidden rule that decides which steps are safe. Every floor has a safe path from S to G, and the
@@ -79,7 +79,7 @@ Rationale: runs cost money, and dry runs must be safe by default.
   episode ends as stuck once the goal can no longer be made from the inventory and the stock.
   Code computes a reference: the steps of the shortest plan that inspects every craftable item it
   uses, gathers its raw materials and crafts the goal. The step budget is 3× the reference.
-  Levels W1–W3 are defined in plan.md.
+  Levels W1–W4 are defined in plan.md.
 - **Warehouse**: floors are generated from a seed: rows of shelves with aisles between them, a
   cross corridor at each end, a dock where robots start and a drop zone D. Packages stand on aisle
   cells, every one reachable. The floor plan and the number of packages are given free at the
@@ -119,4 +119,4 @@ and review MUST check compliance. An unavoidable violation MUST be recorded in t
 Complexity Tracking table with a justification. Results from different problems MUST NOT be
 combined in one comparison.
 
-**Version**: 2.5.0 | **Ratified**: 2026-10-28 | **Last Amended**: 2026-11-03
+**Version**: 2.5.1 | **Ratified**: 2026-10-28 | **Last Amended**: 2026-11-03

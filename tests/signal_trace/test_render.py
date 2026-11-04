@@ -1,12 +1,13 @@
 """`apl signal show` and the text and SVG pictures (specs/009 contracts/cli.md)."""
 
+import re
 from pathlib import Path
 
 import pytest
 
 from apl.cli import main
-from apl.signal_trace import generate
-from apl.signal_trace.render_svg import svg
+from apl.signal_trace import DEV_SEEDS, TEST_SEEDS, generate
+from apl.signal_trace.render_svg import CELL, MARGIN, svg
 from apl.signal_trace.render_text import render_text
 from apl.signal_trace.strategy import reference_run
 
@@ -49,3 +50,36 @@ def test_cli_show(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:
     assert capsys.readouterr().out.splitlines()[-1].startswith("reference: 32 ")
     with pytest.raises(SystemExit):
         main(["signal", "show", "--level", "S1", "--seed", "1000"])
+
+
+def _width(picture: str) -> int:
+    match = re.search(r'viewBox="0 0 (\d+) \d+"', picture)
+    assert match
+    return int(match.group(1))
+
+
+def test_a_long_pipe_is_drawn_wider() -> None:  # specs/013 research R8
+    assert _width(svg(generate("T3", 1000))) == 2 * MARGIN + 64 + 8 * CELL == 300
+    picture = svg(generate("T4", 1000))
+    assert picture.count('data-seg="') == 256
+    assert _width(picture) == 2 * MARGIN + 80 + 24 * CELL == 732
+
+
+def test_t4_labels_fit_inside_the_picture() -> None:  # 12 px monospace, about 7.2 px a character
+    for seed in [*DEV_SEEDS, *TEST_SEEDS]:
+        picture = svg(generate("T4", seed))
+        labels = re.findall(r'<text class="label[^"]*" x="(-?\d+)"[^>]*>([^<]+)</text>', picture)
+        assert labels and any(text.startswith("from ") for _, text in labels)
+        for x, text in labels:
+            assert int(x) - len(text) * 7.2 >= MARGIN / 2, (seed, text)
+
+
+def test_cli_show_t4(capsys: pytest.CaptureFixture[str]) -> None:
+    pipe = generate("T4", 1000)
+    assert main(["signal", "show", "--level", "T4", "--seed", "1000", "--route", "reference"]) == 0
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[0].startswith("Signal trace T4, seed 1000: 256 segments, 15 runs")
+    assert len(lines) == 1 + len(pipe.runs) + 1 and lines[-1].startswith("reference: ")
+    with pytest.raises(SystemExit) as raised:
+        main(["signal", "show", "--level", "T9", "--seed", "1000"])
+    assert raised.value.code == 2

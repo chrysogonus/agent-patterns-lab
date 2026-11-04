@@ -2,7 +2,8 @@
 
 > **At a glance.** Six small simulated problems (a dungeon, a survey field, a signal trace, a rune
 > floor, a workshop and a warehouse), one model, and several hand-built LangGraph architectures,
-> scored by code. M0–M12 are built: every architecture in §4 is in, and M12 added the warehouse.
+> scored by code. M0–M13 are built: every architecture in §4 is in, M12 added the warehouse and M13
+> a harder top level on the signal trace and the workshop.
 > The [README](README.md) is the short tour. This file holds the design: the worlds (§2–§2f),
 > the fairness rules (§3), the architectures (§4), the metrics (§5) and the milestones (§7).
 
@@ -144,6 +145,7 @@ implied counts as wasted.
 | T1 | 16 | one run | 5 (optimal) | 16 | Baseline; every architecture should find it |
 | T2 | 64 | one run | 7 (optimal) | 64 | About 6 probes for bisection, about 32 for a scan |
 | T3 | 64 | a tree with 4 pipe ends, every run ≥ 4 | about 8 | 64 | Halfway along the numbers is no longer the best probe |
+| T4 | 256 | a tree with 8 pipe ends, every run ≥ 4 | about 12 | 256 | Fifteen runs to weigh: the best split is harder to find |
 
 Seeds: the same numbers as the other problems, keyed by the problem name.
 
@@ -226,6 +228,7 @@ scarce unit used beyond the reference plan's use counts as wasted.
 | W1 | 3 | 2 | none (one harmless second recipe) | Baseline; every architecture should finish |
 | W2 | 5 | 3 | 1 | The mock-up's lantern: planning saves the coal |
 | W3 | 8 | 4 | 2 | Two conflicts a plan must hold at once |
+| W4 | 12 | 5 | 3 | Three scarce materials a plan must protect at once |
 
 Seeds: the same numbers as the other problems, keyed by the problem name.
 
@@ -361,6 +364,7 @@ Each milestone after M0 is one Spec Kit feature (`/speckit-specify` through
 | M10 | The rune floor (§2d), with A1–A4 and A6 on it | Any rune level and seed can be shown and watched in the viewer; rune runs plan, continue and report like the other problems; the other problems are unchanged | ✅ |
 | M11 | The workshop (§2e), with A1–A6 on it | Any workshop level and seed can be shown and watched in the viewer; workshop runs plan, continue and report like the other problems; the other problems are unchanged | ✅ |
 | M12 | The warehouse (§2f), with A1, A2 and A7–A9 on it | Any warehouse level and seed can be shown and watched in the viewer; warehouse runs plan, continue and report like the other problems; the other problems are unchanged | ✅ |
+| M13 | Harder top levels: T4 on the signal trace (§2c), W4 on the workshop (§2e) | Any T4 and W4 seed can be shown and watched in the viewer; runs with `--level all` include them; T1–T3, W1–W3 and saved runs are unchanged | ✅ |
 
 Paperclip comes in from M5, when several architectures can be built as parallel tickets.
 
@@ -393,3 +397,7 @@ Decided:
   differs (specs/011).
 - A sixth problem (since M12): the warehouse, where adapting a split of the work to packages found
   along the way is what differs (specs/012). The combination vault is the one mock-up board left.
+- Harder top levels (since M13): T4 and W4 (specs/013), after the first `gpt-6-luna` run on the
+  four new problems showed every architecture solving the signal trace and the workshop. T4 keeps
+  the signal budget rule (a full scan, 256 steps), so it separates architectures by wasted probes
+  and tokens; noisy probes stay deferred.

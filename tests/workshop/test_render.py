@@ -5,8 +5,8 @@ from pathlib import Path
 import pytest
 
 from apl.cli import main
-from apl.workshop import generate
-from apl.workshop.render_svg import svg
+from apl.workshop import DEV_SEEDS, TEST_SEEDS, generate
+from apl.workshop.render_svg import BOX_W, GAP_X, layers, places, svg
 from apl.workshop.render_text import render_text
 from tests.workshop.lantern import lantern
 
@@ -52,3 +52,27 @@ def test_cli_show(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:
     assert capsys.readouterr().out.splitlines()[-1].startswith("reference: inspect ")
     with pytest.raises(SystemExit):
         main(["workshop", "show", "--level", "R1", "--seed", "1000"])
+
+
+def test_w4_draws_every_item_once_without_overlap() -> None:  # specs/013 research R9
+    for seed in [*DEV_SEEDS, *TEST_SEEDS]:
+        w = generate("W4", seed)
+        assert svg(w).count('data-item="') == len(w.recipes) + len(w.stock)
+        assert max(len(row) for row in layers(w)) <= 7
+        boxes = places(w)
+        for row in layers(w):
+            xs = sorted(boxes[item][0] for item in row)
+            assert all(b - a >= BOX_W + GAP_X for a, b in zip(xs, xs[1:], strict=False))
+
+
+def test_cli_show_w4(capsys: pytest.CaptureFixture[str]) -> None:
+    w = generate("W4", 1000)
+    assert (
+        main(["workshop", "show", "--level", "W4", "--seed", "1000", "--route", "reference"]) == 0
+    )
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[0].startswith(f"Workshop W4, seed 1000: goal {w.goal}; reference {w.reference}")
+    assert lines[1].count("(scarce)") == 3 and lines[-1].startswith("reference: ")
+    with pytest.raises(SystemExit) as raised:
+        main(["workshop", "show", "--level", "W9", "--seed", "1000"])
+    assert raised.value.code == 2

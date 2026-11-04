@@ -19,7 +19,7 @@ def test_the_signal_prompt_fingerprint_is_unchanged() -> None:
 
 
 def test_the_signal_dry_run_plan_is_unchanged() -> None:
-    spec = RunSpec.build(["react"], ["all"], "dev", limit=1, problem="signal")
+    spec = RunSpec.build(["react"], ["T1", "T2", "T3"], "dev", limit=1, problem="signal")
     text = format_plan(spec, Settings(), {"react": True}, CODE) + "\n"
     path = FIXTURES / "signal-plan.txt"
     if os.environ.get("GOLDEN_REGEN"):

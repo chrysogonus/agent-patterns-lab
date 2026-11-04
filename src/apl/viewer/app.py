@@ -59,7 +59,7 @@ Response = tuple[int, str, bytes]
 LOCAL_PROVIDERS = ("ollama:", "vllm:")  # no cost, so no --execute needed (research R8)
 MODELS = ("vllm:qwen3.5-9b", "openai:gpt-6-luna")  # the page's model switch, besides APL_MODEL
 # Checked before any file access, so an id can never point outside results/viewer/.
-EPISODE_ID = re.compile(r"\d{8}-\d{6}-[a-z0-9_]+-(?:[LSTWP][1-3]|R[0-3])-\d+(-\d+)?")
+EPISODE_ID = re.compile(r"\d{8}-\d{6}-[a-z0-9_]+-(?:[LSTWP][1-4]|R[0-3])-\d+(-\d+)?")
 
 
 def json_response(status: int, data: object) -> Response:

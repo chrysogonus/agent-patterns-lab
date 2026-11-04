@@ -3,8 +3,10 @@
 Drawn as in the problem mock-up: each run snakes `PER_ROW` segments a row (left to right, then
 back), with a grey pipe line through the segment centres. Runs are stacked one under another, and
 each starts at an inlet left of its first segment, labelled "S" or "from 18", so no line crosses
-the board. Boxes carry `data-seg`, and
-the page draws the water, the probe marks and the suspects from the frames (`#water`, `#probes`).
+the board. A pipe longer than `LONG` segments (T4) gets `LONG_PER_ROW` a row and the
+`LONG_LABEL` column, so it stays about square and its three-digit labels fit (specs/013 R8).
+Boxes carry `data-seg`, and the page draws the water, the probe marks and the suspects from the
+frames (`#water`, `#probes`).
 """
 
 from apl.signal_trace.model import Pipe
@@ -12,21 +14,30 @@ from apl.signal_trace.model import Pipe
 CELL = 26  # a box
 PER_ROW = 8
 LABEL = 64  # the column for "S" and "from 18"
+LONG = 64  # segments; longer pipes are drawn wider
+LONG_PER_ROW = 24
+LONG_LABEL = 80  # room for "from 194"
 MARGIN = 14
 BLOCK_GAP = 14  # between runs
 
 
+def shape(pipe: Pipe) -> tuple[int, int]:
+    """The segments a row and the label column's width for this pipe."""
+    return (PER_ROW, LABEL) if pipe.segments <= LONG else (LONG_PER_ROW, LONG_LABEL)
+
+
 def layout(pipe: Pipe) -> dict[int, tuple[int, int]]:
-    """Each segment's box position (x, y): runs stacked, each snaking PER_ROW a row."""
+    """Each segment's box position (x, y): runs stacked, each snaking `shape` segments a row."""
+    per_row, label = shape(pipe)
     places: dict[int, tuple[int, int]] = {}
     top = MARGIN
     for run in pipe.runs:
         segments = range(run.first, run.last + 1)
         for i, k in enumerate(segments):
-            row, col = divmod(i, PER_ROW)
-            col = col if row % 2 == 0 else PER_ROW - 1 - col
-            places[k] = (MARGIN + LABEL + col * CELL, top + row * CELL)
-        rows = -(-len(segments) // PER_ROW)
+            row, col = divmod(i, per_row)
+            col = col if row % 2 == 0 else per_row - 1 - col
+            places[k] = (MARGIN + label + col * CELL, top + row * CELL)
+        rows = -(-len(segments) // per_row)
         top += rows * CELL + BLOCK_GAP
     return places
 
@@ -47,7 +58,8 @@ def svg(pipe: Pipe, animated: bool = False) -> str:
     fills: `#water` and `#probes`."""
     places = layout(pipe)
     sx, sy = inlet(places, 1)
-    width = 2 * MARGIN + LABEL + PER_ROW * CELL
+    per_row, label = shape(pipe)
+    width = 2 * MARGIN + label + per_row * CELL
     height = max(y for _, y in places.values()) + CELL + MARGIN
     out = [
         f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" role="img" '

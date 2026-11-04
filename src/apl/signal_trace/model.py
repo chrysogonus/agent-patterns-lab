@@ -17,6 +17,7 @@ LEVELS: dict[str, SignalLevel] = {
     "T1": SignalLevel("T1", segments=16, ends=1, min_run=16),
     "T2": SignalLevel("T2", segments=64, ends=1, min_run=64),
     "T3": SignalLevel("T3", segments=64, ends=4, min_run=4),
+    "T4": SignalLevel("T4", segments=256, ends=8, min_run=4),
 }
 
 

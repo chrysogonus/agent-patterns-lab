@@ -382,8 +382,8 @@ def test_a_signal_plan(workdir: Path, capsys: pytest.CaptureFixture[str]) -> Non
     assert lines[1] == "  architectures  react, mapstate, plan_execute, reflexion, hybrid"
     assert lines[2] == "  problem        signal"
     for line in [
-        "levels         T1, T2, T3",
-        "episodes       15",
+        "levels         T1, T2, T3, T4",  # specs/013: `all` includes T4
+        "episodes       20",
         f"prompt         {prompt_fingerprint()}",
     ]:
         assert line in out
@@ -454,8 +454,8 @@ def test_a_workshop_plan(workdir: Path, capsys: pytest.CaptureFixture[str]) -> N
     )
     assert lines[2] == "  problem        workshop"
     for line in [
-        "levels         W1, W2, W3",
-        "episodes       18",
+        "levels         W1, W2, W3, W4",  # specs/013: `all` includes W4
+        "episodes       24",
         f"prompt         {prompt_fingerprint()}",
     ]:
         assert line in out
