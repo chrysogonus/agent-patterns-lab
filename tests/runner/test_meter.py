@@ -76,7 +76,10 @@ def test_transcript_stores_each_message_once() -> None:
     assert data["messages"][0]["content"] == "rules"
 
 
-@pytest.mark.parametrize("metadata", [{"done_reason": "length"}, {"finish_reason": "length"}])
+@pytest.mark.parametrize(
+    "metadata",
+    [{"done_reason": "length"}, {"finish_reason": "length"}, {"stop_reason": "max_tokens"}],
+)
 def test_counts_calls_cut_off_by_the_output_limit(metadata: dict[str, str]) -> None:
     episode = start_episode(Dungeon.from_layout(two_open_routes()))
     meter = Meter(episode, token_cap=1000)

@@ -29,6 +29,7 @@ LEVELS: dict[str, WorkshopLevel] = {
     "W1": WorkshopLevel("W1", 3, 2, 0),
     "W2": WorkshopLevel("W2", 5, 3, 1),
     "W3": WorkshopLevel("W3", 8, 4, 2),
+    "W4": WorkshopLevel("W4", 12, 5, 3),
 }
 
 

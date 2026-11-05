@@ -1,5 +1,6 @@
 """The probe rule and the reference strategy (specs/009 research R5, R6; SC-003, SC-004)."""
 
+import dataclasses
 import math
 import statistics
 
@@ -71,6 +72,18 @@ def test_the_reference_finds_the_break_within_its_probes(level: str) -> None:
         assert submitted == pipe.broken
         assert len(probes) <= pipe.reference_probes
         assert all(water == pipe.wet(k) for k, water in probes)
+
+
+@pytest.mark.parametrize("level", sorted(LEVELS))
+def test_the_reference_finds_every_possible_break(level: str) -> None:  # specs/013 SC-002
+    for seed in SEEDS:
+        pipe = generate(level, seed)
+        for k in range(1, pipe.segments + 1):
+            broken = dataclasses.replace(pipe, broken=k)
+            probes, submitted = reference_run(broken)
+            assert submitted == k
+            assert len(probes) <= pipe.reference_probes
+            assert all(water == broken.wet(j) for j, water in probes)
 
 
 def _scan(feeder: tuple[int, ...], broken: int) -> int:

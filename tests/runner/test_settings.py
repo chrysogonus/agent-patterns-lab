@@ -56,7 +56,12 @@ def test_every_variable_is_read() -> None:
 
 @pytest.mark.parametrize(
     ("model", "expected"),
-    [("vllm:qwen3.5-9b", 8192), ("ollama:qwen3:8b", 4096), ("openai:gpt-6-luna", 4096)],
+    [
+        ("vllm:qwen3.5-9b", 8192),
+        ("ollama:qwen3:8b", 4096),
+        ("openai:gpt-6-luna", 4096),
+        ("anthropic:claude-sonnet-5-5", 16_000),  # adaptive thinking counts against it
+    ],
 )
 def test_output_limit_default_depends_on_the_provider(model: str, expected: int) -> None:
     assert load_settings({"APL_MODEL": model}).max_output_tokens == expected

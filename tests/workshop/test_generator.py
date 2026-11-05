@@ -11,8 +11,9 @@ SHAPE = {
     "W1": (3, 2, 1, 0),
     "W2": (5, 3, 1, 1),
     "W3": (8, 4, 2, 2),
+    "W4": (12, 5, 3, 3),  # specs/013 FR-004
 }  # craftables, depth, alts, scarce
-BOUND = {"W1": 12, "W2": 20, "W3": 32}
+BOUND = {"W1": 12, "W2": 20, "W3": 32, "W4": 48}
 
 
 def _tree(w: Workshop) -> tuple[list[str], int]:
@@ -63,5 +64,5 @@ def test_seeds_give_different_workshops() -> None:
 
 
 def test_an_unknown_level_is_refused() -> None:
-    with pytest.raises(ValueError, match="W1, W2, W3"):
+    with pytest.raises(ValueError, match="W1, W2, W3, W4"):
         generate("W9", 1000)

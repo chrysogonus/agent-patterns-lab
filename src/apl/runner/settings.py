@@ -26,7 +26,8 @@ class Settings:
     # Output tokens per model call. Without it a local model can think endlessly inside one call,
     # where neither the token cap (checked after a call) nor the timeout (per read) can stop it.
     # Qwen's thinking counts against it: at 1,024 it often ran out before the tool call. 8,192
-    # suits vLLM's 32,768-token context; load_settings uses 4,096 for other providers.
+    # suits vLLM's 32,768-token context; load_settings uses 16,000 for Claude (its adaptive
+    # thinking counts too) and 4,096 for other providers.
     max_output_tokens: int = 8192
     base_url: str = "http://localhost:8001/v1"  # the vLLM server
 
@@ -96,7 +97,10 @@ def load_settings(environ: Mapping[str, str] | None = None) -> Settings:
     defaults = Settings()
     model = values.get("APL_MODEL") or defaults.model
     if max_output is None:
-        max_output = defaults.max_output_tokens if model.startswith("vllm:") else 4096
+        if model.startswith("vllm:"):
+            max_output = defaults.max_output_tokens
+        else:
+            max_output = 16_000 if model.startswith("anthropic:") else 4096
     return Settings(
         model=model,
         temperature=_parse(values, "APL_TEMPERATURE", float, _non_negative, "float ≥ 0 when set"),

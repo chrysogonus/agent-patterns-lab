@@ -1,6 +1,6 @@
 # AGENTS.md
 
-A lab for comparing hand-built LangGraph agent architectures on a generated dungeon, scored by
+A lab for comparing hand-built LangGraph agent architectures on generated problems, scored by
 code. The design and milestones are in `plan.md`. The rules every change must follow are in
 `.specify/memory/constitution.md`.
 
@@ -25,6 +25,7 @@ uv run apl run --problem rune --arch react --level all --seeds dev --limit 1  # 
 uv run apl run --problem workshop --arch react --level all --seeds dev --limit 1  # a workshop plan
 uv run apl run --problem warehouse --arch react --level all --seeds dev --limit 1  # a warehouse plan
 uv run apl continue results/<run-id>  # plan the rest of an interrupted run (free)
+uv run apl report results/<run-id>  # rebuild a run's report
 uv run apl serve             # the browser viewer on http://127.0.0.1:8765/
 ```
 
@@ -40,9 +41,8 @@ All four checks must pass before a feature counts as done.
   `craft`, the warehouse's `look`, `move`, `pick` and `drop`. From `apl` they may import only
   `apl.kit`, `apl.dungeon.tools`, `apl.dungeon.results`, `apl.survey.tools`, `apl.survey.results`,
   `apl.signal_trace.tools`, `apl.signal_trace.results`, `apl.rune.tools`, `apl.rune.results`,
-  `apl.workshop.tools`, `apl.workshop.results`, `apl.warehouse.tools` and `apl.warehouse.results`,
-  and they
-  must use `kit.model` instead of creating a model (both enforced by a test).
+  `apl.workshop.tools`, `apl.workshop.results`, `apl.warehouse.tools`, `apl.warehouse.results` and
+  `apl.arch`, and they must use `kit.model` instead of creating a model (both enforced by a test).
 - No paid model call without an explicit `--execute`. Tests never make paid calls.
 - Never commit `.env`; it holds the provider API key.
 - Each milestone after M0 is one Spec Kit feature: `/speckit-specify` through

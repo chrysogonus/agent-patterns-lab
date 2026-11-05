@@ -19,7 +19,7 @@ def test_the_workshop_prompt_fingerprint_is_unchanged() -> None:
 
 
 def test_the_workshop_dry_run_plan_is_unchanged() -> None:
-    spec = RunSpec.build(["react"], ["all"], "dev", limit=1, problem="workshop")
+    spec = RunSpec.build(["react"], ["W1", "W2", "W3"], "dev", limit=1, problem="workshop")
     text = format_plan(spec, Settings(), {"react": True}, CODE) + "\n"
     path = FIXTURES / "workshop-plan.txt"
     if os.environ.get("GOLDEN_REGEN"):

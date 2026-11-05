@@ -123,13 +123,17 @@ def signal_options(log: ProbeLog) -> list[Option]:
 
 
 def rune_options(log: WalkLog) -> list[Option]:
-    """Every move that stays on the floor, with what happened on that tile before."""
+    """Every move that stays on the floor, with what happened on that tile before.
+
+    Tiles already stepped on in this walk are not offered unless nothing else is left: Haiku
+    otherwise circled tiles it knew were safe until the budget ran out (R3 seed 1000).
+    """
     found = []
     step = len(log.walks[-1].steps) + 1  # the walk step the move would be
-    for direction in DIRECTIONS:
-        cell = log.neighbor(direction)
-        if cell is None:
-            continue
+    trail = {log.start, *(cell for cell, _ in log.walks[-1].steps)}
+    moves = [(d, cell) for d in DIRECTIONS if (cell := log.neighbor(d)) is not None]
+    fresh = [(d, cell) for d, cell in moves if cell not in trail]
+    for direction, cell in fresh or moves:
         call: list[Call] = [("move", {"direction": direction})]
         if cell == log.start:
             found.append(Option(f"move {direction} to the start", call))

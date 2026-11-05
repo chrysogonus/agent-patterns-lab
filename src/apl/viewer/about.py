@@ -112,8 +112,9 @@ OFFERS = {  # A6's option list
     "item, each with the shortest known route, which code walks; fewest steps first",
     "signal": f"the {SIGNAL_PROBES} probes that split the remaining suspects most evenly, with "
     f"how many suspects each answer leaves; submissions once {SIGNAL_SUBMITS} or fewer are left",
-    "rune": "every move that stays on the floor, with what happened on that tile before (safe or "
-    "a trap, at which walk step); it never guesses the rule",
+    "rune": "every move that stays on the floor, except to tiles already stepped on in this walk "
+    "unless nothing else is left, with what happened on that tile before (safe or a trap, at "
+    "which walk step); it never guesses the rule",
     "workshop": "every action possible now: inspect a named item, gather a raw material in stock, "
     "or craft with a recipe whose inputs are held; it never compares recipes",
 }

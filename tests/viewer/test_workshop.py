@@ -21,7 +21,7 @@ FRAME_KEYS = {
 def test_options_and_the_workshop(tmp_path: Path) -> None:
     viewer = _viewer(tmp_path, architectures=None)
     workshop = _body(viewer.options())["problems"]["workshop"]
-    assert workshop["levels"] == ["W1", "W2", "W3"] and workshop["dev_seeds"][0] == 1000
+    assert workshop["levels"] == ["W1", "W2", "W3", "W4"] and workshop["dev_seeds"][0] == 1000
     assert set(workshop["architectures"]) == {
         "react", "mapstate", "plan_execute", "reflexion", "retry", "supervisor", "hybrid",
     }  # fmt: skip
@@ -86,3 +86,21 @@ def test_a_reflexion_episode_that_gets_stuck_emits_one_restart(tmp_path: Path) -
     assert [e["type"] for e in events].count("restart") == 1
     row = events[-1]["data"]["row"]
     assert row["success"] and row["stuck"] is False and row["attempts"] == 2 and row["wasted"] == 1
+
+
+def test_a_react_episode_on_w4_streams_and_replays(tmp_path: Path) -> None:  # specs/013 SC-005
+    w = generate("W4", 1000)
+    factory = scripted_factory(play_calls(reference_calls(w)))
+    viewer = _viewer(tmp_path, OLLAMA, model_factory=factory, architectures=None)
+    episode_id = _start(viewer, "react", "W4", 1000, problem="workshop")
+    assert EPISODE_ID.fullmatch(episode_id)
+    events = _events(viewer, episode_id)
+    assert events[0]["data"]["goal"] == w.goal
+    steps = [e["data"] for e in events if e["type"] == "step"]
+    assert steps[-1]["frame"]["end_reason"] == "goal"
+    row = events[-1]["data"]["row"]
+    assert row["level"] == "W4" and row["success"] and row["wasted"] == 0
+    assert row["steps"] == w.reference
+    replayed = _viewer(tmp_path, OLLAMA).session(episode_id)
+    assert replayed is not None and replayed.done
+    assert [event for _, event in (x for x in replayed.stream() if x)] == events
