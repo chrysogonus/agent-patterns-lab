@@ -15,7 +15,7 @@ from apl.dungeon.model import Direction
 from apl.runner.episode import play_episode
 from apl.runner.settings import Settings
 from apl.runner.spec import EpisodeKey
-from apl.viewer.app import Viewer
+from apl.viewer.app import MODELS, Viewer
 from tests.runner import loop_arch
 from tests.runner.scripted import (
     FakeProviderError,
@@ -268,6 +268,10 @@ def test_the_page_can_switch_models(tmp_path: Path) -> None:
     assert _body(viewer.list_episodes())[0]["model"] == "openai:gpt-6-luna"
     default = _events(viewer, _start(viewer))[0]["data"]  # no model given: the default
     assert default["settings"] == OLLAMA.record()  # not the offered copy with num_ctx=1
+
+
+def test_the_model_switch_offers_claude() -> None:
+    assert MODELS == ("vllm:qwen3.5-9b", "openai:gpt-6-luna", "anthropic:claude-sonnet-5-5")
 
 
 def test_provider_failure_is_shown_and_the_viewer_stays_usable(tmp_path: Path) -> None:

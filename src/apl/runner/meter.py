@@ -88,10 +88,14 @@ class Meter(BaseCallbackHandler):
         generation = response.generations[0][0]
         assert isinstance(generation, ChatGeneration)
         usage = getattr(generation.message, "usage_metadata", None)
-        meta = generation.message.response_metadata  # Ollama: done_reason; OpenAI: finish_reason
+        # Ollama: done_reason; OpenAI: finish_reason; Anthropic: stop_reason "max_tokens".
+        meta = generation.message.response_metadata
         with self._lock:
             started, inputs, role = self._started.pop(run_id)
-            if "length" in (meta.get("done_reason"), meta.get("finish_reason")):
+            if (
+                "length" in (meta.get("done_reason"), meta.get("finish_reason"))
+                or meta.get("stop_reason") == "max_tokens"
+            ):
                 self.output_limit_hits += 1
             call = {
                 "input": inputs,

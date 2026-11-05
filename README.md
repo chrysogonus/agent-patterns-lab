@@ -367,6 +367,7 @@ in `.env` (never committed; [`.env.example`](.env.example) lists every setting):
 APL_MODEL=vllm:qwen3.5-9b      # default: local vLLM, free
 # APL_MODEL=ollama:qwen3:8b    # local Ollama
 # APL_MODEL=openai:gpt-6-luna  # paid, needs OPENAI_API_KEY
+# APL_MODEL=anthropic:claude-sonnet-5-5  # paid, needs ANTHROPIC_API_KEY
 ```
 
 <details>
@@ -392,7 +393,7 @@ These optional settings are the same for every architecture in a run:
 | Setting | Default | Meaning |
 | --- | --- | --- |
 | `APL_TEMPERATURE`, `APL_REASONING_EFFORT` | the provider's default | sampling |
-| `APL_MAX_OUTPUT_TOKENS` | 8,192 for vLLM, otherwise 4,096 | per model call |
+| `APL_MAX_OUTPUT_TOKENS` | 8,192 for vLLM, 16,000 for Claude, otherwise 4,096 | per model call |
 | `APL_TOKEN_CAP` | 2,000,000 | tokens per episode before it is stopped |
 | `APL_NUM_CTX` | 16,384 | Ollama's context; its own 4,096 would silently cut off long episodes |
 | `APL_PRICE_INPUT`, `APL_PRICE_OUTPUT` | unset | USD per 1M tokens, for the dry run's worst-case cost |

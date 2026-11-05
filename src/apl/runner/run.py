@@ -29,6 +29,7 @@ _PACKAGES = (
     "langchain-core",
     "langchain-openai",
     "langchain-ollama",
+    "langchain-anthropic",
     "ollama",
 )
 _TRANSIENT_STATUS = {429, 500, 502, 503, 504}
@@ -107,6 +108,14 @@ def default_model_factory(
         return model
     if settings.reasoning_effort is not None:
         extra["reasoning_effort"] = settings.reasoning_effort
+    if settings.model.startswith("anthropic:"):
+        # Architectures resend an earlier turn under a new prompt; Claude would refuse its
+        # thinking block there (the history-editing check), so the API drops the block instead.
+        extra["thinking"] = {
+            "type": "adaptive",
+            "block_binding": {"prefix_mismatch_behavior": "drop_block"},
+        }
+        extra["betas"] = ["thinking-binding-controls-2026-08-01"]
     # The provider client retries rate limits, timeouts and 5xx with growing pauses (R8).
     model = init_chat_model(
         settings.model,

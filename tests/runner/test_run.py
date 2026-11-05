@@ -186,6 +186,7 @@ def test_run_record(tmp_path: Path) -> None:
         "langchain-core",
         "langchain-openai",
         "langchain-ollama",
+        "langchain-anthropic",
         "ollama",
     } <= set(record.versions)
     assert "OPENAI_API_KEY" not in (tmp_path / record.run_id / "run.json").read_text()
@@ -244,6 +245,26 @@ def test_default_model_factory_for_ollama() -> None:
     )
     assert type(openai_model).__name__ == "ChatOpenAI"
     assert openai_model.max_tokens == 4096  # type: ignore[attr-defined]
+
+
+def test_default_model_factory_for_anthropic(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")  # construction sends nothing
+    settings = Settings(
+        model="anthropic:claude-sonnet-5-5", reasoning_effort="medium", max_output_tokens=16_000
+    )
+    model = default_model_factory(settings, [])
+    assert type(model).__name__ == "ChatAnthropic"
+    assert model.model == "claude-sonnet-5-5"  # type: ignore[attr-defined]
+    assert model.thinking == {  # type: ignore[attr-defined]
+        "type": "adaptive",
+        "block_binding": {"prefix_mismatch_behavior": "drop_block"},
+    }
+    assert model.betas == ["thinking-binding-controls-2026-08-01"]  # type: ignore[attr-defined]
+    assert model.reasoning_effort == "medium"  # type: ignore[attr-defined]
+    assert model.max_tokens == 16_000 and model.temperature is None  # type: ignore[attr-defined]
+    assert model.max_retries == 4 and model.default_request_timeout == 300  # type: ignore[attr-defined]
+    plain = default_model_factory(Settings(model="anthropic:claude-sonnet-5-5"), [])
+    assert plain.reasoning_effort is None  # type: ignore[attr-defined]
 
 
 def _transport(*answers: int | Exception) -> tuple[RetryTransport, list[int]]:

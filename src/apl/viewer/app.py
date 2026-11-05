@@ -57,7 +57,8 @@ from apl.workshop.render_svg import svg as workshop_svg
 
 Response = tuple[int, str, bytes]
 LOCAL_PROVIDERS = ("ollama:", "vllm:")  # no cost, so no --execute needed (research R8)
-MODELS = ("vllm:qwen3.5-9b", "openai:gpt-6-luna")  # the page's model switch, besides APL_MODEL
+# The page's model switch, besides APL_MODEL.
+MODELS = ("vllm:qwen3.5-9b", "openai:gpt-6-luna", "anthropic:claude-sonnet-5-5")
 # Checked before any file access, so an id can never point outside results/viewer/.
 EPISODE_ID = re.compile(r"\d{8}-\d{6}-[a-z0-9_]+-(?:[LSTWP][1-4]|R[0-3])-\d+(-\d+)?")
 
