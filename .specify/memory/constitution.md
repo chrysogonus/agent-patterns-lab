@@ -1,4 +1,4 @@
-# agent-patterns-lab Constitution
+# langgraph-architecture-lab Constitution
 
 ## Core Principles
 
@@ -88,14 +88,14 @@ Rationale: runs cost money, and dry runs must be safe by default.
   that walks the aisles in a fixed order and carries each package to D as soon as it sees it,
   marked as a reference, not an optimum. The step budget is 3× the reference, shared by all robots.
   Levels P1–P3 are defined in plan.md.
-- **Attempts**: an architecture registered as retrying (A4) may restart the world up to 3
+- **Attempts**: an architecture registered as retrying (A4, A4r) may restart the world up to 3
   attempts per episode. A restart puts the world back in its start state and costs no step; every
   tool call of every attempt counts toward the one budget. On the survey field a wrong total, on
   the signal trace a wrong submitted segment, on the rune floor a trap, and on the workshop getting
   stuck ends such an architecture's attempt while attempts are left, with a result that says only
   that it was wrong (on the rune floor, that it was a trap and where; on the workshop, that the goal
   can no longer be made). Every other architecture has one attempt.
-- A per-run token cap stops an episode that loops.
+- A per-episode token cap stops an episode that loops.
 - Changing a level definition or the seed split invalidates earlier results for comparison.
 - Stack: Python 3.12, uv, LangGraph 1.2.x, LangChain `init_chat_model`, pytest, ruff, mypy.
 
@@ -119,4 +119,4 @@ and review MUST check compliance. An unavoidable violation MUST be recorded in t
 Complexity Tracking table with a justification. Results from different problems MUST NOT be
 combined in one comparison.
 
-**Version**: 2.5.1 | **Ratified**: 2026-10-28 | **Last Amended**: 2026-11-03
+**Version**: 2.5.2 | **Ratified**: 2026-10-28 | **Last Amended**: 2026-11-05

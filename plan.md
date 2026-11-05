@@ -321,12 +321,12 @@ apl report results/<run-id>
 
 Without `--execute`, the runner prints the matrix and an estimate of model calls.
 
-One JSONL row per episode:
+One JSONL row per episode; the main fields:
 
 | Field | Meaning |
 | --- | --- |
-| `success` | Reached the exit |
-| `steps`, `optimal_steps`, `efficiency` | Steps taken, shortest solution, their ratio |
+| `success` | Solved the problem (on the dungeon: reached the exit) |
+| `steps`, `optimal_steps`, `efficiency` | Steps taken; the shortest solution or reference, which is not an optimum on every level; `optimal_steps / steps`, which can go above 1 where it is not |
 | `invalid_actions` | Tool calls that returned an error |
 | `budget_hit` | Ran out of steps |
 | `llm_calls`, `tool_calls` | Model and tool calls |
@@ -340,7 +340,8 @@ efficiency, tokens and the spread across repeats.
 
 - Python 3.12, uv
 - LangGraph 1.2.x
-- LangChain `init_chat_model`, so `APL_MODEL` can name any provider in `provider:model` form
+- `APL_MODEL` in `provider:model` form: vLLM through its own chat class; Ollama, OpenAI and
+  Anthropic through LangChain `init_chat_model`; another provider needs its LangChain package added
 - pytest, ruff, mypy
 - Optional later: tracing with Langfuse
 
@@ -366,8 +367,6 @@ Each milestone after M0 is one Spec Kit feature (`/speckit-specify` through
 | M12 | The warehouse (§2f), with A1, A2 and A7–A9 on it | Any warehouse level and seed can be shown and watched in the viewer; warehouse runs plan, continue and report like the other problems; the other problems are unchanged | ✅ |
 | M13 | Harder top levels: T4 on the signal trace (§2c), W4 on the workshop (§2e) | Any T4 and W4 seed can be shown and watched in the viewer; runs with `--level all` include them; T1–T3, W1–W3 and saved runs are unchanged | ✅ |
 
-Paperclip comes in from M5, when several architectures can be built as parallel tickets.
-
 ## 8. Cost control
 
 - Dry run by default; `--execute` to spend money.
@@ -380,8 +379,9 @@ Decided:
 
 - Default model (since M3): `vllm:qwen3.5-9b`, Qwen3.5 9B on a local vLLM server (free, about
   2 s per call, 32,768-token context set on the server), through `APL_MODEL` and `APL_BASE_URL`.
-  `ollama:qwen3:8b` (the M2 default, 16,384-token `APL_NUM_CTX`) and `openai:gpt-6-luna` remain
-  options. Runs with different models are never combined.
+  `ollama:qwen3:8b` (the M2 default, 16,384-token `APL_NUM_CTX`), `openai:gpt-6-luna`,
+  `anthropic:claude-sonnet-5-5` and `anthropic:claude-haiku-5-5` remain options. Runs with
+  different models are never combined.
 - The subscription gateway (`~/workspace/subscription-gateway`) is used wherever a step needs no
   tool calls. It rejects `tools` and runs the request through an agent CLI, so it never runs
   experiment episodes: every architecture must call the same raw model (constitution I).

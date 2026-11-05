@@ -26,15 +26,17 @@ flowchart LR
     model["One model<br/>for every architecture"] --> arch["Architecture<br/>a LangGraph graph<br/><b>the one thing that changes</b>"]
     arch <-->|"tools only:<br/>look · move · probe · …"| world["World<br/>dungeon, survey field, signal trace,<br/>rune floor, workshop or warehouse"]
     seed(["seed"]) --> world
-    world --> score["Score by code<br/>success · steps vs. best<br/>tokens · time"]
+    world --> score["Score by code<br/>success · steps vs. reference<br/>tokens · time"]
 ```
 
-1. **A seed builds a world.** The same seed always builds the same world, and code knows the
-   best possible answer.
+1. **A seed builds a world.** The same seed always builds the same world, and code computes a
+   reference to score against: the shortest answer on some levels, the result of a fixed strategy
+   on the others.
 2. **An architecture plays it.** It can only call the problem's tools, like a player who sees
    one room at a time.
-3. **Code scores it.** Did it succeed? How many steps did it take compared with the best? How
-   many tokens, model calls and seconds did it use?
+3. **Code scores it.** Did it succeed? How many steps did it take compared with the reference? An
+   agent can beat a reference that is not an optimum, so efficiency can go above 1. How many
+   tokens, model calls and seconds did it use?
 
 ## Try it in one minute
 
@@ -56,7 +58,7 @@ In the viewer, pick a problem, level and seed, and press **Generate** to see the
 
 ---
 
-## The five problems
+## The six problems
 
 Architectures are compared only within a problem, never across problems.
 
@@ -327,7 +329,7 @@ Nothing calls a model until you add `--execute`. Each run writes a folder:
 ```text
 results/<run-id>/
 ├── run.json          settings: model, levels, seeds, code version
-├── episodes.jsonl    one row per episode: success, steps, best steps, tokens, calls, time
+├── episodes.jsonl    one row per episode: success, steps, reference steps, tokens, calls, time
 ├── episodes/         each episode's tool log and model conversation
 └── report.md         success rate and efficiency per architecture and level, with spread
 ```
@@ -350,24 +352,26 @@ reach.
 - The side panel shows every model turn: what the model was told, its reasoning, its tool calls
   and their results. With scouts, each card says whether it was the orchestrator or which scout.
 - **Agent's view** dims what no scout has seen. **Shortest solution** (or **Reference walk**)
-  draws the best route. The slider steps back through the episode.
+  draws the reference route. The slider steps back through the episode.
 - Every episode is saved under `results/viewer/` and can be replayed from **Saved episodes**.
 
 Local models (`vllm:`, `ollama:`) run straight away. A paid provider needs
-`apl serve --execute`.
+`apl serve --execute`. The model switch offers `APL_MODEL` first, then `vllm:qwen3.5-9b`,
+`openai:gpt-6-luna` and `anthropic:claude-sonnet-5-5`.
 
 ---
 
 ## Model
 
 One setting picks the model for every architecture, in LangChain's `provider:model` form. Put it
-in `.env` (never committed; [`.env.example`](.env.example) lists every setting):
+in `.env` (never committed; [`.env.example`](.env.example) lists the settings):
 
 ```bash
 APL_MODEL=vllm:qwen3.5-9b      # default: local vLLM, free
 # APL_MODEL=ollama:qwen3:8b    # local Ollama
 # APL_MODEL=openai:gpt-6-luna  # paid, needs OPENAI_API_KEY
 # APL_MODEL=anthropic:claude-sonnet-5-5  # paid, needs ANTHROPIC_API_KEY
+# APL_MODEL=anthropic:claude-haiku-5-5   # paid, needs ANTHROPIC_API_KEY
 ```
 
 <details>
@@ -384,9 +388,14 @@ The default is Qwen3.5 9B on a local [vLLM](https://docs.vllm.ai) server at
 The last option sets Qwen's recommended thinking-mode sampling. The quantized checkpoint ships
 none, so vLLM would otherwise sample unfiltered. A model call takes about 2 seconds.
 
-The viewer shows the model's reasoning and the transcripts keep it, but it is never sent back to
-the model. The context window is the server's (32,768 here), and the runner records it. A
+On vLLM, the viewer shows the model's reasoning and the transcripts keep it, but it is never sent
+back to the model. The context window is the server's (32,768 here), and the runner records it. A
 prompt that outgrows the window ends the episode, and it counts as the architecture's failure.
+
+Claude works differently. By default its API returns thinking blocks with no text, so the viewer
+shows no reasoning and the transcripts hold only the empty blocks. The blocks go back to the model
+with the history. If an architecture resends an earlier turn under a new prompt, the API drops the
+block instead of refusing the request.
 
 These optional settings are the same for every architecture in a run:
 
@@ -408,8 +417,8 @@ These optional settings are the same for every architecture in a run:
    descriptions and step budget.
 2. Architectures see the world only through the tools. A test enforces this.
 3. Only the graph may differ: nodes, edges, state and what each node is told. A retrying
-   architecture (A4) may restart the world up to 3 times per episode, and every attempt's steps
-   count toward the one budget.
+   architecture (A4, A4r) may restart the world up to 3 times per episode, and every attempt's
+   steps count toward the one budget.
 4. Results are reported on test seeds only, with repeats and their spread.
 5. No paid call happens without `--execute`.
 
@@ -463,11 +472,12 @@ docs/parked/      designs set aside for later
 results/          experiment output (not committed)
 ```
 
-Useful contracts:
-[the kit an architecture receives](specs/002-runner-react/contracts/kit.md),
-[the results format](specs/002-runner-react/contracts/results.md),
-[the CLI](specs/001-dungeon-environment/contracts/cli.md),
-[the viewer API](specs/003-viewer-mapstate/contracts/viewer-api.md),
+Contracts, each as written for the milestone that introduced it; later features extend them in
+their own `specs/*/contracts/` folders:
+[the original kit an architecture receives](specs/002-runner-react/contracts/kit.md),
+[the original results format](specs/002-runner-react/contracts/results.md),
+[`apl dungeon show`](specs/001-dungeon-environment/contracts/cli.md),
+[the original viewer API](specs/003-viewer-mapstate/contracts/viewer-api.md),
 [the survey tools](specs/005-survey-field/contracts/survey-tools.md),
 [the signal trace tools](specs/009-signal-trace/contracts/signal-tools.md),
 [the rune floor tools](specs/010-rune-floor/contracts/rune-tools.md),
