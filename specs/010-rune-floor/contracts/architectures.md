@@ -57,8 +57,10 @@ says what happened on that tile before: at which step of a walk it was safe or a
 the number of one option and nothing else.
 ```
 
-Options: the moves from the agent's cell that stay on the floor, in the order north, east, south,
-west, each with the walk step the move would be and the tile's record, as
+Options: the moves from the agent's cell that stay on the floor and lead to a tile not yet stepped
+on in this walk, the start included; if there are none, every move that stays on the floor (added
+2026-11-05 after A6 circled safe tiles until the budget ran out). They come in the order north,
+east, south, west, each with the walk step the move would be and the tile's record, as
 `move east to C3 (blue), walk step 3: safe at walk step 2 (twice); trap at walk step 4 (once)`, or
 `move east to C3 (blue), walk step 1: never stepped on`; a move onto the start or the goal says so
 (`move west to the start`, `move east to the goal`). Counts read `once`, `twice`, `3 times`; the

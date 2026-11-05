@@ -220,7 +220,7 @@ is used in the docs, and the name column is what you pass to `--arch`.
 | A4 | `reflexion` | A2 that tries again: after a failed attempt (on the rune floor: a trap, with the walk log kept) it writes a note, the world restarts, all steps count | ✓ | ✓ | ✓ | ✓ | ✓ | |
 | A4r | `retry` | A4 without the reflector: the same attempts and restarts with no notes, the baseline for what A4's notes add | ✓ | ✓ | ✓ | ✓ | ✓ | |
 | A5 | `supervisor` | A supervisor hands tasks to a navigator (look, move) and an inventory helper (take, use), each a subgraph on A2's map (on the workshop: a researcher and a crafter) | ✓ | | | | ✓ | |
-| A6 | `hybrid` | Code keeps the map and walks the routes; the model only picks where to go (on the signal trace: code lists the probes that split the suspects best; on the rune floor: code lists the moves with what happened on each tile before; in the workshop: code lists the actions it can take now) | ✓ | | ✓ | ✓ | ✓ | |
+| A6 | `hybrid` | Code keeps the map and walks the routes; the model only picks where to go (on the signal trace: code lists the probes that split the suspects best; on the rune floor: code lists the moves to tiles not yet stepped on in this walk, or every move if there are none, with what happened on each tile before; in the workshop: code lists the actions it can take now) | ✓ | | ✓ | ✓ | ✓ | |
 | A7 | `fanout` | An orchestrator sends out up to 4 scouts once; each explores alone (in the warehouse the scouts are robots) | ✓ | ✓ | | | | ✓ |
 | A8 | `rounds` | An orchestrator gives scouts short tasks and replans on the map they all saw | ✓ | ✓ | | | | ✓ |
 | A9 | `blackboard` | No planner: scouts take turns on one shared map and claim unexplored exits (in the warehouse: packages or aisles) | ✓ | ✓ | | | | ✓ |
